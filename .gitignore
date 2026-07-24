@@ -1,0 +1,16 @@
+node_modules/
+dist/
+*.tsbuildinfo
+packages/*/dist/
+
+# downloaded dictionary sources (rebuild with npm run build-dict)
+data/jmdict-*.json
+data/jmdict-*.zip
+
+# built full dictionaries are large; the committed seed lives in data/
+apps/web/public/dict/dict.json
+apps/extension/public/dict/dict.json
+
+# sync server data
+yomeyo-data.json
+*.tmp
