@@ -4,18 +4,30 @@
 browsing, save them as flashcards, and review them daily with spaced
 repetition — the sentence-mining workflow without juggling two tools.
 
-> **Nothing to build.** Push this branch and GitHub Actions builds the full
-> JMdict dictionary, publishes the app, and packages the extension for you.
+> **Nothing to build.** GitHub Actions builds the JMdict dictionary,
+> publishes the app, and packages the extension on every push.
 
-## Install on Android (start here)
+## One-time setup: turn on GitHub Pages
 
-1. **Open the app** in Chrome:
-   **https://biosphobia.github.io/yomeyo/**
+The build already runs and publishes the site to the **gh-pages** branch, but
+GitHub does not allow the Actions token to switch Pages on, so this needs one
+click from you:
+
+**Settings → Pages → Source → "Deploy from a branch" → `gh-pages` → `/ (root)` → Save**
+
+(Or pick **"GitHub Actions"** as the source and re-run the workflow — both
+paths are published, so either works.)
+
+A minute later the app is live at **https://biosphobia.github.io/yomeyo/**
+
+## Install on Android
+
+1. **Open** https://biosphobia.github.io/yomeyo/ in Chrome.
 2. **Add it to your home screen** — Chrome menu (⋮) → *Add to Home screen*.
-   It now opens like a normal app, works offline, and keeps your deck on the
-   device.
-3. **Open it once while online** so the dictionary downloads and caches
+   It now opens like a normal app and keeps your deck on the device.
+3. **Open it once while online** so the dictionary caches for offline use
    (Settings → *Download for offline use*, or just use the Reader once).
+   After that, reviews and lookups work with no signal.
 
 ### Mining words on your phone
 
@@ -38,7 +50,8 @@ when you would next see the card.
 For tap-on-page lookup while browsing on a computer:
 
 1. Download **https://biosphobia.github.io/yomeyo/yomeyo-extension.zip**
-   (also attached to every Actions run as an artifact).
+   — or, without waiting for Pages, grab the `yomeyo-extension` artifact from
+   the latest run under the repository's **Actions** tab.
 2. Unzip it.
 3. Chrome/Edge → `chrome://extensions` → enable **Developer mode** →
    **Load unpacked** → select the unzipped folder.
@@ -79,16 +92,17 @@ Without sync you can still move a deck by hand: **Words → Export JSON**, then
    高い/日本語/する are present with the right readings and parts of speech, so
    an upstream format change fails the build instead of shipping a dictionary
    that silently looks nothing up,
-4. builds the app and deploys it to GitHub Pages,
+4. builds the app and publishes it both to the `gh-pages` branch and through
+   the Actions Pages pipeline, so whichever Pages source you chose works,
 5. zips the extension and publishes it alongside the app.
 
-The workflow turns Pages on by itself the first time it runs. If your
-organization blocks that, enable it once under *Settings → Pages → Source:
-GitHub Actions* and re-run the workflow.
+If Pages is not enabled yet, the build still succeeds and says so in the job
+summary — the extension artifact is produced either way.
 
-By default it builds the **common-words** JMdict (smaller download, covers
-what learners actually read). For the complete dictionary, run the workflow
-manually from the Actions tab with *full_dictionary* checked.
+By default it builds the **common-words** JMdict: 23,186 entries, a 2.3 MB
+download (~600 KB gzipped), which covers what learners actually read. For the
+complete dictionary, run the workflow manually from the Actions tab with
+*full_dictionary* checked.
 
 [jmdict]: https://github.com/scriptin/jmdict-simplified
 
