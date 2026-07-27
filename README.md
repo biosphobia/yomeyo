@@ -68,14 +68,29 @@ folder. Follow whichever your browser supports.
 
 ### Getting extension words into the app
 
-The extension keeps its own deck, so send words over when you want to
-review: open the toolbar popup and tap **Send words to the Yomeyo app**. The
-app opens and imports them.
+Nothing to do: whenever Yomeyo is open in a browser tab, words saved with the
+extension come across on their own, including ones saved while that tab is
+already sitting open.
 
-The words travel in the URL fragment, which browsers never send to a server,
-so your deck stays on the device. Re-sending is harmless — cards merge by id
-and the newer version wins. If you run the sync server below, both sides sync
-automatically instead and you never need this button.
+The extension has to keep its own deck — it must work on pages where the app
+is not open — so something has to carry the words across. Since the extension
+injects a content script into every page, including the app's own, the two
+simply talk through the page they share: the extension offers what it has not
+handed over yet, the app imports it and says which ids it took, and the
+extension stops offering those. Nothing leaves the device, and no server is
+involved. The extension checks the page against the app URL in its own
+settings before handing anything over, so a site claiming to be Yomeyo is
+given nothing.
+
+That leaves one case: Yomeyo opened from the home screen as an installed app
+rather than in a tab, where a content script cannot reach it. For that, open
+the extension's toolbar popup and tap **Send them now** — the app opens and
+imports them, with the words travelling in the URL fragment, which browsers
+never send to a server. Re-sending is always harmless: cards merge by id and
+the newer version wins.
+
+Signing in to the same account on both, or running the sync server below,
+covers everything else — including a phone and a desktop.
 
 ### Reviewing
 

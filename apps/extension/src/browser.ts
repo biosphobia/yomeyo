@@ -53,6 +53,19 @@ export function resourceUrl(path: string): string {
   return ext.runtime.getURL(path);
 }
 
+/** Every open tab whose URL matches the pattern. */
+export async function tabsMatching(urlPattern: string): Promise<Array<{ id?: number }>> {
+  const query = { url: urlPattern };
+  try {
+    const tabs: any[] = promiseStyle
+      ? await ext.tabs.query(query)
+      : await new Promise((resolve) => ext.tabs.query(query, resolve));
+    return tabs ?? [];
+  } catch {
+    return []; // an unusable pattern must not break saving a word
+  }
+}
+
 /** The tab the user is currently looking at, or null. */
 export async function activeTab(): Promise<{ id?: number } | null> {
   const query = { active: true, currentWindow: true };

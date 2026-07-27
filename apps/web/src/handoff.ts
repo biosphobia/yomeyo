@@ -19,7 +19,8 @@ function decodePayload(encoded: string): unknown {
   return JSON.parse(new TextDecoder().decode(bytes));
 }
 
-function looksLikeCard(value: any): value is Card {
+/** A minimal shape check for cards arriving from outside the app. */
+export function looksLikeCard(value: any): value is Card {
   return (
     value &&
     typeof value.id === "string" &&

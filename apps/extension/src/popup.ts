@@ -19,7 +19,8 @@ const handoffBtn = $<HTMLButtonElement>("handoff-btn");
 const syncBtn = $<HTMLButtonElement>("sync-btn");
 const msg = $<HTMLDivElement>("msg");
 const statTotal = $<HTMLElement>("stat-total");
-const statDirty = $<HTMLElement>("stat-dirty");
+const statWaiting = $<HTMLElement>("stat-waiting");
+const transferHint = $<HTMLDivElement>("transfer-hint");
 
 function setMessage(text: string, kind: "" | "ok" | "error" = ""): void {
   msg.textContent = text;
@@ -64,10 +65,16 @@ async function refresh(): Promise<void> {
   urlInput.value = settings.url ?? "";
   tokenInput.value = settings.token ?? "";
 
-  const stats = await sendMessage<{ total: number; dirty: number }>({ type: "stats" });
+  const stats = await sendMessage<{ total: number; waiting: number }>({ type: "stats" });
   statTotal.textContent = String(stats.total);
-  statDirty.textContent = String(stats.dirty);
+  statWaiting.textContent = String(stats.waiting);
   handoffBtn.disabled = stats.total === 0;
+  // Words normally travel on their own; this button is the fallback for when
+  // the app is not open in a tab (an installed PWA, or another browser).
+  transferHint.textContent =
+    stats.waiting === 0
+      ? "Everything saved here is in the app."
+      : "These go to the app by themselves next time you open it in a tab.";
 }
 
 tapToggle.addEventListener("change", () => {

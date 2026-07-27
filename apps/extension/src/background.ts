@@ -9,7 +9,7 @@ import {
   type SyncRequest,
   type SyncResponse,
 } from "@yomeyo/core";
-import { ext, resourceUrl, storageGet, storageSet } from "./browser.js";
+import { ext, resourceUrl, sendToTab, storageGet, storageSet, tabsMatching } from "./browser.js";
 
 /**
  * Background script: owns the dictionary (loaded from the packaged
@@ -49,7 +49,11 @@ function getDictionary(): Promise<BinaryDictionary> {
   return dictPromise;
 }
 
-type StoredCard = Card & { dirty?: boolean };
+type StoredCard = Card & {
+  dirty?: boolean;
+  /** Set once the app has taken this card, so it is not offered again. */
+  handedOff?: boolean;
+};
 
 async function getCards(): Promise<Record<string, StoredCard>> {
   const data = await storageGet<{ cards?: Record<string, StoredCard> }>("cards");
@@ -82,7 +86,65 @@ async function handleSave(entry: any, sentence?: string, url?: string): Promise<
   };
   cards[card.id] = card;
   await setCards(cards);
+  void tellAppAboutNewWords();
   return "saved";
+}
+
+/**
+ * Words the app has not taken yet.
+ *
+ * Offered to the app automatically whenever it is open — see
+ * apps/web/src/extension-bridge.ts. Cards stay here afterwards; only the
+ * "already handed over" mark is added, so this store remains usable on its
+ * own and the manual handoff still works.
+ */
+async function pendingForApp(): Promise<Card[]> {
+  const cards = await getCards();
+  return (
+    Object.values(cards)
+      .filter((c) => !c.deleted && !c.handedOff)
+      // Oldest first, so a large backlog arrives in the order it was mined.
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .slice(0, 500)
+      .map(({ dirty: _dirty, handedOff: _handedOff, ...card }) => card)
+  );
+}
+
+/** The app's location, as configured in the toolbar popup. */
+async function appUrlSetting(): Promise<string> {
+  const settings = await storageGet<{ settings?: { appUrl?: string } }>("settings");
+  return settings.settings?.appUrl?.trim() || DEFAULT_APP_URL;
+}
+
+/**
+ * Nudge an already-open app tab to collect the word just saved.
+ *
+ * Without this the app only picks words up when its page loads, so anything
+ * saved while it sits open in another tab would appear to have gone nowhere
+ * until the user reloaded it.
+ */
+async function tellAppAboutNewWords(): Promise<void> {
+  const appUrl = await appUrlSetting();
+  const pattern = appUrl.replace(/[^/]*$/, "") + "*"; // the app's directory
+  for (const tab of await tabsMatching(pattern)) {
+    if (tab.id !== undefined) void sendToTab(tab.id, { type: "appHasNewWords" });
+  }
+}
+
+/** Record that the app has these words, so they stop being offered. */
+async function markHandedOff(ids: unknown): Promise<number> {
+  if (!Array.isArray(ids) || ids.length === 0) return 0;
+  const cards = await getCards();
+  let marked = 0;
+  for (const id of ids) {
+    const card = typeof id === "string" ? cards[id] : undefined;
+    if (card && !card.handedOff) {
+      cards[id as string] = { ...card, handedOff: true };
+      marked++;
+    }
+  }
+  if (marked > 0) await setCards(cards);
+  return marked;
 }
 
 async function isSaved(term: string, reading: string): Promise<boolean> {
@@ -108,8 +170,7 @@ function encodePayload(value: unknown): string {
  * is safe to repeat.
  */
 async function handoffToApp(): Promise<{ url: string; count: number }> {
-  const settings = await storageGet<{ settings?: { appUrl?: string } }>("settings");
-  const appUrl = settings.settings?.appUrl?.trim() || DEFAULT_APP_URL;
+  const appUrl = await appUrlSetting();
 
   const cards = await getCards();
   const pending = Object.values(cards)
@@ -122,6 +183,9 @@ async function handoffToApp(): Promise<{ url: string; count: number }> {
   const base = appUrl.endsWith("/") ? appUrl : appUrl + "/";
   const url = `${base}#import=${encodePayload(pending)}`;
   await ext.tabs.create({ url });
+  // Deliberately not marked as handed over here. If this import were to fail
+  // the words would be lost, whereas the automatic offer costs only one
+  // redundant transfer: the app dedupes, acknowledges, and it settles.
   return { url, count: pending.length };
 }
 
@@ -181,6 +245,14 @@ ext.runtime.onMessage.addListener((message: any, _sender: any, sendResponse: (r:
         sendResponse({ ok: true });
         break;
       }
+      case "pendingForApp": {
+        sendResponse(await pendingForApp());
+        break;
+      }
+      case "handedOff": {
+        sendResponse({ marked: await markHandedOff(message.ids) });
+        break;
+      }
       case "lookup": {
         const dict = await getDictionary();
         const matches: LookupMatch[] = lookup(dict, message.text, message.offset ?? 0);
@@ -199,7 +271,11 @@ ext.runtime.onMessage.addListener((message: any, _sender: any, sendResponse: (r:
       case "stats": {
         const cards = await getCards();
         const live = Object.values(cards).filter((c) => !c.deleted);
-        sendResponse({ total: live.length, dirty: live.filter((c) => c.dirty).length });
+        sendResponse({
+          total: live.length,
+          waiting: live.filter((c) => !c.handedOff).length,
+          dirty: live.filter((c) => c.dirty).length,
+        });
         break;
       }
       case "handoff": {

@@ -6,7 +6,9 @@ import { renderKanji } from "./kanji.js";
 import { renderSettings } from "./settings.js";
 import { closePopup } from "./popup.js";
 import { consumeHandoff, showHandoffToast } from "./handoff.js";
+import { listenForExtensionCards } from "./extension-bridge.js";
 import { completeRedirectSignIn } from "./cloud.js";
+import { toast } from "./toast.js";
 
 /** Hash-routed SPA shell with a bottom tab bar. */
 
@@ -97,6 +99,13 @@ window.addEventListener("hashchange", () => void routeWithHandoff());
 if (sharedText) location.hash = "#reader";
 
 await routeWithHandoff();
+
+// Words saved by the extension arrive on their own whenever the app is open,
+// so there is nothing for the user to press.
+listenForExtensionCards((count) => {
+  toast(`Added ${count} word${count === 1 ? "" : "s"} saved with the extension.`);
+  route(); // the deck on screen is now out of date
+});
 
 // Google sign-in falls back to a redirect on mobile and in installed PWAs,
 // which lands back here; completing it updates Settings on the next render.

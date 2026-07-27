@@ -18,12 +18,76 @@ const IS_TOUCH =
     ? matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0
     : navigator.maxTouchPoints > 0;
 
+// ---------- handing saved words to the app ----------
+
+/**
+ * True once this page has been recognised as the Yomeyo app itself.
+ *
+ * The app does its own lookups, so the extension's sheet must stay out of
+ * the way there — two popups for one tap is worse than either.
+ */
+let isAppPage = false;
+
+/**
+ * Is this page the app the user configured?
+ *
+ * The check is against the app URL in the extension's own settings, not
+ * against anything the page says about itself: a page claiming to be Yomeyo
+ * would otherwise be handed the user's saved words.
+ */
+function pageIsApp(appUrl: string): boolean {
+  try {
+    const base = new URL(appUrl);
+    if (location.origin !== base.origin) return false;
+    const dir = base.pathname.replace(/[^/]*$/, ""); // drop any index.html
+    return location.pathname.startsWith(dir);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Give the app the words saved here, as soon as it is open.
+ *
+ * The alternative was the "Send to app" button in the toolbar popup, which
+ * on Chrome for Android is buried deep enough that saved words did not, in
+ * practice, ever reach the app.
+ */
+/** Set on the app's own pages, so the background can push new words here. */
+let offerToApp: (() => Promise<void>) | null = null;
+
+async function offerSavedWordsToApp(appUrl: string): Promise<void> {
+  if (!pageIsApp(appUrl)) return;
+  isAppPage = true;
+  removeHost();
+
+  const offer = async (): Promise<void> => {
+    const cards = await sendMessage<any[]>({ type: "pendingForApp" }).catch(() => null);
+    if (!cards?.length) return;
+    window.postMessage({ source: "yomeyo-extension", type: "cards", cards }, location.origin);
+  };
+  offerToApp = offer;
+
+  window.addEventListener("message", (ev) => {
+    if (ev.source !== window) return;
+    const data: any = ev.data;
+    if (data?.source !== "yomeyo-app") return;
+    // The app finished loading after this script did, and is asking.
+    if (data.type === "ready") void offer();
+    // The app has these words now; stop offering them.
+    if (data.type === "imported") void sendMessage({ type: "handedOff", ids: data.ids });
+  });
+
+  await offer();
+}
+
 /** undefined = follow the device default (tap on touch, Alt+click on desktop). */
 let tapModeSetting: boolean | undefined;
 /** Whether the small on-page toggle is shown at all. */
 let showToggle = true;
 
 function tapModeActive(): boolean {
+  if (isAppPage) return false; // the app has its own lookup UI
   return tapModeSetting ?? IS_TOUCH;
 }
 
@@ -39,6 +103,16 @@ void storageGet<{ tapMode?: boolean | null; showToggle?: boolean }>(["tapMode", 
     if (tapModeActive()) void sendMessage({ type: "warm" }).catch(() => {});
   },
 );
+
+void sendMessage<{ settings?: { appUrl?: string } }>({ type: "getSettings" })
+  .then((data) => {
+    const appUrl = data?.settings?.appUrl?.trim();
+    if (appUrl) return offerSavedWordsToApp(appUrl);
+    return undefined;
+  })
+  .catch(() => {
+    /* nothing to hand over if the background is unreachable */
+  });
 ext.storage?.onChanged?.addListener((changes: any) => {
   if ("tapMode" in changes) {
     const value = changes.tapMode.newValue;
@@ -252,6 +326,14 @@ function ensureHost(): ShadowRoot {
   return shadow;
 }
 
+/** Take all of the extension's UI back off the page. */
+function removeHost(): void {
+  host?.remove();
+  host = null;
+  shadow = null;
+  toggleEl = null;
+}
+
 /**
  * The on-page lookup toggle.
  *
@@ -263,6 +345,12 @@ function ensureHost(): ShadowRoot {
 let toggleEl: HTMLElement | null = null;
 
 function renderToggle(): void {
+  // The app has its own lookup UI and its own settings; the extension should
+  // be invisible there.
+  if (isAppPage) {
+    removeHost();
+    return;
+  }
   if (!showToggle) {
     toggleEl?.remove();
     toggleEl = null;
@@ -624,6 +712,12 @@ ext.runtime.onMessage?.addListener((message: any, _sender: any, sendResponse: (r
   // happen here, rather than guessing the device from its own context.
   if (message?.type === "getTapState") {
     sendResponse({ active: tapModeActive(), isTouch: IS_TOUCH, explicit: tapModeSetting });
+    return true;
+  }
+  // A word was just saved on another tab and the app is open here.
+  if (message?.type === "appHasNewWords") {
+    void offerToApp?.();
+    sendResponse({ ok: true });
     return true;
   }
   if (message?.type === "lookupSelection") {

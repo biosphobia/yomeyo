@@ -80,7 +80,10 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
         Yomeyo then opens like a normal app and works offline.<br/><br/>
         <b>2. Mine words while browsing.</b> Select Japanese text on any page →
         tap <i>Share</i> → choose <b>Yomeyo</b>, or install the browser
-        extension and tap words directly on the page.
+        extension and tap words directly on the page. Words saved with the
+        extension come across on their own whenever Yomeyo is open in a
+        browser tab — there is nothing to press. Opened from the home screen
+        instead, use <i>Send them now</i> in the extension's toolbar popup.
       </div>
     </div>
 
