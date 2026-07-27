@@ -10,6 +10,12 @@ import {
   type AccountInfo,
 } from "./cloud.js";
 import {
+  importDictionary,
+  listDictionaries,
+  removeDictionary,
+  setDictionaryEnabled,
+} from "./dictionaries.js";
+import {
   dictionaryLoaded,
   dictionaryMeta,
   dictionarySize,
@@ -50,6 +56,7 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
       <div class="row-actions">
         <button id="dict-load" class="secondary">Download for offline use</button>
       </div>
+      <div id="extra-dicts" style="margin-top:14px"></div>
     </div>
 
     <div class="card-panel">
@@ -78,6 +85,7 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
 
   renderAccount();
   wireDictionary(main);
+  void renderExtraDictionaries(main);
   wireServerSync(main);
 
   // ---------------- account panel ----------------
@@ -197,6 +205,87 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
       void renderSettings(main);
     });
   }
+}
+
+/**
+ * Extra dictionaries, including monolingual ones.
+ *
+ * JMdict — the source of the built-in dictionary — has no Japanese glosses,
+ * so a Japanese-Japanese dictionary has to come from the user; the popular
+ * ones are copyrighted and cannot be bundled. Yomitan's term-bank format is
+ * what they are distributed in, so that is what this reads.
+ */
+async function renderExtraDictionaries(main: HTMLElement): Promise<void> {
+  const box = main.querySelector<HTMLDivElement>("#extra-dicts");
+  if (!box) return;
+  const list = await listDictionaries();
+
+  box.innerHTML = `
+    <b style="font-size:0.85rem">Additional dictionaries</b>
+    <div id="dict-list"></div>
+    <div class="msg">
+      Add a Japanese-Japanese or other bilingual dictionary. Unzip a
+      Yomitan/Yomichan dictionary and select its <code>term_bank_*.json</code>
+      files. Definitions are labelled with the dictionary they came from.
+    </div>
+    <label for="dict-name">Name</label>
+    <input type="text" id="dict-name" placeholder="e.g. 三省堂国語辞典" />
+    <div class="row-actions">
+      <button id="dict-pick" class="secondary">Choose files…</button>
+      <input type="file" id="dict-files" accept="application/json,.json" multiple style="display:none" />
+    </div>
+    <div class="msg" id="dict-import-msg"></div>
+  `;
+
+  const rows = box.querySelector<HTMLDivElement>("#dict-list")!;
+  if (list.length === 0) {
+    rows.innerHTML = `<div class="msg">Only the built-in JMdict (English) is in use.</div>`;
+  }
+  for (const record of list) {
+    const row = document.createElement("div");
+    row.className = "word-row";
+    row.innerHTML = `
+      <div class="word">
+        <div><b>${escapeHtml(record.name)}</b></div>
+        <div class="glosses">${record.entryCount.toLocaleString()} entries</div>
+      </div>
+      <label class="switch-sm"><input type="checkbox" ${record.enabled ? "checked" : ""} /></label>
+      <button class="ghost" title="Remove">✕</button>
+    `;
+    row.querySelector<HTMLInputElement>("input")!.addEventListener("change", async (ev) => {
+      await setDictionaryEnabled(record.id, (ev.target as HTMLInputElement).checked);
+    });
+    row.querySelector<HTMLButtonElement>("button")!.addEventListener("click", async () => {
+      await removeDictionary(record.id);
+      void renderExtraDictionaries(main);
+    });
+    rows.appendChild(row);
+  }
+
+  const fileInput = box.querySelector<HTMLInputElement>("#dict-files")!;
+  const msg = box.querySelector<HTMLDivElement>("#dict-import-msg")!;
+  box.querySelector<HTMLButtonElement>("#dict-pick")!.addEventListener("click", () => fileInput.click());
+
+  fileInput.addEventListener("change", async () => {
+    const files = [...(fileInput.files ?? [])];
+    if (files.length === 0) return;
+    const name =
+      box.querySelector<HTMLInputElement>("#dict-name")!.value.trim() ||
+      files[0].name.replace(/\.json$/i, "");
+    msg.textContent = `Importing ${files.length} file${files.length === 1 ? "" : "s"}…`;
+    msg.className = "msg";
+    try {
+      const record = await importDictionary(name, files);
+      msg.textContent = `Added ${record.name} with ${record.entryCount.toLocaleString()} entries.`;
+      msg.className = "msg ok";
+      void renderExtraDictionaries(main);
+    } catch (err) {
+      msg.textContent = err instanceof Error ? err.message : String(err);
+      msg.className = "msg error";
+    } finally {
+      fileInput.value = "";
+    }
+  });
 }
 
 function wireDictionary(main: HTMLElement): void {

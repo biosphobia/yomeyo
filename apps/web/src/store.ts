@@ -6,10 +6,12 @@ import {
   parseDictFile,
   runSync,
   type CompactDictFile,
+  type Dictionary,
   type SyncBackend,
   type SyncRequest,
   type SyncResponse,
 } from "@yomeyo/core";
+import { combineWith, resetCombined } from "./dictionaries.js";
 import { getAllCards, getMeta, putCard, putCards, setMeta, type StoredCard } from "./db.js";
 import { firestoreBackend, getFirebaseConfig } from "./cloud.js";
 
@@ -25,6 +27,14 @@ export function assetUrl(path: string): string {
   return new URL(path, new URL(import.meta.env.BASE_URL, location.href)).href;
 }
 
+/**
+ * The dictionary used for lookups: the built-in one, combined with any extra
+ * dictionaries the user has imported.
+ */
+export async function activeDictionary(): Promise<Dictionary> {
+  return combineWith(await loadDictionary());
+}
+
 export async function loadDictionary(): Promise<MemoryDictionary> {
   if (dictionary) return dictionary;
   // Concurrent callers (e.g. fast tab switches) must share one download.
@@ -37,6 +47,7 @@ export async function loadDictionary(): Promise<MemoryDictionary> {
       dictSize = entries.length;
       dictMeta = dictFileMeta(raw);
       dictionary = new MemoryDictionary(entries);
+      resetCombined(); // extras must be re-attached to the new instance
       return dictionary;
     })().catch((err) => {
       dictLoading = null; // allow a retry after a failed/offline load

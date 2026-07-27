@@ -13,6 +13,11 @@ export interface DictEntry {
   glosses: string[];
   /** Popularity rank (lower = more common). Used for ranking results. */
   freq?: number;
+  /**
+   * Which dictionary this came from. Unset for the built-in one; set when
+   * several are enabled, so results can be labelled.
+   */
+  source?: string;
 }
 
 /** A compiled, lookupable dictionary. */

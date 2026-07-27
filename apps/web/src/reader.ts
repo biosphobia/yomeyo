@@ -1,5 +1,5 @@
 import { isJapaneseChar, lookup } from "@yomeyo/core";
-import { loadDictionary } from "./store.js";
+import { activeDictionary } from "./store.js";
 import { closePopup, showLookupPopup } from "./popup.js";
 
 /**
@@ -51,7 +51,7 @@ export function renderReader(main: HTMLElement, sharedText?: string): void {
       view.appendChild(span);
     });
 
-    const dict = await loadDictionary();
+    const dict = await activeDictionary();
 
     view.addEventListener("click", (ev) => {
       const target = ev.target as HTMLElement;

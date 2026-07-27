@@ -81,7 +81,45 @@ automatically instead and you never need this button.
 
 Open the app and hit **Review**. Cards are scheduled Anki-style: rate each
 one *Again / Hard / Good / Easy* and the interval adapts. Each button shows
-when you would next see the card.
+when you would next see the card. Tap 🔊 on any word to hear it — Yomeyo
+speaks the reading with the Japanese voice already on your device, so it
+works offline and covers every word.
+
+## Kanji
+
+The **Kanji** tab has two lists:
+
+- **From my words** — every kanji appearing in words you have saved, which is
+  the set actually worth studying.
+- **Jōyō** — all 2,136 school kanji, with the ones you have already met
+  highlighted.
+
+Tapping a character shows its meanings, on/kun readings, grade, stroke count
+and JLPT level, the words in your deck that use it, and its **stroke order
+animated one stroke at a time** (with numbering, replay, and a
+show-the-finished-character button).
+
+Data is [KANJIDIC2](https://www.edrdg.org/wiki/index.php/KANJIDIC_Project)
+for the readings and meanings and [KanjiVG](https://kanjivg.tagaini.net/) for
+the stroke paths, both built in CI alongside the dictionary.
+
+## Extra dictionaries (Japanese-Japanese and other languages)
+
+The built-in dictionary is JMdict English. **JMdict contains no Japanese
+glosses**, and the well-known monolingual dictionaries (三省堂, 大辞林, …) are
+copyrighted, so a Japanese-Japanese dictionary cannot be shipped with the
+app. What Yomeyo does instead is read the format those dictionaries are
+distributed in, so one you already have can be added:
+
+**Settings → Dictionary → Additional dictionaries** → unzip a
+Yomitan/Yomichan dictionary and select its `term_bank_*.json` files.
+
+Imported dictionaries are searched alongside the built-in one, each
+definition labelled with where it came from, and can be switched off or
+removed without losing anything. Yomeyo's own exported dictionary format is
+accepted too, so a JMdict build in another language (Spanish, French, German,
+Dutch, Russian, …) can be added the same way — `npm run build-dict` takes the
+language edition you point it at.
 
 ## The extension on desktop
 
@@ -171,10 +209,11 @@ then **Import JSON** on the other device.
 If Pages is not enabled yet, the build still succeeds and says so in the job
 summary — the extension artifact is produced either way.
 
-By default it builds the **common-words** JMdict: 23,186 entries, a 2.3 MB
-download (~600 KB gzipped), which covers what learners actually read. For the
-complete dictionary, run the workflow manually from the Actions tab with
-*full_dictionary* checked.
+It builds the **complete** JMdict by default. The common-words subset is
+smaller but omits ordinary compounds — 遠距離恋愛 and 人工知能 are both
+missing from it — and a word you cannot look up is exactly the word worth
+mining. Run the workflow manually with *common_dictionary* checked if you
+would rather have the smaller download.
 
 [jmdict]: https://github.com/scriptin/jmdict-simplified
 
@@ -220,6 +259,10 @@ firestore.rules     Firestore security rules — each deck is private to its own
 - **Dictionary format** (`yomeyo-dict-1`): positional tuples with an interned
   part-of-speech table, roughly a quarter smaller than plain objects, so the
   phone downloads less on mobile data.
+- **Kanji data**: KANJIDIC2 for readings/meanings, KanjiVG stroke paths
+  bucketed by codepoint so opening one character fetches ~100 KB rather than
+  every stroke in the set. The animation drives a dash offset along each
+  stroke path in order.
 - **Sync** (`packages/core/src/sync.ts`): one engine behind a `SyncBackend`
   interface, so Firestore and the self-hosted server share the same
   push/pull/merge logic. The local IndexedDB deck is always the read path —

@@ -63,10 +63,12 @@ export async function showLookupPopup(matches: LookupMatch[], context: PopupCont
       glosses.textContent = entry.glosses.join(" · ");
       word.appendChild(glosses);
 
-      if (entry.pos.length > 0) {
+      if (entry.pos.length > 0 || entry.source) {
         const pos = document.createElement("div");
         pos.className = "pos";
-        pos.textContent = entry.pos.join(", ");
+        // Name the dictionary when more than one can answer, so a
+        // monolingual definition is not mistaken for the built-in one.
+        pos.textContent = [entry.source, entry.pos.join(", ")].filter(Boolean).join(" · ");
         word.appendChild(pos);
       }
 
