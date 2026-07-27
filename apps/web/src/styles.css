@@ -376,3 +376,24 @@ label {
   flex-wrap: wrap;
   margin-top: 12px;
 }
+
+.toast {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(84px + env(safe-area-inset-bottom));
+  max-width: calc(100% - 32px);
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid #ffffff22;
+  border-radius: 12px;
+  padding: 12px 18px;
+  font-size: 0.9rem;
+  box-shadow: 0 8px 30px #00000077;
+  z-index: 200;
+  transition: opacity 0.4s ease;
+}
+
+.toast.out {
+  opacity: 0;
+}

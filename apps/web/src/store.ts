@@ -85,6 +85,21 @@ export async function hasCardForTerm(term: string, reading: string): Promise<boo
   return false;
 }
 
+/**
+ * Import cards handed over by the browser extension (or a deck export).
+ * Merges last-write-wins, so re-importing the same words is harmless.
+ * Returns how many cards were new or newer than what is already here.
+ */
+export async function importCards(incoming: Card[]): Promise<number> {
+  const cards = await loadCards();
+  const plain = new Map<string, Card>([...cards.entries()]);
+  const applied = mergeCards(plain, incoming);
+  const stored: StoredCard[] = applied.map((c) => ({ ...c, dirty: true }));
+  for (const c of stored) cards.set(c.id, c);
+  await putCards(stored);
+  return stored.length;
+}
+
 // ---------------- sync ----------------
 
 export interface SyncSettings {

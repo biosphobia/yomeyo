@@ -9,28 +9,26 @@ import {
   type SyncRequest,
   type SyncResponse,
 } from "@yomeyo/core";
+import { ext, resourceUrl, storageGet, storageSet } from "./browser.js";
 
 /**
- * Background service worker: owns the dictionary (loaded from the packaged
- * dict.json) and the saved-card store (chrome.storage.local), and answers
- * messages from the content script and the action popup.
+ * Background script: owns the dictionary (loaded from the packaged
+ * dict.json) and the saved-card store, and answers messages from the content
+ * script and the toolbar popup.
  *
- * Message protocol:
- *   { type: "lookup", text, offset }        -> LookupMatch[]
- *   { type: "save", entry, sentence, url }  -> { ok: true }
- *   { type: "isSaved", term, reading }      -> boolean
- *   { type: "stats" }                        -> { total, dirty }
- *   { type: "sync" }                         -> { pushed, pulled } | { error }
- *   { type: "getSettings" } / { type: "setSettings", settings }
+ * Runs as a service worker on Chromium and as an event page on Firefox; both
+ * can be torn down between messages, so nothing is kept in memory that is not
+ * either cheap to rebuild (the dictionary) or persisted (cards, settings).
  */
 
-declare const chrome: any;
+/** The default location of the hosted app, used for the deck handoff. */
+const DEFAULT_APP_URL = "https://biosphobia.github.io/yomeyo/";
 
 let dictPromise: Promise<MemoryDictionary> | null = null;
 
 function getDictionary(): Promise<MemoryDictionary> {
   if (!dictPromise) {
-    dictPromise = fetch(chrome.runtime.getURL("dict/dict.json"))
+    dictPromise = fetch(resourceUrl("dict/dict.json"))
       .then((res) => res.json())
       .then((raw) => new MemoryDictionary(parseDictFile(raw)))
       .catch((err) => {
@@ -44,12 +42,12 @@ function getDictionary(): Promise<MemoryDictionary> {
 type StoredCard = Card & { dirty?: boolean };
 
 async function getCards(): Promise<Record<string, StoredCard>> {
-  const data = await chrome.storage.local.get("cards");
+  const data = await storageGet<{ cards?: Record<string, StoredCard> }>("cards");
   return data.cards ?? {};
 }
 
 async function setCards(cards: Record<string, StoredCard>): Promise<void> {
-  await chrome.storage.local.set({ cards });
+  await storageSet({ cards });
 }
 
 async function handleSave(entry: any, sentence?: string, url?: string): Promise<void> {
@@ -76,8 +74,43 @@ async function isSaved(term: string, reading: string): Promise<boolean> {
   return Object.values(cards).some((c) => !c.deleted && c.term === term && c.reading === reading);
 }
 
+/** Base64url-encode UTF-8 JSON for the app handoff fragment. */
+function encodePayload(value: unknown): string {
+  const json = JSON.stringify(value);
+  const bytes = new TextEncoder().encode(json);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/**
+ * Hand the words saved here over to the app.
+ *
+ * On a single phone there is no sync server to bridge the two stores, so the
+ * cards travel in the URL fragment — which browsers never send to the server
+ * — and the app imports them into its own deck. Cards stay here too, so this
+ * is safe to repeat.
+ */
+async function handoffToApp(): Promise<{ url: string; count: number }> {
+  const settings = await storageGet<{ settings?: { appUrl?: string } }>("settings");
+  const appUrl = settings.settings?.appUrl?.trim() || DEFAULT_APP_URL;
+
+  const cards = await getCards();
+  const pending = Object.values(cards)
+    .filter((c) => !c.deleted)
+    .sort((a, b) => b.createdAt - a.createdAt)
+    // Keep the fragment to a sane length; repeat the handoff for more.
+    .slice(0, 300)
+    .map(({ dirty: _dirty, ...card }) => card);
+
+  const base = appUrl.endsWith("/") ? appUrl : appUrl + "/";
+  const url = `${base}#import=${encodePayload(pending)}`;
+  await ext.tabs.create({ url });
+  return { url, count: pending.length };
+}
+
 async function handleSync(): Promise<{ pushed: number; pulled: number }> {
-  const data = await chrome.storage.local.get(["settings", "syncSince"]);
+  const data = await storageGet<{ settings?: any; syncSince?: number }>(["settings", "syncSince"]);
   const settings = data.settings ?? {};
   if (!settings.url || !settings.token) {
     throw new Error("Set the sync server URL and token first.");
@@ -88,7 +121,7 @@ async function handleSync(): Promise<{ pushed: number; pulled: number }> {
 
   const request: SyncRequest = {
     since,
-    changes: dirty.map(({ dirty: _d, ...card }) => card),
+    changes: dirty.map(({ dirty: _dirty, ...card }) => card),
   };
   const res = await fetch(settings.url.replace(/\/+$/, "") + "/sync", {
     method: "POST",
@@ -105,18 +138,22 @@ async function handleSync(): Promise<{ pushed: number; pulled: number }> {
 
   const map = new Map<string, Card>(Object.entries(cards));
   const applied = mergeCards(map, response.changes);
+  const appliedIds = new Set(applied.map((c) => c.id));
+  const pushedIds = new Set(dirty.map((c) => c.id));
+
   const next: Record<string, StoredCard> = {};
   for (const [id, card] of map) {
-    const wasApplied = applied.some((a) => a.id === id);
-    const wasDirty = (cards[id] as StoredCard | undefined)?.dirty && !wasApplied;
-    next[id] = { ...card, dirty: wasDirty && !dirty.some((d) => d.id === id) ? true : false };
+    const wasPushed = pushedIds.has(id);
+    const wasPulled = appliedIds.has(id);
+    const stillDirty = (cards[id]?.dirty ?? false) && !wasPushed && !wasPulled;
+    next[id] = { ...card, dirty: stillDirty };
   }
   await setCards(next);
-  await chrome.storage.local.set({ syncSince: response.now });
+  await storageSet({ syncSince: response.now });
   return { pushed: dirty.length, pulled: applied.length };
 }
 
-chrome.runtime.onMessage.addListener((message: any, _sender: any, sendResponse: (r: any) => void) => {
+ext.runtime.onMessage.addListener((message: any, _sender: any, sendResponse: (r: any) => void) => {
   (async () => {
     switch (message?.type) {
       case "lookup": {
@@ -140,6 +177,14 @@ chrome.runtime.onMessage.addListener((message: any, _sender: any, sendResponse: 
         sendResponse({ total: live.length, dirty: live.filter((c) => c.dirty).length });
         break;
       }
+      case "handoff": {
+        try {
+          sendResponse(await handoffToApp());
+        } catch (err) {
+          sendResponse({ error: err instanceof Error ? err.message : String(err) });
+        }
+        break;
+      }
       case "sync": {
         try {
           sendResponse(await handleSync());
@@ -149,17 +194,23 @@ chrome.runtime.onMessage.addListener((message: any, _sender: any, sendResponse: 
         break;
       }
       case "getSettings": {
-        const data = await chrome.storage.local.get(["settings", "tapMode"]);
-        sendResponse({ settings: data.settings ?? {}, tapMode: data.tapMode ?? false });
+        const data = await storageGet<{ settings?: any; tapMode?: boolean | null }>([
+          "settings",
+          "tapMode",
+        ]);
+        sendResponse({
+          settings: { appUrl: DEFAULT_APP_URL, ...(data.settings ?? {}) },
+          tapMode: data.tapMode ?? null,
+        });
         break;
       }
       case "setSettings": {
-        await chrome.storage.local.set({ settings: message.settings });
+        await storageSet({ settings: message.settings });
         sendResponse({ ok: true });
         break;
       }
       case "setTapMode": {
-        await chrome.storage.local.set({ tapMode: message.enabled });
+        await storageSet({ tapMode: message.enabled });
         sendResponse({ ok: true });
         break;
       }

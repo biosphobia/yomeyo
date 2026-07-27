@@ -10,8 +10,9 @@ import {
 
 /** Settings page: sync configuration and dictionary status. */
 
-export async function renderSettings(main: HTMLElement): Promise<void> {
+export async function renderSettings(main: HTMLElement, isCurrent: () => boolean = () => true): Promise<void> {
   const settings = await getSyncSettings();
+  if (!isCurrent()) return; // a newer render has taken over
 
   main.innerHTML = `
     <h1>Settings</h1>

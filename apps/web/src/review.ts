@@ -10,8 +10,9 @@ import { liveCards, saveCard } from "./store.js";
 
 /** Review page: Anki-style daily flashcards. */
 
-export async function renderReview(main: HTMLElement): Promise<void> {
+export async function renderReview(main: HTMLElement, isCurrent: () => boolean = () => true): Promise<void> {
   const cards = await liveCards();
+  if (!isCurrent()) return; // a newer render has taken over
   const now = Date.now();
   const stats = deckStats(cards, now);
   const queue = dueCards(cards, now);

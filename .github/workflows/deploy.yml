@@ -89,20 +89,22 @@ jobs:
       - name: Build browser extension
         run: npm run build -w @yomeyo/extension
 
-      - name: Package extension for download
+      - name: Package extensions for download
         run: |
-          cd apps/extension/dist
-          zip -qr "$GITHUB_WORKSPACE/yomeyo-extension.zip" .
-          cd "$GITHUB_WORKSPACE"
-          # Serve the zip from the app site too, so it has a stable install URL.
-          cp yomeyo-extension.zip apps/web/dist/
-          echo "- Extension package: $(du -h yomeyo-extension.zip | cut -f1)" >> $GITHUB_STEP_SUMMARY
+          for target in chromium firefox; do
+            ( cd "apps/extension/dist/$target" && zip -qr "$GITHUB_WORKSPACE/yomeyo-extension-$target.zip" . )
+            # Serve from the app site too, so each has a stable install URL.
+            cp "yomeyo-extension-$target.zip" apps/web/dist/
+            echo "- Extension ($target): $(du -h "yomeyo-extension-$target.zip" | cut -f1)" >> $GITHUB_STEP_SUMMARY
+          done
+          # Keep the previous single-file name working as the Chromium build.
+          cp yomeyo-extension-chromium.zip apps/web/dist/yomeyo-extension.zip
 
-      - name: Upload extension as a workflow artifact
+      - name: Upload extensions as workflow artifacts
         uses: actions/upload-artifact@v4
         with:
           name: yomeyo-extension
-          path: yomeyo-extension.zip
+          path: yomeyo-extension-*.zip
           if-no-files-found: error
 
       # Publishing path 1: a plain gh-pages branch. Always works with the

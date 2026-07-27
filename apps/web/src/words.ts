@@ -2,8 +2,9 @@ import { liveCards, saveCard } from "./store.js";
 
 /** Words page: browse, delete, export/import the deck. */
 
-export async function renderWords(main: HTMLElement): Promise<void> {
+export async function renderWords(main: HTMLElement, isCurrent: () => boolean = () => true): Promise<void> {
   const cards = (await liveCards()).sort((a, b) => b.createdAt - a.createdAt);
+  if (!isCurrent()) return; // a newer render has taken over
 
   main.innerHTML = `
     <h1>Words</h1>
