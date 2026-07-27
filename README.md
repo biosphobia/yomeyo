@@ -79,11 +79,33 @@ automatically instead and you never need this button.
 
 ### Reviewing
 
-Open the app and hit **Review**. Cards are scheduled Anki-style: rate each
-one *Again / Hard / Good / Easy* and the interval adapts. Each button shows
-when you would next see the card. Tap 🔊 on any word to hear it — Yomeyo
-speaks the reading with the Japanese voice already on your device, so it
-works offline and covers every word.
+Open the app and hit **Review**. Rate each card *Again / Hard / Good / Easy*;
+each button shows when you would next see it. Tap 🔊 to hear the word — Yomeyo
+speaks the reading with the Japanese voice already on your device, so it works
+offline and covers every word.
+
+Scheduling is **FSRS-6**, the same algorithm Anki uses with FSRS enabled, and
+it ships configured to match a real mining deck:
+
+| Setting | Default |
+|---|---|
+| Scheduler | FSRS, 80% desired retention |
+| FSRS parameters | 21-weight optimised set (replaceable) |
+| New cards/day | 20 |
+| Maximum reviews/day | 9999 |
+| Learning steps | 20s 1m 5m |
+| Relearning steps | 3m |
+| Leech threshold | 5 lapses, tag only |
+| New card order | Order added |
+
+All of it is editable under **Settings → Scheduling**, including pasting a
+fresh parameter set from Anki (*Deck options → FSRS → FSRS parameters*).
+Turning FSRS off falls back to SM-2.
+
+Learning steps sit outside FSRS, exactly as they do in Anki: FSRS models
+memory over days, while a 20-second step is about getting a new word in at
+all. Once a card graduates, FSRS picks the interval from the memory state
+built up during those steps.
 
 ## Kanji
 
