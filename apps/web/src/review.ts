@@ -1,29 +1,34 @@
-import {
-  DEFAULT_SRS_CONFIG,
-  deckStats,
-  dueCards,
-  gradeCard,
-  type Card,
-  type Grade,
-} from "@yomeyo/core";
+import { buildQueue, deckStats, gradeCard, gradePreview, type Card, type DeckConfig, type Grade } from "@yomeyo/core";
 import { liveCards, saveCard } from "./store.js";
 import { speak, speakerButton } from "./audio.js";
+import { getDailyCounts, getDeckConfig, recordReview } from "./deck.js";
 
-/** Review page: Anki-style daily flashcards. */
+/** Review page: daily flashcards, scheduled by FSRS (or SM-2 if switched off). */
 
 export async function renderReview(main: HTMLElement, isCurrent: () => boolean = () => true): Promise<void> {
   const cards = await liveCards();
   if (!isCurrent()) return; // a newer render has taken over
   const now = Date.now();
+  const config = await getDeckConfig();
+  const counts = await getDailyCounts(now);
   const stats = deckStats(cards, now);
-  const queue = dueCards(cards, now);
+  const queue = buildQueue(cards, now, config, {
+    introducedToday: counts.introduced,
+    reviewedToday: counts.reviewed,
+  });
+
+  const newLeft = Math.max(0, config.newPerDay - counts.introduced);
 
   main.innerHTML = `
     <h1>Review</h1>
-    <p class="subtitle">Grade honestly — the scheduler adapts to you.</p>
+    <p class="subtitle">${
+      config.fsrs
+        ? `FSRS · ${Math.round(config.desiredRetention * 100)}% target retention`
+        : "SM-2 scheduling"
+    }</p>
     <div class="stats-row">
-      <div class="stat"><div class="num">${stats.due}</div><div class="lbl">due</div></div>
-      <div class="stat"><div class="num">${stats.newCount}</div><div class="lbl">new</div></div>
+      <div class="stat"><div class="num">${queue.length}</div><div class="lbl">to study</div></div>
+      <div class="stat"><div class="num">${newLeft}</div><div class="lbl">new left</div></div>
       <div class="stat"><div class="num">${stats.learning}</div><div class="lbl">learning</div></div>
       <div class="stat"><div class="num">${stats.review}</div><div class="lbl">known</div></div>
     </div>
@@ -31,23 +36,45 @@ export async function renderReview(main: HTMLElement, isCurrent: () => boolean =
   `;
 
   const area = main.querySelector<HTMLDivElement>("#review-area")!;
-  showNext(area, queue);
+  const numbers = main.querySelectorAll<HTMLElement>(".stat .num");
+
+  /** Keep the counters honest while reviewing, not just on entry. */
+  const refreshStats = async (remaining: number): Promise<void> => {
+    const live = await getDailyCounts(Date.now());
+    numbers[0].textContent = String(remaining);
+    numbers[1].textContent = String(Math.max(0, config.newPerDay - live.introduced));
+  };
+
+  showNext(area, queue, config, stats.due, refreshStats);
 }
 
-function showNext(area: HTMLElement, queue: Card[]): void {
+function showNext(
+  area: HTMLElement,
+  queue: Card[],
+  config: DeckConfig,
+  totalDue: number,
+  refreshStats: (remaining: number) => Promise<void>,
+): void {
   const card = queue.shift();
   if (!card) {
     area.innerHTML = `
       <div class="empty-state">
         <div class="big">🎉</div>
-        <div>All caught up!<br/>Mine some new words in the Reader, or check back later.</div>
+        <div>${
+          totalDue > 0
+            ? "That's the daily limit — more cards are waiting tomorrow."
+            : "All caught up!<br/>Mine some new words in the Reader, or check back later."
+        }</div>
       </div>
     `;
     return;
   }
 
+  const preview = gradePreview(card, Date.now(), config);
+
   area.innerHTML = `
     <div class="card-panel review-card">
+      ${card.leech ? `<div class="leech-tag">Leech · ${card.lapses} lapses</div>` : ""}
       <div class="review-term" lang="ja">${escapeHtml(card.term)}</div>
       ${card.sentence ? `<div class="review-sentence" lang="ja">${escapeHtml(hideTerm(card.sentence, card.term))}</div>` : ""}
       <div id="answer" style="display:none">
@@ -58,10 +85,10 @@ function showNext(area: HTMLElement, queue: Card[]): void {
         <button id="show-btn">Show answer</button>
       </div>
       <div class="grade-row" id="grades" style="display:none">
-        ${gradeButton(card, "again", "Again")}
-        ${gradeButton(card, "hard", "Hard")}
-        ${gradeButton(card, "good", "Good")}
-        ${gradeButton(card, "easy", "Easy")}
+        ${gradeButton("again", "Again", preview.again)}
+        ${gradeButton("hard", "Hard", preview.hard)}
+        ${gradeButton("good", "Good", preview.good)}
+        ${gradeButton("easy", "Easy", preview.easy)}
       </div>
     </div>
   `;
@@ -71,44 +98,50 @@ function showNext(area: HTMLElement, queue: Card[]): void {
     area.querySelector<HTMLElement>("#answer")!.style.display = "";
     area.querySelector<HTMLElement>("#grades")!.style.display = "";
     showBtn.style.display = "none";
-    // Hearing the word as the answer appears is the point of the audio;
-    // autoplay is allowed here because a tap triggered it.
     void speak(card.reading || card.term).catch(() => {
       /* no Japanese voice on this device */
     });
   });
 
-  // A speaker on the answer so it can be replayed.
   area.querySelector<HTMLElement>("#reading-row")?.appendChild(speakerButton(card.term, card.reading));
 
   area.querySelectorAll<HTMLButtonElement>("[data-grade]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const grade = btn.dataset.grade as Grade;
       const now = Date.now();
-      const updated = gradeCard(card, grade, now);
+      const wasNew = card.state === "new";
+      const updated = gradeCard(card, grade, now, config);
       await saveCard(updated);
-      // Cards still due within this session (short learning steps) rejoin
-      // the back of the queue so they come around again.
-      if (updated.due <= now + 20 * 60 * 1000 && updated.state !== "review") {
+      await recordReview(wasNew, now);
+
+      // Cards still due within this session (short learning steps) rejoin the
+      // queue so they come round again, as they would in Anki.
+      if (updated.state !== "review" && updated.due <= now + 20 * 60 * 1000) {
         queue.push(updated);
       }
-      showNext(area, queue);
+      await refreshStats(queue.length);
+      showNext(area, queue, config, totalDue, refreshStats);
     });
   });
 }
 
-function gradeButton(card: Card, grade: Grade, label: string): string {
-  const preview = gradeCard(card, grade, Date.now(), DEFAULT_SRS_CONFIG);
-  return `<button class="grade-${grade}" data-grade="${grade}">${label}<span class="interval">${formatDelay(preview.due - Date.now())}</span></button>`;
+function gradeButton(grade: Grade, label: string, deltaMs: number): string {
+  return `<button class="grade-${grade}" data-grade="${grade}">${label}<span class="interval">${formatDelay(
+    deltaMs,
+  )}</span></button>`;
 }
 
 function formatDelay(ms: number): string {
-  const min = Math.round(ms / 60000);
-  if (min < 60) return `${Math.max(1, min)}m`;
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return `${Math.max(1, seconds)}s`;
+  const minutes = Math.round(ms / 60000);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = ms / 3600000;
+  if (hours < 24) return `${Math.round(hours)}h`;
   const days = ms / 86400000;
-  if (days < 1.5) return "1d";
   if (days < 30) return `${Math.round(days)}d`;
-  return `${(days / 30.4).toFixed(1)}mo`;
+  if (days < 365) return `${(days / 30.4).toFixed(1)}mo`;
+  return `${(days / 365).toFixed(1)}y`;
 }
 
 /** Mask the target word in its sentence so the front isn't a giveaway. */

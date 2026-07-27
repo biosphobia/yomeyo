@@ -9,6 +9,8 @@ import {
   validateConfig,
   type AccountInfo,
 } from "./cloud.js";
+import { formatSteps, parseFsrsWeights, parseSteps } from "@yomeyo/core";
+import { getDeckConfig, resetDeckConfig, saveDeckConfig } from "./deck.js";
 import {
   importDictionary,
   listDictionaries,
@@ -51,6 +53,11 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
     </div>
 
     <div class="card-panel">
+      <b>Scheduling</b>
+      <div id="deck-config"></div>
+    </div>
+
+    <div class="card-panel">
       <b>Dictionary</b>
       <div class="msg" id="dict-status">Not loaded yet — open the Reader to load it.</div>
       <div class="row-actions">
@@ -84,6 +91,7 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
   `;
 
   renderAccount();
+  void renderDeckConfig(main);
   wireDictionary(main);
   void renderExtraDictionaries(main);
   wireServerSync(main);
@@ -205,6 +213,101 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
       void renderSettings(main);
     });
   }
+}
+
+/**
+ * Deck options, laid out like Anki's preset screen so the same settings are
+ * recognisable: FSRS and its parameters, daily limits, learning steps, and
+ * what to do with leeches.
+ */
+async function renderDeckConfig(main: HTMLElement): Promise<void> {
+  const box = main.querySelector<HTMLDivElement>("#deck-config");
+  if (!box) return;
+  const config = await getDeckConfig();
+
+  box.innerHTML = `
+    <div class="settings-grid">
+      <label for="cfg-fsrs">FSRS scheduler</label>
+      <label class="switch-sm"><input type="checkbox" id="cfg-fsrs" ${config.fsrs ? "checked" : ""} /></label>
+
+      <label for="cfg-retention">Desired retention</label>
+      <input type="number" id="cfg-retention" min="70" max="99" step="1" value="${Math.round(config.desiredRetention * 100)}" />
+
+      <label for="cfg-new">New cards/day</label>
+      <input type="number" id="cfg-new" min="0" max="9999" value="${config.newPerDay}" />
+
+      <label for="cfg-max">Maximum reviews/day</label>
+      <input type="number" id="cfg-max" min="0" max="99999" value="${config.maxReviewsPerDay}" />
+
+      <label for="cfg-learn">Learning steps</label>
+      <input type="text" id="cfg-learn" value="${escapeAttr(formatSteps(config.learningStepsSec))}" />
+
+      <label for="cfg-relearn">Relearning steps</label>
+      <input type="text" id="cfg-relearn" value="${escapeAttr(formatSteps(config.relearningStepsSec))}" />
+
+      <label for="cfg-leech">Leech threshold</label>
+      <input type="number" id="cfg-leech" min="1" max="99" value="${config.leechThreshold}" />
+
+      <label for="cfg-leech-action">Leech action</label>
+      <select id="cfg-leech-action">
+        <option value="tag" ${config.leechAction === "tag" ? "selected" : ""}>Tag only</option>
+        <option value="suspend" ${config.leechAction === "suspend" ? "selected" : ""}>Suspend card</option>
+      </select>
+
+      <label for="cfg-order">New card order</label>
+      <select id="cfg-order">
+        <option value="added" ${config.newCardOrder === "added" ? "selected" : ""}>Order added</option>
+        <option value="random" ${config.newCardOrder === "random" ? "selected" : ""}>Random</option>
+      </select>
+    </div>
+
+    <label for="cfg-weights">FSRS parameters (21 values)</label>
+    <textarea id="cfg-weights" style="min-height:96px;font-family:ui-monospace,monospace;font-size:0.75rem">${escapeHtml(
+      config.fsrsWeights.join(", "),
+    )}</textarea>
+    <div class="msg">Paste an optimised set from Anki (Deck options → FSRS → FSRS parameters).</div>
+
+    <div class="row-actions">
+      <button id="cfg-save">Save</button>
+      <button id="cfg-reset" class="ghost">Reset to defaults</button>
+    </div>
+    <div class="msg" id="cfg-msg"></div>
+  `;
+
+  const msg = box.querySelector<HTMLDivElement>("#cfg-msg")!;
+  const value = (id: string) => box.querySelector<HTMLInputElement>(id)!.value.trim();
+
+  box.querySelector<HTMLButtonElement>("#cfg-save")!.addEventListener("click", async () => {
+    try {
+      const retention = Number(value("#cfg-retention"));
+      if (!Number.isFinite(retention) || retention < 70 || retention > 99) {
+        throw new Error("Desired retention must be between 70 and 99.");
+      }
+      await saveDeckConfig({
+        ...config,
+        fsrs: box.querySelector<HTMLInputElement>("#cfg-fsrs")!.checked,
+        desiredRetention: retention / 100,
+        fsrsWeights: parseFsrsWeights(box.querySelector<HTMLTextAreaElement>("#cfg-weights")!.value),
+        newPerDay: Math.max(0, Number(value("#cfg-new")) || 0),
+        maxReviewsPerDay: Math.max(0, Number(value("#cfg-max")) || 0),
+        learningStepsSec: parseSteps(value("#cfg-learn")),
+        relearningStepsSec: parseSteps(value("#cfg-relearn")),
+        leechThreshold: Math.max(1, Number(value("#cfg-leech")) || 1),
+        leechAction: box.querySelector<HTMLSelectElement>("#cfg-leech-action")!.value as "tag" | "suspend",
+        newCardOrder: box.querySelector<HTMLSelectElement>("#cfg-order")!.value as "added" | "random",
+      });
+      msg.textContent = "Saved. New intervals use these settings from the next review.";
+      msg.className = "msg ok";
+    } catch (err) {
+      msg.textContent = err instanceof Error ? err.message : String(err);
+      msg.className = "msg error";
+    }
+  });
+
+  box.querySelector<HTMLButtonElement>("#cfg-reset")!.addEventListener("click", async () => {
+    await resetDeckConfig();
+    void renderDeckConfig(main);
+  });
 }
 
 /**

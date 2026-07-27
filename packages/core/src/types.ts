@@ -78,8 +78,15 @@ export interface Card {
   due: number;
   /** Current interval in days (0 while in learning steps). */
   intervalDays: number;
-  /** Ease factor, Anki-style, starts at 2.5, floor 1.3. */
+  /** Ease factor, Anki-style, starts at 2.5, floor 1.3. SM-2 only. */
   ease: number;
+  /** FSRS memory state. Absent until the card's first FSRS review. */
+  stability?: number;
+  difficulty?: number;
+  /** When the card was last reviewed, for FSRS's elapsed-time term. */
+  lastReview?: number;
+  /** Set once lapses reach the leech threshold. */
+  leech?: boolean;
   /** Index into learning steps while state is learning/relearning. */
   stepIndex: number;
   reps: number;
