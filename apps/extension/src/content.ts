@@ -20,20 +20,36 @@ const IS_TOUCH =
 
 /** undefined = follow the device default (tap on touch, Alt+click on desktop). */
 let tapModeSetting: boolean | undefined;
+/** Whether the small on-page toggle is shown at all. */
+let showToggle = true;
 
 function tapModeActive(): boolean {
   return tapModeSetting ?? IS_TOUCH;
 }
 
-void storageGet<{ tapMode?: boolean | null }>("tapMode").then((data) => {
-  if (typeof data?.tapMode === "boolean") tapModeSetting = data.tapMode;
-});
+void storageGet<{ tapMode?: boolean | null; showToggle?: boolean }>(["tapMode", "showToggle"]).then(
+  (data) => {
+    if (typeof data?.tapMode === "boolean") tapModeSetting = data.tapMode;
+    if (typeof data?.showToggle === "boolean") showToggle = data.showToggle;
+    renderToggle();
+  },
+);
 ext.storage?.onChanged?.addListener((changes: any) => {
   if ("tapMode" in changes) {
     const value = changes.tapMode.newValue;
     tapModeSetting = typeof value === "boolean" ? value : undefined;
   }
+  if ("showToggle" in changes) showToggle = changes.showToggle.newValue !== false;
+  renderToggle();
 });
+
+/** Flip lookups on/off and remember the choice across pages. */
+async function setTapMode(enabled: boolean): Promise<void> {
+  tapModeSetting = enabled;
+  renderToggle();
+  if (!enabled) closePopup();
+  await sendMessage({ type: "setTapMode", enabled });
+}
 
 // ---------- shadow-DOM popup ----------
 
@@ -45,7 +61,9 @@ const POPUP_CSS = `
   * { box-sizing: border-box; }
   .sheet {
     position: fixed;
-    z-index: 2147483647;
+    /* One below the toggle: the on/off control must never be covered by a
+       definition, or there is no way to dismiss lookups while one is open. */
+    z-index: 2147483646;
     left: 0; right: 0; bottom: 0;
     margin: 0 auto;
     max-width: 560px;
@@ -110,12 +128,104 @@ const POPUP_CSS = `
   button.save.saved { background: #4cc38a; }
   button.save[disabled] { opacity: 0.6; }
   .empty { padding: 14px; color: #9a97b0; }
+
+  /* The always-available on/off pill. Deliberately small and translucent:
+     it must never be the thing you accidentally tap while reading. */
+  .toggle {
+    position: fixed;
+    z-index: 2147483647;
+    right: 10px;
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    transition: bottom 140ms ease, opacity 120ms ease, background 120ms ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 11px;
+    border-radius: 999px;
+    background: rgba(28, 28, 46, 0.72);
+    border: 1px solid rgba(255,255,255,0.16);
+    color: #eceaf4;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+    user-select: none;
+    opacity: 0.5;
+    transition: opacity 120ms ease, background 120ms ease;
+    backdrop-filter: blur(6px);
+    touch-action: manipulation;
+  }
+  .toggle:hover, .toggle:active { opacity: 1; }
+  .toggle .dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: #6b6880;
+  }
+  .toggle.on { opacity: 0.72; }
+  .toggle.on .dot { background: #7c6cf0; box-shadow: 0 0 6px #7c6cf0; }
+  .toggle .label { letter-spacing: 0.02em; min-width: 46px; }
 `;
 
+/**
+ * Dismiss the lookup sheet. The shadow host itself stays, because the on/off
+ * toggle lives in it and must survive closing a definition.
+ */
 function closePopup(): void {
-  host?.remove();
-  host = null;
-  shadow = null;
+  shadow?.querySelector(".sheet")?.remove();
+  liftToggleAbove(0);
+}
+
+/** How far above the bottom edge the pill currently sits. */
+let toggleLift = 0;
+
+/**
+ * Keep the on/off pill clear of the definition sheet, which fills the bottom
+ * of the screen — exactly where the pill sits.
+ */
+function liftToggleAbove(sheetHeight: number): void {
+  toggleLift = sheetHeight > 0 ? Math.round(sheetHeight) + 12 : 0;
+  positionToggle();
+}
+
+/**
+ * Place the pill against the *visible* part of the page.
+ *
+ * `position: fixed` resolves against the layout viewport, which on a page
+ * without a `<meta name="viewport">` is 980px wide regardless of the phone's
+ * screen — so a plain bottom/right anchor puts the pill off-screen on any
+ * non-responsive site, and pinch-zooming moves it out of reach on the rest.
+ * visualViewport describes what the user can actually see, so anchor to that
+ * and follow it as they scroll and zoom.
+ */
+function positionToggle(): void {
+  if (!toggleEl) return;
+  const gap = 10;
+  const bottom = 16 + toggleLift;
+  const vv = window.visualViewport;
+
+  if (!vv) {
+    toggleEl.style.left = "auto";
+    toggleEl.style.top = "auto";
+    toggleEl.style.right = `${gap}px`;
+    toggleEl.style.bottom = `calc(${bottom}px + env(safe-area-inset-bottom))`;
+    return;
+  }
+
+  const rect = toggleEl.getBoundingClientRect();
+  const width = rect.width || 108;
+  const height = rect.height || 29;
+  toggleEl.style.right = "auto";
+  toggleEl.style.bottom = "auto";
+  toggleEl.style.left = `${Math.round(vv.offsetLeft + vv.width - width - gap)}px`;
+  toggleEl.style.top = `${Math.round(vv.offsetTop + vv.height - height - bottom)}px`;
+}
+
+// Follow the visible area as the user scrolls, zooms or rotates.
+if (window.visualViewport) {
+  window.visualViewport.addEventListener("resize", positionToggle);
+  window.visualViewport.addEventListener("scroll", positionToggle);
+} else {
+  window.addEventListener("resize", positionToggle);
 }
 
 function ensureHost(): ShadowRoot {
@@ -135,6 +245,65 @@ function ensureHost(): ShadowRoot {
   shadow.appendChild(style);
   document.documentElement.appendChild(host);
   return shadow;
+}
+
+/**
+ * The on-page lookup toggle.
+ *
+ * Turning lookups off from the toolbar takes several taps, which is too slow
+ * when you just want to tap a link. This sits in the corner, dimmed until
+ * touched, and flips lookups with one tap. Its own '×' hides it for people
+ * who would rather use the toolbar.
+ */
+let toggleEl: HTMLElement | null = null;
+
+function renderToggle(): void {
+  if (!showToggle) {
+    toggleEl?.remove();
+    toggleEl = null;
+    return;
+  }
+  const root = ensureHost();
+  if (!toggleEl) {
+    toggleEl = document.createElement("div");
+    toggleEl.className = "toggle";
+    toggleEl.setAttribute("role", "switch");
+
+    const dot = document.createElement("span");
+    dot.className = "dot";
+    const label = document.createElement("span");
+    label.className = "label";
+    toggleEl.append(dot, label);
+
+    // The whole pill is one target. An inline "hide" button used to sit here,
+    // but it was a small neighbour of the main action — easy to hit by
+    // accident, and hiding the control is the last thing you want to do by
+    // accident. Hiding now lives in the toolbar popup instead.
+    toggleEl.addEventListener(
+      "click",
+      (ev) => {
+        ev.stopPropagation();
+        ev.preventDefault();
+        void setTapMode(!tapModeActive());
+      },
+      true,
+    );
+    // Never let a tap on the pill reach the page underneath.
+    for (const type of ["pointerdown", "touchstart", "mousedown"]) {
+      toggleEl.addEventListener(type, (ev) => ev.stopPropagation(), true);
+    }
+    root.appendChild(toggleEl);
+  }
+
+  positionToggle();
+
+  const on = tapModeActive();
+  toggleEl.classList.toggle("on", on);
+  toggleEl.setAttribute("aria-checked", String(on));
+  toggleEl.querySelector(".label")!.textContent = on ? "Tap: on" : "Tap: off";
+  toggleEl.title = on
+    ? "Yomeyo lookups are on — tap to turn off and use the page normally"
+    : "Yomeyo lookups are off — tap to turn on";
 }
 
 async function showPopup(matches: LookupMatch[], sentence: string): Promise<void> {
@@ -182,8 +351,10 @@ async function showPopup(matches: LookupMatch[], sentence: string): Promise<void
     list.appendChild(empty);
   }
 
+  liftToggleAbove(sheet.getBoundingClientRect().height);
+
   const dismiss = (ev: Event) => {
-    if (!host || ev.composedPath().includes(sheet)) return;
+    if (ev.composedPath().includes(sheet)) return;
     closePopup();
     document.removeEventListener("pointerdown", dismiss, true);
   };
@@ -263,6 +434,7 @@ interface TapText {
   node: Text;
 }
 
+/** Resolve a screen point to the character actually under it, or null. */
 function textAtPoint(x: number, y: number): TapText | null {
   let node: Node | null = null;
   let offset = 0;
@@ -294,6 +466,24 @@ function textAtPoint(x: number, y: number): TapText | null {
     offset -= 1;
   }
   if (!isJapaneseChar(content[offset])) return null;
+
+  // caretPositionFromPoint snaps to the *nearest* character, so a tap on a
+  // margin, a blank area or the padding around a paragraph still resolves to
+  // some text. Without this check, tapping empty space pops up a definition —
+  // exactly the kind of interruption the lookup should never cause. Require
+  // the point to actually fall on the character's box.
+  try {
+    const glyph = document.createRange();
+    glyph.setStart(textNode, offset);
+    glyph.setEnd(textNode, offset + 1);
+    const box = glyph.getBoundingClientRect();
+    const slack = 4; // forgiving for fingers, not for empty space
+    if (x < box.left - slack || x > box.right + slack || y < box.top - slack || y > box.bottom + slack) {
+      return null;
+    }
+  } catch {
+    return null;
+  }
 
   return { text: content, offset, node: textNode };
 }

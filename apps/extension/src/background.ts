@@ -194,13 +194,15 @@ ext.runtime.onMessage.addListener((message: any, _sender: any, sendResponse: (r:
         break;
       }
       case "getSettings": {
-        const data = await storageGet<{ settings?: any; tapMode?: boolean | null }>([
-          "settings",
-          "tapMode",
-        ]);
+        const data = await storageGet<{
+          settings?: any;
+          tapMode?: boolean | null;
+          showToggle?: boolean;
+        }>(["settings", "tapMode", "showToggle"]);
         sendResponse({
           settings: { appUrl: DEFAULT_APP_URL, ...(data.settings ?? {}) },
           tapMode: data.tapMode ?? null,
+          showToggle: data.showToggle !== false,
         });
         break;
       }
@@ -211,6 +213,11 @@ ext.runtime.onMessage.addListener((message: any, _sender: any, sendResponse: (r:
       }
       case "setTapMode": {
         await storageSet({ tapMode: message.enabled });
+        sendResponse({ ok: true });
+        break;
+      }
+      case "setShowToggle": {
+        await storageSet({ showToggle: message.enabled });
         sendResponse({ ok: true });
         break;
       }

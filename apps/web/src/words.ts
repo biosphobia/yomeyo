@@ -1,4 +1,5 @@
 import { liveCards, saveCard } from "./store.js";
+import { speakerButton } from "./audio.js";
 
 /** Words page: browse, delete, export/import the deck. */
 
@@ -32,12 +33,13 @@ export async function renderWords(main: HTMLElement, isCurrent: () => boolean = 
         <div class="glosses">${escapeHtml(card.glosses.join(" · "))}</div>
       </div>
       <div class="due">${dueLabel(card.due, card.state)}</div>
-      <button class="ghost" title="Delete">✕</button>
+      <button class="ghost delete-btn" title="Delete">✕</button>
     `;
-    row.querySelector("button")!.addEventListener("click", async () => {
+    row.querySelector<HTMLButtonElement>(".delete-btn")!.addEventListener("click", async () => {
       await saveCard({ ...card, deleted: true, updatedAt: Date.now() });
       row.remove();
     });
+    row.querySelector(".word")!.after(speakerButton(card.term, card.reading));
     list.appendChild(row);
   }
 

@@ -19,8 +19,8 @@ on:
       - claude/japanese-vocab-extension-7t4oai
   workflow_dispatch:
     inputs:
-      full_dictionary:
-        description: "Use the complete JMdict instead of the common-words build (much larger)"
+      common_dictionary:
+        description: "Build only JMdict's common-words subset (smaller download, misses many compounds)"
         type: boolean
         default: false
 
@@ -60,8 +60,8 @@ jobs:
           # Raises the GitHub API rate limit when resolving the release asset.
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          if [ "${{ inputs.full_dictionary }}" = "true" ]; then
-            node scripts/build-dict.mjs --full
+          if [ "${{ inputs.common_dictionary }}" = "true" ]; then
+            node scripts/build-dict.mjs --common
           else
             node scripts/build-dict.mjs
           fi

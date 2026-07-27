@@ -1,5 +1,6 @@
 import { createCard, type LookupMatch } from "@yomeyo/core";
 import { hasCardForTerm, saveCard } from "./store.js";
+import { speakerButton } from "./audio.js";
 
 /**
  * Shared lookup-result popup: shows candidate words for a tap and lets the
@@ -70,6 +71,7 @@ export async function showLookupPopup(matches: LookupMatch[], context: PopupCont
       }
 
       row.appendChild(word);
+      row.appendChild(speakerButton(entry.term, entry.reading));
 
       const saveBtn = document.createElement("button");
       saveBtn.textContent = "+ Save";

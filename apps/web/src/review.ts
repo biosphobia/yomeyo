@@ -7,6 +7,7 @@ import {
   type Grade,
 } from "@yomeyo/core";
 import { liveCards, saveCard } from "./store.js";
+import { speak, speakerButton } from "./audio.js";
 
 /** Review page: Anki-style daily flashcards. */
 
@@ -50,7 +51,7 @@ function showNext(area: HTMLElement, queue: Card[]): void {
       <div class="review-term" lang="ja">${escapeHtml(card.term)}</div>
       ${card.sentence ? `<div class="review-sentence" lang="ja">${escapeHtml(hideTerm(card.sentence, card.term))}</div>` : ""}
       <div id="answer" style="display:none">
-        <div class="review-reading" lang="ja">${escapeHtml(card.reading)}</div>
+        <div id="reading-row" class="review-reading" lang="ja">${escapeHtml(card.reading)}</div>
         <div class="review-glosses">${escapeHtml(card.glosses.join(" · "))}</div>
       </div>
       <div class="row-actions" style="justify-content:center">
@@ -70,7 +71,15 @@ function showNext(area: HTMLElement, queue: Card[]): void {
     area.querySelector<HTMLElement>("#answer")!.style.display = "";
     area.querySelector<HTMLElement>("#grades")!.style.display = "";
     showBtn.style.display = "none";
+    // Hearing the word as the answer appears is the point of the audio;
+    // autoplay is allowed here because a tap triggered it.
+    void speak(card.reading || card.term).catch(() => {
+      /* no Japanese voice on this device */
+    });
   });
+
+  // A speaker on the answer so it can be replayed.
+  area.querySelector<HTMLElement>("#reading-row")?.appendChild(speakerButton(card.term, card.reading));
 
   area.querySelectorAll<HTMLButtonElement>("[data-grade]").forEach((btn) => {
     btn.addEventListener("click", async () => {

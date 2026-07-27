@@ -377,6 +377,37 @@ label {
   margin-top: 12px;
 }
 
+/* audio */
+.speaker {
+  background: transparent;
+  border: 1px solid #ffffff22;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  padding: 0;
+  font-size: 1rem;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.speaker.speaking {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.speaker.error {
+  opacity: 0.35;
+}
+
+.review-reading .speaker {
+  margin-left: 10px;
+  vertical-align: middle;
+}
+
 .toast {
   position: fixed;
   left: 50%;

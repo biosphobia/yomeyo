@@ -7,8 +7,8 @@
  * documented at packages/jmdict-simplified-types/index.ts in that repo and
  * mirrored in the conversion below.
  *
- *   node scripts/build-dict.mjs                 # download the common-words build
- *   node scripts/build-dict.mjs --full          # download the complete JMdict
+ *   node scripts/build-dict.mjs                 # download the complete JMdict
+ *   node scripts/build-dict.mjs --common        # smaller common-words build
  *   node scripts/build-dict.mjs path/to.json    # convert an existing file
  *
  * Output is the compact `yomeyo-dict-1` format (positional tuples + interned
@@ -28,7 +28,11 @@ const OUT_PATHS = [
 const RELEASE_API = "https://api.github.com/repos/scriptin/jmdict-simplified/releases/latest";
 
 const args = process.argv.slice(2);
-const wantFull = args.includes("--full");
+// The complete dictionary is the default: the common-words subset is missing
+// ordinary compounds (遠距離恋愛, 人工知能, …), and a word you cannot look up
+// is exactly the word worth mining. `--common` opts into the smaller build.
+const wantCommon = args.includes("--common");
+const wantFull = !wantCommon;
 const localPath = args.find((a) => !a.startsWith("--"));
 
 /** Pick the right release asset and unpack it. */
@@ -188,7 +192,7 @@ export function convertJmdict(raw) {
  * Guard against silently shipping a broken dictionary: the upstream schema
  * could change, or a download could truncate. Fail the build instead.
  */
-export function verifyDict(dict, { minEntries = 10_000 } = {}) {
+export function verifyDict(dict, { minEntries = 10_000, requireCompounds = false } = {}) {
   const problems = [];
   if (dict.entries.length < minEntries) {
     problems.push(`only ${dict.entries.length} entries (expected ${minEntries}+)`);
@@ -207,6 +211,11 @@ export function verifyDict(dict, { minEntries = 10_000 } = {}) {
     ["日本語", "にほんご", "n"],
     ["する", "する", null],
   ];
+  // Compounds that exist in JMdict but not in its common-words subset. They
+  // catch a build that silently fell back to the smaller dictionary.
+  if (requireCompounds) {
+    expectations.push(["遠距離恋愛", "えんきょりれんあい", "n"], ["人工知能", "じんこうちのう", "n"]);
+  }
   for (const [term, reading, pos] of expectations) {
     const entry = byTerm.get(term);
     if (!entry) {
@@ -230,7 +239,10 @@ async function main() {
   console.log(`Converting ${jsonPath}…`);
   const dict = convertJmdict(JSON.parse(readFileSync(jsonPath, "utf8")));
   console.log(`  ${dict.entries.length} entries, ${dict.pos.length} distinct POS tags`);
-  verifyDict(dict);
+  verifyDict(dict, {
+    minEntries: wantCommon ? 10_000 : 100_000,
+    requireCompounds: wantFull,
+  });
   console.log("  verification passed");
 
   const payload = JSON.stringify(dict);

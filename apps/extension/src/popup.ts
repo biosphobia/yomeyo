@@ -10,6 +10,7 @@ const IS_TOUCH =
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 const tapToggle = $<HTMLInputElement>("tap-mode");
+const showToggleInput = $<HTMLInputElement>("show-toggle");
 const tapHint = $<HTMLDivElement>("tap-hint");
 const appUrlInput = $<HTMLInputElement>("app-url");
 const urlInput = $<HTMLInputElement>("sync-url");
@@ -50,11 +51,14 @@ async function effectiveTapMode(stored: boolean | null): Promise<boolean> {
 }
 
 async function refresh(): Promise<void> {
-  const { settings, tapMode } = await sendMessage<{ settings: any; tapMode: boolean | null }>({
-    type: "getSettings",
-  });
+  const { settings, tapMode, showToggle } = await sendMessage<{
+    settings: any;
+    tapMode: boolean | null;
+    showToggle: boolean;
+  }>({ type: "getSettings" });
   // null means "follow the device default": on for touch, off for desktop.
   tapToggle.checked = await effectiveTapMode(tapMode);
+  showToggleInput.checked = showToggle !== false;
   updateHint();
   appUrlInput.value = settings.appUrl ?? "";
   urlInput.value = settings.url ?? "";
@@ -69,6 +73,10 @@ async function refresh(): Promise<void> {
 tapToggle.addEventListener("change", () => {
   updateHint();
   void sendMessage({ type: "setTapMode", enabled: tapToggle.checked });
+});
+
+showToggleInput.addEventListener("change", () => {
+  void sendMessage({ type: "setShowToggle", enabled: showToggleInput.checked });
 });
 
 async function saveSettings(): Promise<void> {
