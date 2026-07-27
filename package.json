@@ -12,7 +12,8 @@
     "test": "npm run test -w @yomeyo/core",
     "dev:web": "npm run dev -w @yomeyo/web",
     "sync-server": "node apps/sync-server/server.mjs",
-    "build-dict": "node scripts/build-dict.mjs"
+    "build-dict": "node scripts/build-dict.mjs",
+    "build-kanji": "node scripts/build-kanji.mjs"
   },
   "engines": {
     "node": ">=20"

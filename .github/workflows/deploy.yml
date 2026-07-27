@@ -66,16 +66,23 @@ jobs:
             node scripts/build-dict.mjs
           fi
 
+      - name: Build kanji data (KANJIDIC2 + KanjiVG)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/build-kanji.mjs
+
       - name: Check dictionary size
         run: |
           SIZE=$(stat -c %s apps/web/public/dict/dict.json)
           GZ=$(gzip -c apps/web/public/dict/dict.json | wc -c)
           ENTRIES=$(node -e "console.log(JSON.parse(require('fs').readFileSync('apps/web/public/dict/dict.json','utf8')).entries.length)")
+          KANJI=$(node -e "console.log(JSON.parse(require('fs').readFileSync('apps/web/public/kanji/index.json','utf8')).kanji.length)")
+          STROKES=$(ls apps/web/public/kanji/strokes 2>/dev/null | wc -l)
           {
-            echo "### Dictionary"
+            echo "### Data"
             echo ""
-            echo "- $ENTRIES entries"
-            echo "- $(( SIZE / 1000000 )) MB raw, $(( GZ / 1000000 )) MB gzipped (what phones download)"
+            echo "- Dictionary: $ENTRIES entries, $(( SIZE / 1000000 )) MB raw, $(( GZ / 1000000 )) MB gzipped"
+            echo "- Kanji: $KANJI characters, stroke order in $STROKES bucket files"
           } >> $GITHUB_STEP_SUMMARY
           # GitHub Pages rejects individual files over 100 MB.
           if [ "$SIZE" -gt 99000000 ]; then

@@ -21,7 +21,7 @@ let dictSize = 0;
 let dictMeta: CompactDictFile["meta"];
 
 /** URL of a bundled asset, correct at any deploy path (root or /yomeyo/). */
-function assetUrl(path: string): string {
+export function assetUrl(path: string): string {
   return new URL(path, new URL(import.meta.env.BASE_URL, location.href)).href;
 }
 

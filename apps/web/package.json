@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "predev": "node ../../scripts/ensure-dict.mjs",
+    "predev": "node ../../scripts/ensure-dict.mjs && node ../../scripts/ensure-kanji.mjs",
     "dev": "vite",
-    "prebuild": "node ../../scripts/ensure-dict.mjs",
+    "prebuild": "node ../../scripts/ensure-dict.mjs && node ../../scripts/ensure-kanji.mjs",
     "build": "tsc --noEmit -p tsconfig.json && vite build && node ../../scripts/stamp-sw.mjs",
     "preview": "vite preview"
   },

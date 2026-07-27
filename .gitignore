@@ -14,3 +14,10 @@ apps/extension/public/dict/dict.json
 # sync server data
 yomeyo-data.json
 *.tmp
+
+# built kanji data (rebuild with npm run build-kanji; seed is in data/)
+apps/web/public/kanji/index.json
+apps/web/public/kanji/strokes/
+data/kanjidic2-*.json
+data/kanjidic2-*.zip
+data/kanjivg*
