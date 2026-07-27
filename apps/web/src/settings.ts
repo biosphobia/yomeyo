@@ -400,7 +400,14 @@ async function renderDeckConfig(main: HTMLElement): Promise<void> {
  * ones are copyrighted and cannot be bundled. Yomitan's term-bank format is
  * what they are distributed in, so that is what this reads.
  */
-async function renderExtraDictionaries(main: HTMLElement): Promise<void> {
+/** A message to show once the list has been rebuilt, since rebuilding it
+ * replaces the element the message would otherwise have been written into. */
+interface DictStatus {
+  text: string;
+  kind: "ok" | "error";
+}
+
+async function renderExtraDictionaries(main: HTMLElement, status?: DictStatus): Promise<void> {
   const box = main.querySelector<HTMLDivElement>("#extra-dicts");
   if (!box) return;
   const list = await listDictionaries();
@@ -449,6 +456,10 @@ async function renderExtraDictionaries(main: HTMLElement): Promise<void> {
 
   const fileInput = box.querySelector<HTMLInputElement>("#dict-files")!;
   const msg = box.querySelector<HTMLDivElement>("#dict-import-msg")!;
+  if (status) {
+    msg.textContent = status.text;
+    msg.className = `msg ${status.kind}`;
+  }
   box.querySelector<HTMLButtonElement>("#dict-pick")!.addEventListener("click", () => fileInput.click());
 
   fileInput.addEventListener("change", async () => {
@@ -461,9 +472,12 @@ async function renderExtraDictionaries(main: HTMLElement): Promise<void> {
     msg.className = "msg";
     try {
       const record = await importDictionary(name, files);
-      msg.textContent = `Added ${record.name} with ${record.entryCount.toLocaleString()} entries.`;
-      msg.className = "msg ok";
-      void renderExtraDictionaries(main);
+      // The message has to survive the re-render below, which replaces the
+      // element it is written into.
+      void renderExtraDictionaries(main, {
+        text: `Added ${record.name} with ${record.entryCount.toLocaleString()} entries.`,
+        kind: "ok",
+      });
     } catch (err) {
       msg.textContent = err instanceof Error ? err.message : String(err);
       msg.className = "msg error";

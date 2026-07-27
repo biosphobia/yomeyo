@@ -19,8 +19,9 @@ const CACHE = `yomeyo-${BUILD_ID}`;
  * scripts and styles fetched during that first load never pass through it.
  * Without precaching, the very first offline launch renders a blank page.
  *
- * The dictionary is deliberately excluded — it is megabytes, and is cached
- * on first use (or via "Download for offline use" in Settings) instead.
+ * The dictionary is deliberately excluded — it is megabytes, and the app
+ * caches it itself on first use (or via "Download for offline use" in
+ * Settings), in a cache this worker neither fills nor clears.
  */
 const PRECACHE = __PRECACHE__;
 
@@ -44,7 +45,14 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      // yomeyo-dict is the app's own: a redeploy must not throw away a
+      // dictionary the user downloaded over mobile data. It revalidates
+      // itself instead.
+      .then((keys) =>
+        Promise.all(
+          keys.filter((k) => k !== CACHE && k !== "yomeyo-dict").map((k) => caches.delete(k)),
+        ),
+      )
       .then(() => self.clients.claim()),
   );
 });
@@ -53,6 +61,13 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   // Same-origin GETs only: never intercept sync traffic to the server.
   if (event.request.method !== "GET" || url.origin !== location.origin) return;
+
+  // The dictionary is handled by the app itself, and must not come through
+  // here. Serving it from this worker means streaming ~19MB back through
+  // JavaScript, which measured about 2.5 seconds on a phone-class CPU —
+  // against ~100ms for the app reading the same bytes out of Cache Storage
+  // directly. See apps/web/src/dict-bytes.ts.
+  if (url.pathname.includes("/dict/")) return;
 
   // Navigations: network-first so a new deploy is picked up promptly, with
   // the cached shell as the offline fallback.

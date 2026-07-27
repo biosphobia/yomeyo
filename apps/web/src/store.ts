@@ -1,10 +1,8 @@
 import {
+  BinaryDictionary,
   Card,
-  MemoryDictionary,
-  dictFileMeta,
   findDuplicate,
   mergeCards,
-  parseDictFile,
   runSync,
   type CompactDictFile,
   type Dictionary,
@@ -13,13 +11,14 @@ import {
   type SyncResponse,
 } from "@yomeyo/core";
 import { combineWith, resetCombined } from "./dictionaries.js";
+import { loadDictBytes } from "./dict-bytes.js";
 import { getAllCards, getMeta, putCard, putCards, setMeta, type StoredCard } from "./db.js";
 import { firestoreBackend, getFirebaseConfig } from "./cloud.js";
 
 /** App-wide state: dictionary + cards, loaded once, mutated through here. */
 
-let dictionary: MemoryDictionary | null = null;
-let dictLoading: Promise<MemoryDictionary> | null = null;
+let dictionary: BinaryDictionary | null = null;
+let dictLoading: Promise<BinaryDictionary> | null = null;
 let dictSize = 0;
 let dictMeta: CompactDictFile["meta"];
 
@@ -36,18 +35,22 @@ export async function activeDictionary(): Promise<Dictionary> {
   return combineWith(await loadDictionary());
 }
 
-export async function loadDictionary(): Promise<MemoryDictionary> {
+/** Where the dictionary lives, as both the loader and Settings need it. */
+export function dictionaryUrl(): string {
+  return assetUrl("dict/dict.bin");
+}
+
+export async function loadDictionary(): Promise<BinaryDictionary> {
   if (dictionary) return dictionary;
   // Concurrent callers (e.g. fast tab switches) must share one download.
   if (!dictLoading) {
     dictLoading = (async () => {
-      const res = await fetch(assetUrl("dict/dict.json"));
-      if (!res.ok) throw new Error(`Could not load dictionary (${res.status})`);
-      const raw = await res.json();
-      const entries = parseDictFile(raw);
-      dictSize = entries.length;
-      dictMeta = dictFileMeta(raw);
-      dictionary = new MemoryDictionary(entries);
+      // Nothing is parsed here: the bytes are searched where they lie, so
+      // this is a read and a couple of typed-array views, not seconds of
+      // JSON parsing and object building on every page load.
+      dictionary = new BinaryDictionary(await loadDictBytes(dictionaryUrl()));
+      dictSize = dictionary.size;
+      dictMeta = dictionary.meta;
       resetCombined(); // extras must be re-attached to the new instance
       return dictionary;
     })().catch((err) => {

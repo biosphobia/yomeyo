@@ -1,10 +1,9 @@
 import {
-  MemoryDictionary,
+  BinaryDictionary,
   createCard,
   findDuplicate,
   lookup,
   mergeCards,
-  parseDictFile,
   type Card,
   type LookupMatch,
   type SyncRequest,
@@ -14,7 +13,7 @@ import { ext, resourceUrl, storageGet, storageSet } from "./browser.js";
 
 /**
  * Background script: owns the dictionary (loaded from the packaged
- * dict.json) and the saved-card store, and answers messages from the content
+ * dict.bin) and the saved-card store, and answers messages from the content
  * script and the toolbar popup.
  *
  * Runs as a service worker on Chromium and as an event page on Firefox; both
@@ -25,13 +24,23 @@ import { ext, resourceUrl, storageGet, storageSet } from "./browser.js";
 /** The default location of the hosted app, used for the deck handoff. */
 const DEFAULT_APP_URL = "https://biosphobia.github.io/yomeyo/";
 
-let dictPromise: Promise<MemoryDictionary> | null = null;
+let dictPromise: Promise<BinaryDictionary> | null = null;
 
-function getDictionary(): Promise<MemoryDictionary> {
+/**
+ * The dictionary, read straight from the packaged file.
+ *
+ * Nothing is parsed: `yomeyo-dict-2` is searched where it lies, so this is a
+ * read and a few typed-array views. That matters more here than anywhere
+ * else — this is a service worker, so it is torn down whenever it goes idle
+ * and pays this cost again on the next page. The old JSON dictionary took
+ * seconds of parsing each time, which is what made the first tap on a freshly
+ * loaded page feel dead.
+ */
+function getDictionary(): Promise<BinaryDictionary> {
   if (!dictPromise) {
-    dictPromise = fetch(resourceUrl("dict/dict.json"))
-      .then((res) => res.json())
-      .then((raw) => new MemoryDictionary(parseDictFile(raw)))
+    dictPromise = fetch(resourceUrl("dict/dict.bin"))
+      .then((res) => res.arrayBuffer())
+      .then((buffer) => new BinaryDictionary(buffer))
       .catch((err) => {
         dictPromise = null; // let the next lookup retry
         throw err;
@@ -163,6 +172,15 @@ async function handleSync(): Promise<{ pushed: number; pulled: number }> {
 ext.runtime.onMessage.addListener((message: any, _sender: any, sendResponse: (r: any) => void) => {
   (async () => {
     switch (message?.type) {
+      // A page has finished loading. Start the dictionary now, while the
+      // user is still reading, rather than on the tap they are waiting for.
+      case "warm": {
+        void getDictionary().catch(() => {
+          /* reported when a lookup is actually attempted */
+        });
+        sendResponse({ ok: true });
+        break;
+      }
       case "lookup": {
         const dict = await getDictionary();
         const matches: LookupMatch[] = lookup(dict, message.text, message.offset ?? 0);

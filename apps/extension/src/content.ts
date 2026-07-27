@@ -32,6 +32,11 @@ void storageGet<{ tapMode?: boolean | null; showToggle?: boolean }>(["tapMode", 
     if (typeof data?.tapMode === "boolean") tapModeSetting = data.tapMode;
     if (typeof data?.showToggle === "boolean") showToggle = data.showToggle;
     renderToggle();
+    // Start the dictionary as soon as the page is up. The background is a
+    // service worker and is torn down whenever it goes idle, so on a freshly
+    // loaded page it would otherwise begin loading only on the tap the user
+    // is waiting for — and that wait is the whole delay they see.
+    if (tapModeActive()) void sendMessage({ type: "warm" }).catch(() => {});
   },
 );
 ext.storage?.onChanged?.addListener((changes: any) => {

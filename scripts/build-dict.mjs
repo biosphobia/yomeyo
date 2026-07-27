@@ -11,19 +11,22 @@
  *   node scripts/build-dict.mjs --common        # smaller common-words build
  *   node scripts/build-dict.mjs path/to.json    # convert an existing file
  *
- * Output is the compact `yomeyo-dict-1` format (positional tuples + interned
- * part-of-speech table), written into both apps' public/dict/ folders.
+ * Output is the binary `yomeyo-dict-2` format, written into both apps'
+ * public/dict/ folders. It is searched where it lies rather than parsed, so
+ * a phone can start looking words up the moment the bytes are in memory —
+ * see packages/core/src/dict-binary.ts.
  */
 import { createWriteStream, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { pipeline } from "node:stream/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
+import { BinaryDictionary, encodeBinaryDict } from "../packages/core/dist/index.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT_PATHS = [
-  join(root, "apps/web/public/dict/dict.json"),
-  join(root, "apps/extension/public/dict/dict.json"),
+  join(root, "apps/web/public/dict/dict.bin"),
+  join(root, "apps/extension/public/dict/dict.bin"),
 ];
 const RELEASE_API = "https://api.github.com/repos/scriptin/jmdict-simplified/releases/latest";
 
@@ -245,12 +248,20 @@ async function main() {
   });
   console.log("  verification passed");
 
-  const payload = JSON.stringify(dict);
+  const payload = encodeBinaryDict({ entries: dict.entries, pos: dict.pos, meta: dict.meta });
   for (const outPath of OUT_PATHS) {
     mkdirSync(dirname(outPath), { recursive: true });
     writeFileSync(outPath, payload);
     console.log(`Wrote ${outPath} (${(statSync(outPath).size / 1e6).toFixed(1)} MB)`);
   }
+  // Read it back the way the apps will, so a format bug fails the build here
+  // rather than on someone's phone.
+  const check = new BinaryDictionary(payload.buffer.slice(payload.byteOffset, payload.byteOffset + payload.byteLength));
+  if (check.size !== dict.entries.length) {
+    throw new Error(`encoded ${check.size} entries but expected ${dict.entries.length}`);
+  }
+  if (check.lookupExact("読む").length === 0) throw new Error("the encoded dictionary cannot find 読む");
+  console.log("  binary dictionary reads back correctly");
 }
 
 // Only run the pipeline when invoked as a script, so tests can import the

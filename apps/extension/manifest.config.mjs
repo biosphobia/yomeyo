@@ -40,7 +40,7 @@ function base() {
     },
     web_accessible_resources: [
       {
-        resources: ["dict/dict.json"],
+        resources: ["dict/dict.bin"],
         matches: ["<all_urls>"],
       },
     ],

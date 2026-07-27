@@ -7,9 +7,9 @@ packages/*/dist/
 data/jmdict-*.json
 data/jmdict-*.zip
 
-# built full dictionaries are large; the committed seed lives in data/
-apps/web/public/dict/dict.json
-apps/extension/public/dict/dict.json
+# built dictionaries are large; the committed seed lives in data/
+apps/web/public/dict/
+apps/extension/public/dict/
 
 # sync server data
 yomeyo-data.json

@@ -1,6 +1,10 @@
 import {
+  BinaryDictionary,
   CombinedDictionary,
   MemoryDictionary,
+  binarySourceFromEntries,
+  encodeBinaryDict,
+  isBinaryDict,
   parseDictFile,
   parseYomitanTermBank,
   type DictEntry,
@@ -80,7 +84,11 @@ export async function importDictionary(name: string, files: File[]): Promise<Ext
   if (entries.length === 0) throw new Error("No entries found in those files.");
 
   const id = `d${Date.now().toString(36)}`;
-  await setMeta(dataKey(id), entries);
+  // Stored in the same binary form as the built-in dictionary. A monolingual
+  // dictionary can be as big as JMdict, and rebuilding it into objects on
+  // every page load would put back exactly the delay that format removes.
+  const bytes = encodeBinaryDict(binarySourceFromEntries(entries, { count: entries.length }));
+  await setMeta(dataKey(id), new Blob([bytes as unknown as BlobPart]));
   const record: ExtraDictionary = {
     id,
     name,
@@ -106,6 +114,24 @@ export async function removeDictionary(id: string): Promise<void> {
 
 let combinedCache: Promise<Dictionary> | null = null;
 
+/**
+ * Open a stored extra dictionary.
+ *
+ * Dictionaries imported before the binary format existed are still plain
+ * entry lists in IndexedDB, so both are accepted rather than making the user
+ * import their files again.
+ */
+async function openStored(record: ExtraDictionary): Promise<Dictionary | null> {
+  const stored = await getMeta<Blob | DictEntry[]>(dataKey(record.id));
+  if (!stored) return null;
+  if (Array.isArray(stored)) {
+    return stored.length > 0 ? new MemoryDictionary(stored) : null;
+  }
+  const buffer = await stored.arrayBuffer();
+  if (!isBinaryDict(buffer)) return null;
+  return new BinaryDictionary(buffer, record.name);
+}
+
 /** Invalidate the combined dictionary (called when the built-in one loads). */
 export function resetCombined(): void {
   combinedCache = null;
@@ -124,10 +150,8 @@ export async function combineWith(builtIn: Dictionary): Promise<Dictionary> {
 
       const parts = [{ name: "JMdict", dictionary: builtIn }];
       for (const record of enabled) {
-        const entries = await getMeta<DictEntry[]>(dataKey(record.id));
-        if (entries?.length) {
-          parts.push({ name: record.name, dictionary: new MemoryDictionary(entries) });
-        }
+        const dictionary = await openStored(record);
+        if (dictionary) parts.push({ name: record.name, dictionary });
       }
       return parts.length === 1 ? builtIn : new CombinedDictionary(parts);
     })();

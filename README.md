@@ -238,7 +238,7 @@ then **Import JSON** on the other device.
 
 1. runs the test suite,
 2. downloads the latest [jmdict-simplified][jmdict] release and converts it to
-   Yomeyo's compact dictionary format,
+   Yomeyo's binary dictionary format,
 3. **verifies** the result — entry count plus spot-checks that 食べる/読む/
    高い/日本語/する are present with the right readings and parts of speech, so
    an upstream format change fails the build instead of shipping a dictionary
@@ -297,9 +297,20 @@ firestore.rules     Firestore security rules — each deck is private to its own
 - **SRS** (`packages/core/src/srs.ts`): Anki-style SM-2 — learning steps
   (1 min → 10 min), graduation at 1 day, intervals scaled by an ease factor
   (2.5 start, 1.3 floor), lapses to relearning with an ease penalty.
-- **Dictionary format** (`yomeyo-dict-1`): positional tuples with an interned
-  part-of-speech table, roughly a quarter smaller than plain objects, so the
-  phone downloads less on mobile data.
+- **Dictionary format** (`yomeyo-dict-2`, `packages/core/src/dict-binary.ts`):
+  the dictionary is searched where it lies rather than parsed. Keys are stored
+  sorted by their UTF-8 bytes, so a lookup is a binary search comparing raw
+  bytes — the query is encoded once and no stored key is ever decoded — and
+  only the handful of entries a tap actually hits get decoded. Opening it is
+  a read plus a few typed-array views.
+
+  This matters because nothing stays loaded: the app's page and the
+  extension's service worker both start from nothing on every page. Parsing
+  the old JSON dictionary cost about four seconds on a mid-range phone each
+  time, and left ~180 MB of heap behind; the binary form costs about a tenth
+  of a second and holds only the buffer. The app also reads it straight out of
+  Cache Storage instead of through `fetch`, because a service worker streaming
+  ~19 MB back through JavaScript was itself ~2.5 s of that.
 - **Kanji data**: KANJIDIC2 for readings/meanings, KanjiVG stroke paths
   bucketed by codepoint so opening one character fetches ~100 KB rather than
   every stroke in the set. The animation drives a dash offset along each
