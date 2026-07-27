@@ -15,6 +15,7 @@ export * from "./card.js";
 export * from "./kanji.js";
 export * from "./fsrs.js";
 export * from "./deck-config.js";
+export * from "./audio-sources.js";
 // gradeCard here is the Anki-style dispatcher (FSRS or SM-2); the SM-2-only
 // implementation stays available as gradeCardSm2 from ./srs.js.
 export { gradeCard, gradePreview, buildQueue } from "./scheduler.js";

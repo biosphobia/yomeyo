@@ -80,9 +80,28 @@ automatically instead and you never need this button.
 ### Reviewing
 
 Open the app and hit **Review**. Rate each card *Again / Hard / Good / Easy*;
-each button shows when you would next see it. Tap 🔊 to hear the word — Yomeyo
-speaks the reading with the Japanese voice already on your device, so it works
-offline and covers every word.
+each button shows when you would next see it. Tap 🔊 to hear the word.
+
+### Audio
+
+Three sources are tried in order, so you get a real human voice when one
+exists and never silence when it doesn't:
+
+1. **Forvo** — an actual person saying the word
+2. **Synthesised** — OpenAI / ElevenLabs / Polly from the same endpoint
+3. **Your device's Japanese voice** — always available, works offline
+
+Clips are cached on the device after the first play, so replaying a card
+during review is instant and keeps working with no signal.
+
+Online audio needs an API key, entered under **Settings → Audio**. **The key
+is stored only in your browser** — it is never committed to this repository,
+never bundled into the published app, and never synced. The endpoints are
+editable there too if you use a different service; they take `{term}`,
+`{reading}`, `{language}` and `{apiKey}` placeholders. A **Test** button
+reports exactly what each source returns without ever printing your key.
+
+With no key configured, audio falls straight through to the device voice.
 
 Scheduling is **FSRS-6**, the same algorithm Anki uses with FSRS enabled, and
 it ships configured to match a real mining deck:

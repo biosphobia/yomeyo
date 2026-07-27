@@ -9,7 +9,8 @@ import {
   validateConfig,
   type AccountInfo,
 } from "./cloud.js";
-import { formatSteps, parseFsrsWeights, parseSteps } from "@yomeyo/core";
+import { formatSteps, parseFsrsWeights, parseSteps, type AudioSourceConfig } from "@yomeyo/core";
+import { getAudioConfig, saveAudioConfig, testAudioConfig } from "./audio.js";
 import { getDeckConfig, resetDeckConfig, saveDeckConfig } from "./deck.js";
 import {
   importDictionary,
@@ -58,6 +59,11 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
     </div>
 
     <div class="card-panel">
+      <b>Audio</b>
+      <div id="audio-config"></div>
+    </div>
+
+    <div class="card-panel">
       <b>Dictionary</b>
       <div class="msg" id="dict-status">Not loaded yet — open the Reader to load it.</div>
       <div class="row-actions">
@@ -92,6 +98,7 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
 
   renderAccount();
   void renderDeckConfig(main);
+  void renderAudioConfig(main);
   wireDictionary(main);
   void renderExtraDictionaries(main);
   wireServerSync(main);
@@ -213,6 +220,78 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
       void renderSettings(main);
     });
   }
+}
+
+/**
+ * Audio sources.
+ *
+ * The API key is typed in here and stored only in this browser's local
+ * database — it is deliberately not part of the deployed app, so the
+ * published build carries no credential of anyone's.
+ */
+async function renderAudioConfig(main: HTMLElement): Promise<void> {
+  const box = main.querySelector<HTMLDivElement>("#audio-config");
+  if (!box) return;
+  const config = await getAudioConfig();
+
+  box.innerHTML = `
+    <div class="settings-grid">
+      <label for="au-enabled">Use online audio</label>
+      <label class="switch-sm"><input type="checkbox" id="au-enabled" ${config.enabled ? "checked" : ""} /></label>
+    </div>
+    <div class="msg">
+      Real recordings (Forvo) are played first, synthesised audio second, and
+      your device's Japanese voice if neither is available. Clips are cached
+      on the device after the first play, so replays work offline.
+    </div>
+
+    <label for="au-key">API key</label>
+    <input type="password" id="au-key" placeholder="paste your key" autocomplete="off" value="${escapeAttr(config.apiKey)}" />
+    <div class="msg">Kept on this device only — never uploaded with the app or synced.</div>
+
+    <details>
+      <summary>Endpoints</summary>
+      <label for="au-forvo">Recorded audio (tried first)</label>
+      <textarea id="au-forvo" style="min-height:70px;font-family:ui-monospace,monospace;font-size:0.7rem">${escapeHtml(config.forvoUrl)}</textarea>
+      <label for="au-tts">Synthesised audio (fallback)</label>
+      <textarea id="au-tts" style="min-height:70px;font-family:ui-monospace,monospace;font-size:0.7rem">${escapeHtml(config.ttsUrl)}</textarea>
+      <div class="msg">Placeholders: <code>{term}</code> <code>{reading}</code> <code>{language}</code> <code>{apiKey}</code>.</div>
+    </details>
+
+    <div class="row-actions">
+      <button id="au-save">Save</button>
+      <button id="au-test" class="secondary">Test</button>
+    </div>
+    <div class="msg" id="au-msg"></div>
+  `;
+
+  const msg = box.querySelector<HTMLDivElement>("#au-msg")!;
+  const read = (): AudioSourceConfig => ({
+    enabled: box.querySelector<HTMLInputElement>("#au-enabled")!.checked,
+    apiKey: box.querySelector<HTMLInputElement>("#au-key")!.value.trim(),
+    forvoUrl: box.querySelector<HTMLTextAreaElement>("#au-forvo")!.value.trim(),
+    ttsUrl: box.querySelector<HTMLTextAreaElement>("#au-tts")!.value.trim(),
+  });
+
+  box.querySelector<HTMLButtonElement>("#au-save")!.addEventListener("click", async () => {
+    await saveAudioConfig(read());
+    msg.textContent = "Saved on this device.";
+    msg.className = "msg ok";
+  });
+
+  box.querySelector<HTMLButtonElement>("#au-test")!.addEventListener("click", async () => {
+    const current = read();
+    await saveAudioConfig(current);
+    msg.textContent = "Testing…";
+    msg.className = "msg";
+    try {
+      msg.textContent = await testAudioConfig(current);
+      msg.className = "msg ok";
+    } catch (err) {
+      msg.textContent = err instanceof Error ? err.message : String(err);
+      msg.className = "msg error";
+    }
+  });
 }
 
 /**

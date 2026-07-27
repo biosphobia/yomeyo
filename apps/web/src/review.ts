@@ -1,6 +1,6 @@
 import { buildQueue, deckStats, gradeCard, gradePreview, type Card, type DeckConfig, type Grade } from "@yomeyo/core";
 import { liveCards, saveCard } from "./store.js";
-import { speak, speakerButton } from "./audio.js";
+import { playWord, speakerButton } from "./audio.js";
 import { getDailyCounts, getDeckConfig, recordReview } from "./deck.js";
 
 /** Review page: daily flashcards, scheduled by FSRS (or SM-2 if switched off). */
@@ -98,8 +98,9 @@ function showNext(
     area.querySelector<HTMLElement>("#answer")!.style.display = "";
     area.querySelector<HTMLElement>("#grades")!.style.display = "";
     showBtn.style.display = "none";
-    void speak(card.reading || card.term).catch(() => {
-      /* no Japanese voice on this device */
+    // Prefers a Forvo recording, falls back to TTS, then the device voice.
+    void playWord(card.term, card.reading).catch(() => {
+      /* no audio available on this device */
     });
   });
 
