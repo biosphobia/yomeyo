@@ -7,7 +7,7 @@
     "predev": "node ../../scripts/ensure-dict.mjs",
     "dev": "vite",
     "prebuild": "node ../../scripts/ensure-dict.mjs",
-    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "build": "tsc --noEmit -p tsconfig.json && vite build && node ../../scripts/stamp-sw.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -3,8 +3,8 @@ import {
   createCard,
   lookup,
   mergeCards,
+  parseDictFile,
   type Card,
-  type DictFile,
   type LookupMatch,
   type SyncRequest,
   type SyncResponse,
@@ -32,7 +32,11 @@ function getDictionary(): Promise<MemoryDictionary> {
   if (!dictPromise) {
     dictPromise = fetch(chrome.runtime.getURL("dict/dict.json"))
       .then((res) => res.json())
-      .then((file: DictFile) => new MemoryDictionary(file));
+      .then((raw) => new MemoryDictionary(parseDictFile(raw)))
+      .catch((err) => {
+        dictPromise = null; // let the next lookup retry
+        throw err;
+      });
   }
   return dictPromise;
 }

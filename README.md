@@ -1,108 +1,121 @@
 # Yomeyo 読めよ
 
-**An easy Yomitan + Anki, in one app, synced across your devices.**
+**An easy Yomitan + Anki, in one app.** Tap Japanese words you see while
+browsing, save them as flashcards, and review them daily with spaced
+repetition — the sentence-mining workflow without juggling two tools.
 
-Tap Japanese words you see while browsing, save them as flashcards, and review
-them daily with spaced repetition — the classic *sentence mining* workflow,
-without juggling two separate tools.
+> **Nothing to build.** Push this branch and GitHub Actions builds the full
+> JMdict dictionary, publishes the app, and packages the extension for you.
 
-Yomeyo is three pieces sharing one core:
+## Install on Android (start here)
 
-| Piece | Role | Where it runs |
-|---|---|---|
-| **Web app (PWA)** | Reviews + tap-to-lookup Reader ("the Anki side") | Any browser; installable on Android & iOS home screens |
-| **Browser extension (MV3)** | Tap words on *any* page ("the Yomitan side") | Desktop Chrome/Firefox/Edge; converts to an iOS Safari extension |
-| **Sync server** | Keeps every device's deck identical | Anywhere Node runs (self-hosted, zero dependencies) |
+1. **Open the app** in Chrome:
+   **https://biosphobia.github.io/yomeyo/**
+2. **Add it to your home screen** — Chrome menu (⋮) → *Add to Home screen*.
+   It now opens like a normal app, works offline, and keeps your deck on the
+   device.
+3. **Open it once while online** so the dictionary downloads and caches
+   (Settings → *Download for offline use*, or just use the Reader once).
 
-```
-packages/core       dictionary lookup + deinflection + SRS scheduler + sync merge (shared by everything)
-apps/web            the PWA (Vite, vanilla TS, IndexedDB)
-apps/extension      the MV3 extension (esbuild)
-apps/sync-server    zero-dependency Node sync server
-scripts/            JMdict dictionary builder, icon generator
-data/seed-dict.json small bundled dictionary so everything works out of the box
-```
+### Mining words on your phone
 
-## How mining works on each platform
+Select Japanese text on any page → tap **Share** → choose **Yomeyo**.
+The text opens in the Reader with every word tappable: tap → definition →
+**+ Save**. Pasting text into the Reader works too.
 
-**Android (Chrome).** Chrome for Android does not support extensions — no
-Yomitan-style addon can exist there. Yomeyo's Android flow instead uses the
-PWA: install the web app to your home screen, then **select Japanese text on
-any page → Share → Yomeyo**. The text opens in the Reader where every word is
-tappable: tap → definition → save. (Pasting text or a whole article into the
-Reader works too.)
+Chrome for Android does not support extensions at all, so no Yomitan-style
+addon can exist there — sharing text into the app is the way to mine on
+Android, and it is a two-tap flow once the app is on your home screen.
 
-**iOS (Safari).** Safari supports Web Extensions wrapped in an App Store app.
-The extension in `apps/extension` is written to be convertible with Apple's
-converter (see below), giving true tap-on-page lookup like Yomitan. Until you
-build that wrapper, the shared-text/paste Reader flow works on iOS exactly as
-on Android.
+### Reviewing
 
-**Desktop (Chrome/Edge/Firefox).** Load `apps/extension/dist` as an unpacked
-extension. Hold **Alt/Option and click** any Japanese word for an instant
-popup, or enable *tap mode* from the toolbar for click-only lookup.
+Open the app and hit **Review**. Cards are scheduled Anki-style: rate each
+one *Again / Hard / Good / Easy* and the interval adapts. Each button shows
+when you would next see the card.
 
-Cards from every device meet in the middle via the sync server: save a word on
-your desktop at lunch, review it on your phone that evening.
+## Desktop extension (optional)
 
-## Quick start
+For tap-on-page lookup while browsing on a computer:
 
-```bash
-npm install
-npm test            # core library tests
-npm run build       # core + web app + extension
-```
+1. Download **https://biosphobia.github.io/yomeyo/yomeyo-extension.zip**
+   (also attached to every Actions run as an artifact).
+2. Unzip it.
+3. Chrome/Edge → `chrome://extensions` → enable **Developer mode** →
+   **Load unpacked** → select the unzipped folder.
 
-**Try the web app:**
+Hold **Alt/Option** and click any Japanese word for an instant popup, or flip
+on *tap mode* in the toolbar popup so plain clicks look words up.
 
-```bash
-npm run dev:web     # then open http://localhost:5173, hit "Try demo text" in Reader
-```
+To get words from the extension onto your phone, run the sync server below.
+If you only use the phone, you can ignore sync entirely.
 
-**Load the extension (desktop Chrome):** `chrome://extensions` → Developer
-mode → *Load unpacked* → `apps/extension/dist`.
+## Optional: syncing between devices
 
-**Run the sync server:**
+Cards live on each device by default. To share one deck across your phone and
+desktop, run the sync server somewhere both can reach:
 
 ```bash
 YOMEYO_TOKEN=pick-a-secret npm run sync-server   # listens on :8787
 ```
 
-Then enter the server URL + token in the web app's Settings and in the
-extension's toolbar popup, and press *Sync now* on each device. Sync is
-offline-first and last-write-wins per card; deletions propagate as soft
-deletes. Deploy the server anywhere Node runs and put it behind HTTPS (a
-Caddy/nginx reverse proxy or a platform like Fly/Railway) — browsers require
-HTTPS for the PWA to call it.
+Then enter that URL and token in the app's **Settings** and in the extension's
+toolbar popup, and press *Sync now* on each device. Sync is offline-first and
+last-write-wins per card; deletions propagate as soft deletes. Put it behind
+HTTPS (Caddy/nginx, or a host like Fly/Railway) — the installed app can only
+call HTTPS endpoints.
 
-## The full dictionary
+Without sync you can still move a deck by hand: **Words → Export JSON**, then
+**Import JSON** on the other device.
 
-A small seed dictionary (~150 common words) is bundled so the app works
-immediately. For real use, build the full JMdict dictionary:
+## How the deployment works
+
+`.github/workflows/deploy.yml` runs on every push to `main` or the
+`claude/japanese-vocab-extension-7t4oai` branch:
+
+1. runs the test suite,
+2. downloads the latest [jmdict-simplified][jmdict] release and converts it to
+   Yomeyo's compact dictionary format,
+3. **verifies** the result — entry count plus spot-checks that 食べる/読む/
+   高い/日本語/する are present with the right readings and parts of speech, so
+   an upstream format change fails the build instead of shipping a dictionary
+   that silently looks nothing up,
+4. builds the app and deploys it to GitHub Pages,
+5. zips the extension and publishes it alongside the app.
+
+The workflow turns Pages on by itself the first time it runs. If your
+organization blocks that, enable it once under *Settings → Pages → Source:
+GitHub Actions* and re-run the workflow.
+
+By default it builds the **common-words** JMdict (smaller download, covers
+what learners actually read). For the complete dictionary, run the workflow
+manually from the Actions tab with *full_dictionary* checked.
+
+[jmdict]: https://github.com/scriptin/jmdict-simplified
+
+## Working on it locally
 
 ```bash
-npm run build-dict          # downloads jmdict-simplified, converts, installs
-npm run build               # rebuild apps with the full dictionary
+npm install
+npm test              # core library tests
+npm run build-dict    # optional: build the full JMdict locally
+npm run build         # core + web app + extension
+npm run dev:web       # dev server; "Try demo text" in the Reader
 ```
 
-This writes `dict.json` into both apps' `public/dict/` folders (gitignored;
-the seed is auto-restored on fresh clones). JMdict is published by
-[EDRDG](https://www.edrdg.org/) under CC BY-SA 4.0 — credit it if you
-distribute builds.
+A small seed dictionary (~150 common words) is committed so everything works
+before any dictionary build. `npm run build-dict` replaces it with real
+JMdict; the built file is gitignored and the seed is restored automatically on
+a fresh clone.
 
-## iOS Safari extension (App Store wrapper)
+## Repository layout
 
-On a Mac with Xcode:
-
-```bash
-npm run build -w @yomeyo/extension
-xcrun safari-web-extension-converter apps/extension/dist --project-location ios/ --app-name Yomeyo
 ```
-
-Open the generated Xcode project, sign it, and run it on your iPhone
-(Settings → Safari → Extensions → enable Yomeyo). Enable *tap mode* from the
-extension popup for one-tap lookups on the phone. Distribution to other
-people requires an Apple Developer account (TestFlight or App Store).
+packages/core       lookup + deinflection + SRS scheduler + sync merge (shared)
+apps/web            the installable PWA (Vite, vanilla TS, IndexedDB)
+apps/extension      the MV3 browser extension (esbuild)
+apps/sync-server    zero-dependency Node sync server
+scripts/            JMdict builder, dictionary seeder, icon + SW build helpers
+```
 
 ## How the pieces work
 
@@ -110,31 +123,27 @@ people requires an Apple Developer account (TestFlight or App Store).
   from the tapped character it tries the longest candidate substring first,
   runs each through the deinflector, and filters hits by part-of-speech
   compatibility (so 切って matches 切る but never 着る).
-- **Deinflection** (`packages/core/src/deinflect.ts`): a rule table covering
-  polite forms, te/ta forms, negatives, passives/potentials/causatives,
-  conditionals, volitional, -tai, auxiliaries (ている・てしまう・ちゃう…),
-  and i-adjective conjugation, chained up to 6 steps deep.
+- **Deinflection** (`packages/core/src/deinflect.ts`): rules for polite forms,
+  te/ta forms, negatives, passive/potential/causative, conditionals,
+  volitional, -tai, auxiliaries (ている・てしまう・ちゃう…) and i-adjectives,
+  chained up to 6 steps deep.
 - **SRS** (`packages/core/src/srs.ts`): Anki-style SM-2 — learning steps
-  (1 min → 10 min), graduation to 1 day, interval growth by an ease factor
-  (2.5 start, 1.3 floor), lapses to relearning with ease penalty. Grades:
-  Again / Hard / Good / Easy, with the predicted interval shown on each button.
-- **Sync** (`packages/core/src/sync.ts`, `apps/sync-server`): every card
-  carries `updatedAt`; clients push dirty cards and pull everything changed
-  since their last sync; merges are last-write-wins per card.
+  (1 min → 10 min), graduation at 1 day, intervals scaled by an ease factor
+  (2.5 start, 1.3 floor), lapses to relearning with an ease penalty.
+- **Dictionary format** (`yomeyo-dict-1`): positional tuples with an interned
+  part-of-speech table, roughly a quarter smaller than plain objects, so the
+  phone downloads less on mobile data.
 
-## Development
+## Not done yet
 
-```bash
-npm test                       # vitest suite for the core library
-npm run build                  # everything
-npm run dev:web                # web app dev server
-npm run build -w @yomeyo/extension   # rebuild extension after changes
-```
+- **iOS/Safari.** The extension is written to convert with Apple's
+  `safari-web-extension-converter`, but shipping it needs a Mac, Xcode and an
+  Apple Developer account. Until then the app itself works on iOS — install
+  it from Safari's *Share → Add to Home Screen* and use the Reader.
+- FSRS scheduling, audio/pitch accent, frequency tags, kanji breakdowns.
 
-## Roadmap ideas
+## Credits
 
-- FSRS scheduler option (better retention modeling than SM-2)
-- Audio (pitch accent + TTS) on cards
-- Frequency-list tagging (show how common a word is before you save it)
-- Kanji decomposition on the card back
-- E2E-encrypted hosted sync
+Dictionary data is [JMdict](https://www.edrdg.org/jmdict/j_jmdict.html) from
+the Electronic Dictionary Research and Development Group, used under
+CC BY-SA 4.0, via [jmdict-simplified][jmdict].

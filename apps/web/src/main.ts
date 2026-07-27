@@ -64,8 +64,12 @@ if (sharedText) location.hash = "#reader";
 route();
 
 // PWA service worker (production builds only; Vite dev serves from memory).
+// Registered relatively so it works under a Pages subpath, where its scope
+// becomes the app directory rather than the domain root.
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
-  navigator.serviceWorker.register("/sw.js").catch(() => {
+  // BASE_URL (not import.meta.url, which points into assets/) so the worker
+  // is found at the app root and takes the app directory as its scope.
+  navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => {
     /* offline support is progressive enhancement */
   });
 }

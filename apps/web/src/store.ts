@@ -1,8 +1,10 @@
 import {
   Card,
   MemoryDictionary,
+  dictFileMeta,
   mergeCards,
-  type DictFile,
+  parseDictFile,
+  type CompactDictFile,
   type SyncRequest,
   type SyncResponse,
 } from "@yomeyo/core";
@@ -11,20 +13,47 @@ import { getAllCards, getMeta, putCard, putCards, setMeta, type StoredCard } fro
 /** App-wide state: dictionary + cards, loaded once, mutated through here. */
 
 let dictionary: MemoryDictionary | null = null;
+let dictLoading: Promise<MemoryDictionary> | null = null;
 let dictSize = 0;
+let dictMeta: CompactDictFile["meta"];
+
+/** URL of a bundled asset, correct at any deploy path (root or /yomeyo/). */
+function assetUrl(path: string): string {
+  return new URL(path, new URL(import.meta.env.BASE_URL, location.href)).href;
+}
 
 export async function loadDictionary(): Promise<MemoryDictionary> {
   if (dictionary) return dictionary;
-  const res = await fetch("/dict/dict.json");
-  if (!res.ok) throw new Error(`Could not load dictionary (${res.status})`);
-  const file = (await res.json()) as DictFile;
-  dictSize = file.length;
-  dictionary = new MemoryDictionary(file);
-  return dictionary;
+  // Concurrent callers (e.g. fast tab switches) must share one download.
+  if (!dictLoading) {
+    dictLoading = (async () => {
+      const res = await fetch(assetUrl("dict/dict.json"));
+      if (!res.ok) throw new Error(`Could not load dictionary (${res.status})`);
+      const raw = await res.json();
+      const entries = parseDictFile(raw);
+      dictSize = entries.length;
+      dictMeta = dictFileMeta(raw);
+      dictionary = new MemoryDictionary(entries);
+      return dictionary;
+    })().catch((err) => {
+      dictLoading = null; // allow a retry after a failed/offline load
+      throw err;
+    });
+  }
+  return dictLoading;
 }
 
 export function dictionarySize(): number {
   return dictSize;
+}
+
+export function dictionaryMeta(): CompactDictFile["meta"] {
+  return dictMeta;
+}
+
+/** True once the dictionary is in memory (Settings shows status without forcing a download). */
+export function dictionaryLoaded(): boolean {
+  return dictionary !== null;
 }
 
 let cardsCache: Map<string, StoredCard> | null = null;

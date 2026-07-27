@@ -1,0 +1,127 @@
+name: Build and deploy Yomeyo
+
+# Builds the full JMdict dictionary, publishes the installable web app to
+# GitHub Pages, and packages the browser extension as a downloadable zip —
+# so nothing has to be built by hand.
+
+on:
+  push:
+    branches:
+      - main
+      - claude/japanese-vocab-extension-7t4oai
+  workflow_dispatch:
+    inputs:
+      full_dictionary:
+        description: "Use the complete JMdict instead of the common-words build (much larger)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deploys race; let a newer push supersede an in-flight one.
+concurrency:
+  group: yomeyo-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build core library
+        run: npm run build -w @yomeyo/core
+
+      - name: Build JMdict dictionary
+        env:
+          # Raises the GitHub API rate limit when resolving the release asset.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ inputs.full_dictionary }}" = "true" ]; then
+            node scripts/build-dict.mjs --full
+          else
+            node scripts/build-dict.mjs
+          fi
+
+      - name: Report dictionary size
+        run: |
+          SIZE=$(stat -c %s apps/web/public/dict/dict.json)
+          echo "Dictionary: $(( SIZE / 1000000 )) MB uncompressed, \
+          $(gzip -c apps/web/public/dict/dict.json | wc -c | awk '{print int($1/1000000)}') MB gzipped" >> $GITHUB_STEP_SUMMARY
+          # GitHub Pages rejects individual files over 100 MB.
+          if [ "$SIZE" -gt 99000000 ]; then
+            echo "::error::Dictionary exceeds the 100 MB GitHub Pages file limit"
+            exit 1
+          fi
+
+      - name: Build web app
+        run: npm run build -w @yomeyo/web
+
+      - name: Build browser extension
+        run: npm run build -w @yomeyo/extension
+
+      - name: Package extension for download
+        run: |
+          cd apps/extension/dist
+          zip -qr "$GITHUB_WORKSPACE/yomeyo-extension.zip" .
+          cd "$GITHUB_WORKSPACE"
+          # Serve the zip from the app site so it has a stable install URL.
+          cp yomeyo-extension.zip apps/web/dist/
+          echo "Extension package: $(du -h yomeyo-extension.zip | cut -f1)" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload extension as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: yomeyo-extension
+          path: yomeyo-extension.zip
+          if-no-files-found: error
+
+      - name: Configure GitHub Pages
+        id: pages
+        uses: actions/configure-pages@v5
+        with:
+          # Turns Pages on automatically the first time this runs, so there
+          # is no manual repository setting to flip.
+          enablement: true
+
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Summarize
+        run: |
+          {
+            echo "## Yomeyo is deployed"
+            echo ""
+            echo "**App (install this on your phone):** ${{ steps.deployment.outputs.page_url }}"
+            echo ""
+            echo "**Extension zip:** ${{ steps.deployment.outputs.page_url }}yomeyo-extension.zip"
+            echo ""
+            echo "On Android: open the app link in Chrome, then menu (⋮) → Add to Home screen."
+          } >> $GITHUB_STEP_SUMMARY
