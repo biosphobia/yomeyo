@@ -42,6 +42,9 @@ export function renderReader(main: HTMLElement, sharedText?: string): void {
   async function show(text: string): Promise<void> {
     const trimmed = text.trim();
     if (!trimmed) return;
+    // Put the on-screen keyboard away. It covers the bottom half of the
+    // screen, which is exactly where the lookup popup appears.
+    input.blur();
     view.style.display = "";
     view.innerHTML = "";
 

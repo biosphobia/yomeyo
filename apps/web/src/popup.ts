@@ -1,4 +1,4 @@
-import { cardKey, createCard, type LookupMatch } from "@yomeyo/core";
+import { cardKey, createCard, onTap, type LookupMatch } from "@yomeyo/core";
 import { hasCardForTerm, saveNewCard } from "./store.js";
 import { speakerButton } from "./audio.js";
 import { toast } from "./toast.js";
@@ -23,10 +23,47 @@ function markDuplicates(popup: HTMLElement, term: string, reading: string): void
  */
 
 let currentPopup: HTMLElement | null = null;
+let detachAnchor: (() => void) | null = null;
 
 export function closePopup(): void {
+  detachAnchor?.();
+  detachAnchor = null;
   currentPopup?.remove();
   currentPopup = null;
+}
+
+/** Height of the bottom navigation bar the popup has to clear. */
+const NAV_HEIGHT = 64;
+
+/**
+ * Keep the popup inside the part of the page you can actually see.
+ *
+ * A fixed element sits in the layout viewport, but on a phone that is not
+ * what is on screen: Chrome's URL bar and — much worse — the on-screen
+ * keyboard shrink the *visual* viewport without changing the layout one. The
+ * popup then renders underneath them, and its Save button cannot be tapped
+ * because it is not on the screen at all. Measuring the gap and lifting the
+ * popup by it keeps the button reachable in every case.
+ */
+function anchorToVisibleViewport(popup: HTMLElement): () => void {
+  const vv = window.visualViewport;
+  if (!vv) return () => {};
+
+  const place = (): void => {
+    const hidden = Math.max(0, window.innerHeight - (vv.height + vv.offsetTop));
+    popup.style.bottom = `calc(${hidden + NAV_HEIGHT}px + env(safe-area-inset-bottom))`;
+    // Never take more than half of what is visible, and never so little that
+    // the first entry is cut off.
+    popup.style.maxHeight = `${Math.max(180, Math.round(vv.height * 0.46))}px`;
+  };
+
+  place();
+  vv.addEventListener("resize", place);
+  vv.addEventListener("scroll", place);
+  return () => {
+    vv.removeEventListener("resize", place);
+    vv.removeEventListener("scroll", place);
+  };
 }
 
 export interface PopupContext {
@@ -91,13 +128,18 @@ export async function showLookupPopup(matches: LookupMatch[], context: PopupCont
       row.appendChild(speakerButton(entry.term, entry.reading));
 
       const saveBtn = document.createElement("button");
+      saveBtn.type = "button";
+      saveBtn.className = "save";
       saveBtn.textContent = "+ Save";
       if (await hasCardForTerm(entry.term, entry.reading)) {
         saveBtn.textContent = "✓ Saved";
         saveBtn.classList.add("saved");
         saveBtn.disabled = true;
       }
-      saveBtn.addEventListener("click", async () => {
+      // onTap, not a plain click listener: inside this scrollable panel a
+      // finger that drifts a few pixels never produces a click at all.
+      onTap(saveBtn, async () => {
+        if (saveBtn.disabled) return;
         saveBtn.disabled = true;
         const card = createCard(
           {
@@ -132,14 +174,18 @@ export async function showLookupPopup(matches: LookupMatch[], context: PopupCont
 
   document.body.appendChild(popup);
 
-  // Dismiss when tapping outside the popup.
-  setTimeout(() => {
-    const dismiss = (ev: Event) => {
-      if (currentPopup && !currentPopup.contains(ev.target as Node)) {
-        closePopup();
-        document.removeEventListener("pointerdown", dismiss);
-      }
-    };
-    document.addEventListener("pointerdown", dismiss);
-  }, 0);
+  const detachViewport = anchorToVisibleViewport(popup);
+
+  // Dismiss when tapping outside the popup. Registered on the next tick so
+  // the tap that opened the popup does not immediately close it.
+  const dismiss = (ev: Event) => {
+    if (popup.isConnected && !popup.contains(ev.target as Node)) closePopup();
+  };
+  const timer = setTimeout(() => document.addEventListener("pointerdown", dismiss), 0);
+
+  detachAnchor = () => {
+    clearTimeout(timer);
+    document.removeEventListener("pointerdown", dismiss);
+    detachViewport();
+  };
 }

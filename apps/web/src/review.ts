@@ -38,11 +38,15 @@ export async function renderReview(main: HTMLElement, isCurrent: () => boolean =
   const area = main.querySelector<HTMLDivElement>("#review-area")!;
   const numbers = main.querySelectorAll<HTMLElement>(".stat .num");
 
-  /** Keep the counters honest while reviewing, not just on entry. */
+  /** Keep all four counters honest while reviewing, not just on entry. */
   const refreshStats = async (remaining: number): Promise<void> => {
-    const live = await getDailyCounts(Date.now());
+    const at = Date.now();
+    const live = await getDailyCounts(at);
+    const fresh = deckStats(await liveCards(), at);
     numbers[0].textContent = String(remaining);
     numbers[1].textContent = String(Math.max(0, config.newPerDay - live.introduced));
+    numbers[2].textContent = String(fresh.learning);
+    numbers[3].textContent = String(fresh.review);
   };
 
   showNext(area, queue, config, stats.due, refreshStats);

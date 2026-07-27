@@ -1,4 +1,4 @@
-import { isJapaneseChar, type DictEntry, type LookupMatch } from "@yomeyo/core";
+import { isJapaneseChar, onTap, type DictEntry, type LookupMatch } from "@yomeyo/core";
 import { ext, sendMessage, storageGet } from "./browser.js";
 
 /**
@@ -279,18 +279,15 @@ function renderToggle(): void {
     // but it was a small neighbour of the main action — easy to hit by
     // accident, and hiding the control is the last thing you want to do by
     // accident. Hiding now lives in the toolbar popup instead.
-    toggleEl.addEventListener(
-      "click",
-      (ev) => {
-        ev.stopPropagation();
-        ev.preventDefault();
-        void setTapMode(!tapModeActive());
-      },
-      true,
-    );
-    // Never let a tap on the pill reach the page underneath.
-    for (const type of ["pointerdown", "touchstart", "mousedown"]) {
-      toggleEl.addEventListener(type, (ev) => ev.stopPropagation(), true);
+    onTap(toggleEl, (ev: Event) => {
+      ev.stopPropagation?.();
+      ev.preventDefault?.();
+      void setTapMode(!tapModeActive());
+    });
+    // Never let a tap on the pill reach the page underneath. Bubble phase,
+    // for the same reason as the sheet above.
+    for (const type of ["pointerdown", "pointerup", "touchstart", "mousedown", "click"]) {
+      toggleEl.addEventListener(type, (ev) => ev.stopPropagation());
     }
     root.appendChild(toggleEl);
   }
@@ -323,7 +320,7 @@ async function showPopup(matches: LookupMatch[], sentence: string): Promise<void
   close.className = "close";
   close.textContent = "✕";
   close.setAttribute("aria-label", "Close");
-  close.addEventListener("click", closePopup);
+  onTap(close, closePopup);
   grip.append(spacer, bar, close);
   sheet.appendChild(grip);
 
@@ -333,8 +330,14 @@ async function showPopup(matches: LookupMatch[], sentence: string): Promise<void
   root.appendChild(sheet);
 
   // Taps inside the sheet must never reach the page or re-trigger lookup.
-  for (const type of ["click", "pointerdown", "touchstart"]) {
-    sheet.addEventListener(type, (ev) => ev.stopPropagation(), true);
+  //
+  // These listeners are deliberately NOT on the capture phase. Capturing runs
+  // from the document down, so stopping propagation there stopped the event
+  // before it ever reached the Save and close buttons inside — they could not
+  // be pressed at all. Stopping on the way back up lets the buttons handle
+  // the tap first and still keeps it away from the page.
+  for (const type of ["click", "pointerdown", "pointerup", "touchstart"]) {
+    sheet.addEventListener(type, (ev) => ev.stopPropagation());
   }
 
   let shown = 0;
@@ -353,8 +356,12 @@ async function showPopup(matches: LookupMatch[], sentence: string): Promise<void
 
   liftToggleAbove(sheet.getBoundingClientRect().height);
 
+  // Test against the host, not the sheet. This listener sits outside a
+  // *closed* shadow root, and composedPath() stops at the host for those — it
+  // never contains the sheet, so checking for the sheet dismissed the popup
+  // on the very press that was meant to save a word.
   const dismiss = (ev: Event) => {
-    if (ev.composedPath().includes(sheet)) return;
+    if (host && ev.composedPath().includes(host)) return;
     closePopup();
     document.removeEventListener("pointerdown", dismiss, true);
   };
@@ -415,10 +422,18 @@ async function buildEntryRow(match: LookupMatch, entry: DictEntry, sentence: str
     btn.disabled = true;
   } else {
     btn.textContent = "+ Save";
-    btn.addEventListener("click", async () => {
+    // onTap rather than a click listener: this list scrolls, and a finger
+    // that drifts a few pixels while pressing produces no click at all.
+    onTap(btn, async () => {
+      if (btn.disabled) return;
       btn.disabled = true;
-      await sendMessage({ type: "save", entry, sentence, url: location.href });
-      btn.textContent = "Saved";
+      const res = await sendMessage<{ ok: boolean; outcome?: string }>({
+        type: "save",
+        entry,
+        sentence,
+        url: location.href,
+      });
+      btn.textContent = res?.outcome === "duplicate" ? "Already saved" : "Saved";
       btn.classList.add("saved");
     });
   }

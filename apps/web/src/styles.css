@@ -173,9 +173,13 @@ label {
   position: fixed;
   left: 12px;
   right: 12px;
+  /* Both of these are recomputed against the visual viewport in popup.ts, so
+     the keyboard and Chrome's URL bar cannot bury the Save button. */
   bottom: calc(64px + env(safe-area-inset-bottom));
   max-height: 46dvh;
   overflow-y: auto;
+  /* Do not hand a flick at the end of the list to the page behind. */
+  overscroll-behavior: contain;
   background: var(--panel-2);
   border: 1px solid #ffffff22;
   border-radius: var(--radius);
@@ -231,10 +235,17 @@ label {
   margin-top: 2px;
 }
 
+/* A finger's contact patch is roughly 44px across, so anything smaller is
+   hit-or-miss on a phone no matter how carefully you aim. */
 .lookup-entry button {
   padding: 8px 14px;
   font-size: 0.85rem;
   flex-shrink: 0;
+  min-height: 44px;
+}
+
+.lookup-entry button.save {
+  min-width: 76px;
 }
 
 .lookup-entry button.saved {
@@ -664,9 +675,9 @@ label {
   background: transparent;
   border: 1px solid #ffffff22;
   border-radius: 50%;
-  width: 40px;
-  height: 40px;
-  min-width: 40px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
   padding: 0;
   font-size: 1rem;
   line-height: 1;

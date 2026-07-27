@@ -12,6 +12,7 @@ export {
 } from "./srs.js";
 export * from "./sync.js";
 export * from "./card.js";
+export { onTap, TAP_SLOP_PX, type TapOptions, type TapTarget } from "./tap.js";
 export * from "./kanji.js";
 export * from "./fsrs.js";
 export * from "./deck-config.js";
