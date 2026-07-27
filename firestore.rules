@@ -1,0 +1,54 @@
+rules_version = '2';
+
+// Yomeyo Firestore rules.
+//
+// A deck belongs to exactly one account. Nobody — signed in or not — can read
+// or write anyone else's cards, and there is no collection-group escape hatch
+// because nothing outside users/{uid} is readable at all.
+//
+// Deploy with:  firebase deploy --only firestore:rules
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Everything is denied unless a rule below allows it.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    match /users/{userId} {
+      // The user document itself holds nothing; cards live beneath it.
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      match /cards/{cardId} {
+        allow read: if isOwner(userId);
+        allow delete: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidCard();
+      }
+    }
+  }
+
+  function isOwner(userId) {
+    return request.auth != null && request.auth.uid == userId;
+  }
+
+  // Keep obviously malformed writes out of the deck. This is a shape check,
+  // not a trust boundary: the owner is already the only writer.
+  function isValidCard() {
+    let card = request.resource.data;
+    return card.keys().hasAll(['id', 'term', 'reading', 'updatedAt', 'due', 'state'])
+      && card.id is string
+      && card.id.size() > 0
+      && card.id.size() <= 128
+      && card.term is string
+      && card.term.size() > 0
+      && card.term.size() <= 200
+      && card.reading is string
+      && card.reading.size() <= 200
+      && card.updatedAt is number
+      && card.due is number
+      && card.state in ['new', 'learning', 'review', 'relearning']
+      // Written by the server on every sync; clients cannot forge it.
+      && card.syncedAt == request.time;
+  }
+}

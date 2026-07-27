@@ -26,11 +26,15 @@ if (!existsSync(swPath)) {
 
 /** Files that should never be precached: too large, or not part of the shell. */
 function isExcluded(relPath) {
+  const base = relPath.split("/").pop() ?? "";
   return (
     relPath === "sw.js" ||
     relPath === ".nojekyll" ||
     relPath.startsWith("dict/") || // megabytes; cached on first use instead
-    relPath.endsWith(".zip") // the packaged extension
+    relPath.endsWith(".zip") || // the packaged extension
+    // The Firebase SDK is loaded only when cloud sync is configured; a user
+    // who never signs in should never download it, let alone at install time.
+    base.startsWith("firebase-")
   );
 }
 

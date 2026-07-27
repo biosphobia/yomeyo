@@ -93,23 +93,64 @@ mode** → **Load unpacked** → the unzipped `chromium` folder. Firefox →
 Hold **Alt/Option** and click any Japanese word for an instant popup, or turn
 on *Tap to look up* in the toolbar popup for click-only lookup.
 
-## Optional: syncing between devices
+## Accounts and cloud sync (Firebase)
 
-Cards live on each device by default. To share one deck across your phone and
-desktop, run the sync server somewhere both can reach:
+Your deck works with no account at all — it lives in the browser on each
+device. Signing in adds backup and keeps devices in step.
+
+### Setting up your Firebase project (once)
+
+1. Create a project at [console.firebase.google.com](https://console.firebase.google.com/).
+2. **Authentication → Get started**, and enable the sign-in methods you want:
+   **Google** and/or **Email/Password**.
+3. **Firestore Database → Create database**. Any location; start in
+   production mode, since the rules below replace whatever it starts with.
+4. **Project settings → Your apps → Web (`</>`)** — register an app and copy
+   the `firebaseConfig` object.
+5. Deploy the security rules from this repo, so each deck is private:
+   ```bash
+   npx firebase-tools deploy --only firestore:rules --project <your-project-id>
+   ```
+   Or paste `firestore.rules` into **Firestore → Rules** in the console.
+6. **Authentication → Settings → Authorized domains**: add
+   `biosphobia.github.io` (and any other host you serve the app from), or
+   Google sign-in will be rejected.
+
+### Turning it on in the app
+
+Open **Settings → Account**, paste the `firebaseConfig` JSON, then sign in
+with Google or an email address. (An email that isn't registered yet creates
+the account, so there's one button rather than a separate sign-up flow.)
+
+Press **Sync now** on each device. Sync is offline-first and last-write-wins
+per card, deletions included — mine on your phone, review on your laptop, and
+the scheduling state follows you.
+
+The Firebase config is not a secret (its protection comes from the rules
+above), but if you'd rather bake it into the build than paste it, set
+`VITE_FIREBASE_CONFIG` to the JSON at build time and the app will use that
+instead.
+
+**What it costs:** a personal deck sits far inside Firebase's free tier —
+a sync reads only what changed since last time, and writes only what you
+mined or reviewed.
+
+### Alternative: self-hosted sync server
+
+If you'd rather not use Google's infrastructure, the repo still ships a
+zero-dependency sync server:
 
 ```bash
 YOMEYO_TOKEN=pick-a-secret npm run sync-server   # listens on :8787
 ```
 
-Then enter that URL and token in the app's **Settings** and in the extension's
-toolbar popup, and press *Sync now* on each device. Sync is offline-first and
-last-write-wins per card; deletions propagate as soft deletes. Put it behind
-HTTPS (Caddy/nginx, or a host like Fly/Railway) — the installed app can only
-call HTTPS endpoints.
+Enter that URL and token under **Settings → Self-hosted sync server** (and in
+the extension's toolbar popup). It is used only when no Firebase project is
+configured. Put it behind HTTPS — the installed app can only call HTTPS
+endpoints.
 
-Without sync you can still move a deck by hand: **Words → Export JSON**, then
-**Import JSON** on the other device.
+Without any sync you can still move a deck by hand: **Words → Export JSON**,
+then **Import JSON** on the other device.
 
 ## How the deployment works
 
@@ -155,11 +196,12 @@ a fresh clone.
 ## Repository layout
 
 ```
-packages/core       lookup + deinflection + SRS scheduler + sync merge (shared)
-apps/web            the installable PWA (Vite, vanilla TS, IndexedDB)
+packages/core       lookup + deinflection + SRS scheduler + sync engine (shared)
+apps/web            the installable PWA (Vite, vanilla TS, IndexedDB, Firebase)
 apps/extension      the MV3 browser extension, built for Chromium and Gecko
-apps/sync-server    zero-dependency Node sync server
+apps/sync-server    zero-dependency Node sync server (Firebase alternative)
 scripts/            JMdict builder, dictionary seeder, icon + SW build helpers
+firestore.rules     Firestore security rules — each deck is private to its owner
 ```
 
 ## How the pieces work
@@ -178,6 +220,12 @@ scripts/            JMdict builder, dictionary seeder, icon + SW build helpers
 - **Dictionary format** (`yomeyo-dict-1`): positional tuples with an interned
   part-of-speech table, roughly a quarter smaller than plain objects, so the
   phone downloads less on mobile data.
+- **Sync** (`packages/core/src/sync.ts`): one engine behind a `SyncBackend`
+  interface, so Firestore and the self-hosted server share the same
+  push/pull/merge logic. The local IndexedDB deck is always the read path —
+  the cloud is a peer, not a dependency, so reviews work with no signal.
+  Cards live at `users/{uid}/cards/{cardId}` with a server-written
+  `syncedAt`, so the sync cursor cannot be skewed by a wrong device clock.
 
 ## Not done yet
 

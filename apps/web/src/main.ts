@@ -5,6 +5,7 @@ import { renderWords } from "./words.js";
 import { renderSettings } from "./settings.js";
 import { closePopup } from "./popup.js";
 import { consumeHandoff, showHandoffToast } from "./handoff.js";
+import { completeRedirectSignIn } from "./cloud.js";
 
 /** Hash-routed SPA shell with a bottom tab bar. */
 
@@ -91,6 +92,12 @@ window.addEventListener("hashchange", () => void routeWithHandoff());
 if (sharedText) location.hash = "#reader";
 
 await routeWithHandoff();
+
+// Google sign-in falls back to a redirect on mobile and in installed PWAs,
+// which lands back here; completing it updates Settings on the next render.
+void completeRedirectSignIn().then((account) => {
+  if (account && location.hash.replace("#", "") === "settings") route();
+});
 
 // PWA service worker (production builds only; Vite dev serves from memory).
 // Registered relatively so it works under a Pages subpath, where its scope

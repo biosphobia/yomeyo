@@ -11,7 +11,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@yomeyo/core": "*"
+    "@yomeyo/core": "*",
+    "firebase": "^12.16.0"
   },
   "devDependencies": {
     "typescript": "^5.5.0",

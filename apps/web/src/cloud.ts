@@ -1,0 +1,289 @@
+import type { Card, SyncBackend } from "@yomeyo/core";
+import { getMeta, setMeta } from "./db.js";
+
+/**
+ * Firebase accounts + cloud storage.
+ *
+ * The whole SDK is loaded lazily, only once cloud sync is actually
+ * configured. That keeps the app's first paint and its offline path — which
+ * work with no account at all — free of ~hundreds of KB of Firebase code.
+ *
+ * The local IndexedDB deck stays the source of truth. Firestore is a sync
+ * peer, not the read path, so reviews keep working with no signal.
+ */
+
+export interface FirebaseConfig {
+  apiKey: string;
+  authDomain: string;
+  projectId: string;
+  appId: string;
+  /** Only needed if you use Firebase Storage; harmless otherwise. */
+  storageBucket?: string;
+  messagingSenderId?: string;
+}
+
+export interface AccountInfo {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+}
+
+const CONFIG_KEY = "firebaseConfig";
+
+/**
+ * Build-time config, if the deployment baked one in. Falls back to whatever
+ * the user pasted into Settings, so the hosted app works without a rebuild.
+ */
+function envConfig(): FirebaseConfig | undefined {
+  const raw = import.meta.env.VITE_FIREBASE_CONFIG;
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as FirebaseConfig;
+    return parsed.apiKey && parsed.projectId ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function getFirebaseConfig(): Promise<FirebaseConfig | undefined> {
+  return envConfig() ?? (await getMeta<FirebaseConfig>(CONFIG_KEY));
+}
+
+export async function setFirebaseConfig(config: FirebaseConfig | undefined): Promise<void> {
+  await setMeta(CONFIG_KEY, config);
+  // Force a fresh SDK init next time; the project may have changed.
+  cached = null;
+}
+
+/** True when this build hard-codes the project (config is not user-editable). */
+export function configIsFromEnv(): boolean {
+  return envConfig() !== undefined;
+}
+
+export function validateConfig(value: unknown): FirebaseConfig {
+  if (typeof value !== "object" || value === null) throw new Error("Config must be a JSON object.");
+  const c = value as Record<string, unknown>;
+  for (const key of ["apiKey", "authDomain", "projectId", "appId"]) {
+    if (typeof c[key] !== "string" || !(c[key] as string).trim()) {
+      throw new Error(`Config is missing "${key}".`);
+    }
+  }
+  return value as FirebaseConfig;
+}
+
+// ---------------- lazy SDK ----------------
+
+interface Loaded {
+  auth: any;
+  db: any;
+  mod: {
+    authApi: typeof import("firebase/auth");
+    storeApi: typeof import("firebase/firestore");
+  };
+}
+
+let cached: Promise<Loaded> | null = null;
+
+async function load(): Promise<Loaded> {
+  if (cached) return cached;
+  cached = (async () => {
+    const config = await getFirebaseConfig();
+    if (!config) throw new Error("Cloud sync is not configured yet.");
+
+    const [{ initializeApp, getApps, getApp }, authApi, storeApi] = await Promise.all([
+      import("firebase/app"),
+      import("firebase/auth"),
+      import("firebase/firestore"),
+    ]);
+
+    const app = getApps().length ? getApp() : initializeApp(config);
+    const auth = authApi.getAuth(app);
+    const db = storeApi.getFirestore(app);
+
+    // Survive reloads and app restarts without asking to sign in again.
+    await authApi.setPersistence(auth, authApi.browserLocalPersistence).catch(() => {
+      /* falls back to the default persistence */
+    });
+
+    // Point at local emulators when running the test harness.
+    const emulator = import.meta.env.VITE_FIREBASE_EMULATOR;
+    if (emulator) {
+      const [host, authPort, storePort] = String(emulator).split(":");
+      authApi.connectAuthEmulator(auth, `http://${host}:${authPort}`, { disableWarnings: true });
+      storeApi.connectFirestoreEmulator(db, host, Number(storePort));
+    }
+
+    return { auth, db, mod: { authApi, storeApi } };
+  })().catch((err) => {
+    cached = null; // let a later attempt retry after fixing the config
+    return Promise.reject(err);
+  });
+  return cached;
+}
+
+// ---------------- accounts ----------------
+
+function toAccount(user: any): AccountInfo {
+  return { uid: user.uid, email: user.email ?? null, displayName: user.displayName ?? null };
+}
+
+/** Current account, or null. Resolves once Firebase has restored the session. */
+export async function currentAccount(): Promise<AccountInfo | null> {
+  const config = await getFirebaseConfig();
+  if (!config) return null;
+  const { auth, mod } = await load();
+  const user = await new Promise<any>((resolve) => {
+    const stop = mod.authApi.onAuthStateChanged(auth, (u: any) => {
+      stop();
+      resolve(u);
+    });
+  });
+  return user ? toAccount(user) : null;
+}
+
+export async function signInWithGoogle(): Promise<AccountInfo> {
+  const { auth, mod } = await load();
+  const provider = new mod.authApi.GoogleAuthProvider();
+  try {
+    const credential = await mod.authApi.signInWithPopup(auth, provider);
+    return toAccount(credential.user);
+  } catch (err: any) {
+    // Installed PWAs and some mobile browsers block popups; redirect works
+    // there. The redirect result is picked up on the next load.
+    const code = err?.code ?? "";
+    if (
+      code.includes("popup-blocked") ||
+      code.includes("popup-closed-by-user") ||
+      code.includes("operation-not-supported")
+    ) {
+      await mod.authApi.signInWithRedirect(auth, provider);
+      // Navigation happens; this promise never settles in practice.
+      return new Promise<AccountInfo>(() => {});
+    }
+    throw new Error(friendlyAuthError(err));
+  }
+}
+
+/**
+ * Complete a redirect-based sign-in, if one is in flight.
+ *
+ * Called on every app start, so it must not drag the Firebase SDK in on a
+ * normal launch — a signed-in user opening the app to review offline should
+ * not wait on hundreds of KB. Firebase leaves a marker in sessionStorage
+ * while a redirect is pending, so check that first and stay lazy otherwise.
+ */
+export async function completeRedirectSignIn(): Promise<AccountInfo | null> {
+  let redirectPending = false;
+  try {
+    redirectPending = Object.keys(sessionStorage).some((key) => key.includes("pendingRedirect"));
+  } catch {
+    return null; // storage blocked; nothing to complete
+  }
+  if (!redirectPending) return null;
+
+  const config = await getFirebaseConfig();
+  if (!config) return null;
+  try {
+    const { auth, mod } = await load();
+    const result = await mod.authApi.getRedirectResult(auth);
+    return result?.user ? toAccount(result.user) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function signInWithEmail(email: string, password: string): Promise<AccountInfo> {
+  const { auth, mod } = await load();
+  try {
+    const credential = await mod.authApi.signInWithEmailAndPassword(auth, email, password);
+    return toAccount(credential.user);
+  } catch (err: any) {
+    // Treat a missing account as a sign-up, so there is one button not two.
+    if (err?.code === "auth/user-not-found" || err?.code === "auth/invalid-credential") {
+      try {
+        const created = await mod.authApi.createUserWithEmailAndPassword(auth, email, password);
+        return toAccount(created.user);
+      } catch (createErr: any) {
+        throw new Error(friendlyAuthError(createErr));
+      }
+    }
+    throw new Error(friendlyAuthError(err));
+  }
+}
+
+export async function signOut(): Promise<void> {
+  const { auth, mod } = await load();
+  await mod.authApi.signOut(auth);
+  await setMeta("cloudCursor", 0);
+}
+
+function friendlyAuthError(err: any): string {
+  const code: string = err?.code ?? "";
+  if (code.includes("invalid-email")) return "That email address doesn't look right.";
+  if (code.includes("weak-password")) return "Password must be at least 6 characters.";
+  if (code.includes("email-already-in-use")) return "That email is already registered.";
+  if (code.includes("wrong-password") || code.includes("invalid-credential")) {
+    return "Wrong email or password.";
+  }
+  if (code.includes("network-request-failed")) return "Could not reach Firebase. Check your connection.";
+  if (code.includes("unauthorized-domain")) {
+    return "This domain isn't authorised in Firebase (Authentication → Settings → Authorized domains).";
+  }
+  if (code.includes("operation-not-allowed")) {
+    return "That sign-in method isn't enabled in the Firebase console.";
+  }
+  return err?.message ?? "Sign-in failed.";
+}
+
+// ---------------- Firestore as a sync backend ----------------
+
+/**
+ * Cards live at `users/{uid}/cards/{cardId}`, so the security rules can scope
+ * a deck to its owner with a single match.
+ *
+ * Each document carries a server-written `syncedAt`. The sync cursor uses
+ * that rather than the card's own `updatedAt`, so devices with skewed clocks
+ * cannot cause changes to be skipped.
+ */
+export async function firestoreBackend(): Promise<SyncBackend> {
+  const { auth, db, mod } = await load();
+  const user = auth.currentUser;
+  if (!user) throw new Error("Sign in first.");
+  const { storeApi } = mod;
+  const cardsRef = storeApi.collection(db, "users", user.uid, "cards");
+
+  return {
+    async pull(since: number) {
+      const q = storeApi.query(
+        cardsRef,
+        storeApi.where("syncedAt", ">", storeApi.Timestamp.fromMillis(since)),
+        storeApi.orderBy("syncedAt"),
+      );
+      const snapshot = await storeApi.getDocs(q);
+      const changes: Card[] = [];
+      let cursor = since;
+      snapshot.forEach((doc: any) => {
+        const { syncedAt, ...card } = doc.data();
+        // A just-written document can briefly report a null server timestamp.
+        const at = syncedAt?.toMillis?.();
+        if (typeof at === "number") cursor = Math.max(cursor, at);
+        changes.push(card as Card);
+      });
+      return { changes, cursor };
+    },
+
+    async push(cards: Card[]) {
+      // Firestore allows 500 writes per batch.
+      for (let i = 0; i < cards.length; i += 400) {
+        const batch = storeApi.writeBatch(db);
+        for (const card of cards.slice(i, i + 400)) {
+          batch.set(storeApi.doc(cardsRef, card.id), {
+            ...card,
+            syncedAt: storeApi.serverTimestamp(),
+          });
+        }
+        await batch.commit();
+      }
+    },
+  };
+}

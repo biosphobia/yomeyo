@@ -4,11 +4,14 @@ import {
   dictFileMeta,
   mergeCards,
   parseDictFile,
+  runSync,
   type CompactDictFile,
+  type SyncBackend,
   type SyncRequest,
   type SyncResponse,
 } from "@yomeyo/core";
 import { getAllCards, getMeta, putCard, putCards, setMeta, type StoredCard } from "./db.js";
+import { firestoreBackend, getFirebaseConfig } from "./cloud.js";
 
 /** App-wide state: dictionary + cards, loaded once, mutated through here. */
 
@@ -120,46 +123,84 @@ export interface SyncOutcome {
   pulled: number;
 }
 
-/** Push dirty cards, pull remote changes, LWW-merge them in. */
-export async function syncNow(): Promise<SyncOutcome> {
-  const settings = await getSyncSettings();
-  if (!settings?.url || !settings.token) {
-    throw new Error("Set the sync server URL and token in Settings first.");
-  }
-  const cards = await loadCards();
-  const since = (await getMeta<number>("syncSince")) ?? 0;
-
-  const dirty = [...cards.values()].filter((c) => c.dirty);
-  const request: SyncRequest = {
-    since,
-    changes: dirty.map(({ dirty: _d, ...card }) => card),
-  };
-
+/** An HTTP backend for the optional self-hosted sync server. */
+function httpBackend(settings: SyncSettings): SyncBackend {
   const endpoint = settings.url.replace(/\/+$/, "") + "/sync";
-  const res = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${settings.token}`,
+  let pending: Card[] = [];
+  return {
+    // The server merges and returns in one round trip, so the push is
+    // buffered and sent as part of the pull request.
+    async push(cards: Card[]) {
+      pending = cards;
     },
-    body: JSON.stringify(request),
-  });
-  if (!res.ok) {
-    throw new Error(res.status === 401 ? "Sync failed: wrong token." : `Sync failed (${res.status}).`);
-  }
-  const data = (await res.json()) as SyncResponse;
+    async pull(since: number) {
+      const request: SyncRequest = { since, changes: pending };
+      pending = [];
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${settings.token}` },
+        body: JSON.stringify(request),
+      });
+      if (!res.ok) {
+        throw new Error(res.status === 401 ? "Sync failed: wrong token." : `Sync failed (${res.status}).`);
+      }
+      const data = (await res.json()) as SyncResponse;
+      return { changes: data.changes, cursor: data.now };
+    },
+  };
+}
 
-  // Merge remote changes; anything remote-newer overwrites local state.
+/** Which cloud backend is configured, if any. */
+export type SyncMode = "firebase" | "server" | "none";
+
+export async function syncMode(): Promise<SyncMode> {
+  if (await getFirebaseConfig()) return "firebase";
+  const settings = await getSyncSettings();
+  return settings?.url && settings.token ? "server" : "none";
+}
+
+/**
+ * Run one sync round against whichever backend is configured.
+ *
+ * Firebase takes precedence when both are set up. The local deck stays the
+ * source of truth either way; this only exchanges changes.
+ */
+export async function syncNow(): Promise<SyncOutcome> {
+  const mode = await syncMode();
+  let backend: SyncBackend;
+  let cursorKey: string;
+
+  if (mode === "firebase") {
+    backend = await firestoreBackend();
+    cursorKey = "cloudCursor";
+  } else if (mode === "server") {
+    backend = httpBackend((await getSyncSettings())!);
+    cursorKey = "syncSince";
+  } else {
+    throw new Error("Set up cloud sync in Settings first.");
+  }
+
+  const cards = await loadCards();
+  const since = (await getMeta<number>(cursorKey)) ?? 0;
+  const dirty = [...cards.values()].filter((c) => c.dirty);
+
   const plain = new Map<string, Card>([...cards.entries()]);
-  const applied = mergeCards(plain, data.changes);
-  const appliedStored: StoredCard[] = applied.map((c) => ({ ...c, dirty: false }));
+  const result = await runSync(
+    backend,
+    plain,
+    dirty.map(({ dirty: _d, ...card }) => card),
+    since,
+  );
+
+  // Anything the pull brought in lands clean; anything we pushed is no
+  // longer pending — unless the pull replaced it with a newer remote copy.
+  const appliedStored: StoredCard[] = result.applied.map((c) => ({ ...c, dirty: false }));
   for (const c of appliedStored) cards.set(c.id, c);
 
-  // Clear dirty flags on everything we pushed (unless remote overwrote it).
   const cleared: StoredCard[] = [];
   for (const d of dirty) {
     const current = cards.get(d.id);
-    if (current && current.dirty) {
+    if (current?.dirty) {
       const clean = { ...current, dirty: false };
       cards.set(d.id, clean);
       cleared.push(clean);
@@ -167,6 +208,6 @@ export async function syncNow(): Promise<SyncOutcome> {
   }
 
   await putCards([...appliedStored, ...cleared]);
-  await setMeta("syncSince", data.now);
-  return { pushed: dirty.length, pulled: applied.length };
+  await setMeta(cursorKey, result.cursor);
+  return { pushed: result.pushed, pulled: result.pulled };
 }

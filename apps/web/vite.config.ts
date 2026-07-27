@@ -10,5 +10,21 @@ export default defineConfig({
   base: "./",
   build: {
     target: "es2022",
+    rollupOptions: {
+      output: {
+        /**
+         * Keep the Firebase SDK in one predictably-named chunk. It is loaded
+         * dynamically only once cloud sync is configured, and the service
+         * worker skips precaching anything named `firebase-*` — so a user who
+         * never signs in never downloads it.
+         */
+        manualChunks(id: string) {
+          if (id.includes("node_modules/firebase") || id.includes("node_modules/@firebase")) {
+            return "firebase";
+          }
+          return undefined;
+        },
+      },
+    },
   },
 });
