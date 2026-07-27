@@ -10,14 +10,32 @@
 const BUILD_ID = "__BUILD_ID__";
 const CACHE = `yomeyo-${BUILD_ID}`;
 
+/**
+ * App-shell files to cache at install time, injected by scripts/stamp-sw.mjs
+ * from the real build output (the JS/CSS filenames are content-hashed).
+ *
+ * This must not rely on the runtime handler below to fill the cache: the
+ * worker only starts controlling the page *after* the first load, so the
+ * scripts and styles fetched during that first load never pass through it.
+ * Without precaching, the very first offline launch renders a blank page.
+ *
+ * The dictionary is deliberately excluded — it is megabytes, and is cached
+ * on first use (or via "Download for offline use" in Settings) instead.
+ */
+const PRECACHE = __PRECACHE__;
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches
-      .open(CACHE)
-      .then((cache) => cache.addAll(["./", "./manifest.webmanifest"]))
-      .catch(() => {
-        /* a failed precache must not block activation */
-      }),
+    caches.open(CACHE).then((cache) =>
+      // Cache entries individually so one bad URL cannot void the whole set.
+      Promise.all(
+        PRECACHE.map((url) =>
+          cache.add(url).catch(() => {
+            /* keep installing; the runtime handler can still fill this in */
+          }),
+        ),
+      ),
+    ),
   );
   self.skipWaiting();
 });
