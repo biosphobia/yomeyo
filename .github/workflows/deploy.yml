@@ -137,6 +137,25 @@ jobs:
         with:
           path: apps/web/dist
 
+      - name: Note where the site was published
+        if: steps.pages.outcome == 'success' && github.ref_name != github.event.repository.default_branch
+        run: |
+          {
+            echo "### Site published to the \`gh-pages\` branch"
+            echo ""
+            echo "This is not the default branch, and GitHub only accepts Actions-based"
+            echo "Pages deployments from the default branch — so the \`gh-pages\` branch is"
+            echo "how this build reaches the web."
+            echo ""
+            echo "If **Settings → Pages → Source** is *Deploy from a branch* (\`gh-pages\`),"
+            echo "the app is already live at"
+            echo "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
+            echo ""
+            echo "If it is set to *GitHub Actions* instead, merge to"
+            echo "\`${{ github.event.repository.default_branch }}\` to publish, or switch the"
+            echo "source to the \`gh-pages\` branch to publish from here."
+          } >> $GITHUB_STEP_SUMMARY
+
       - name: Explain how to finish setup
         if: steps.pages.outcome != 'success'
         run: |
@@ -160,7 +179,13 @@ jobs:
 
   deploy:
     needs: build
-    if: needs.build.outputs.pages_ready == 'true'
+    # The `github-pages` environment only accepts deployments from the default
+    # branch; from anywhere else the job is rejected before it even starts, so
+    # skip it rather than show a red build. On other branches the gh-pages
+    # publish in the build job is the delivery path.
+    if: >-
+      needs.build.outputs.pages_ready == 'true' &&
+      github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
     environment:
       name: github-pages
