@@ -1,8 +1,16 @@
 name: Build and deploy Yomeyo
 
-# Builds the full JMdict dictionary, publishes the installable web app to
-# GitHub Pages, and packages the browser extension as a downloadable zip —
-# so nothing has to be built by hand.
+# Builds the full JMdict dictionary, publishes the installable web app, and
+# packages the browser extension as a downloadable zip — so nothing has to be
+# built by hand.
+#
+# GitHub Pages must be switched on once for this repository (the Actions token
+# is not allowed to do it). Either choice works:
+#   Settings -> Pages -> Source: "GitHub Actions"          (deployed by this workflow)
+#   Settings -> Pages -> Source: "Deploy from a branch" -> gh-pages / root
+# This workflow publishes both ways, so whichever you pick goes live. Until
+# Pages is enabled, the build still runs and the extension zip is still
+# produced as a workflow artifact.
 
 on:
   push:
@@ -17,11 +25,10 @@ on:
         default: false
 
 permissions:
-  contents: read
+  contents: write # push the built site to the gh-pages branch
   pages: write
   id-token: write
 
-# Never let two deploys race; let a newer push supersede an in-flight one.
 concurrency:
   group: yomeyo-pages
   cancel-in-progress: true
@@ -29,6 +36,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      pages_ready: ${{ steps.pages.outcome == 'success' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -57,11 +66,17 @@ jobs:
             node scripts/build-dict.mjs
           fi
 
-      - name: Report dictionary size
+      - name: Check dictionary size
         run: |
           SIZE=$(stat -c %s apps/web/public/dict/dict.json)
-          echo "Dictionary: $(( SIZE / 1000000 )) MB uncompressed, \
-          $(gzip -c apps/web/public/dict/dict.json | wc -c | awk '{print int($1/1000000)}') MB gzipped" >> $GITHUB_STEP_SUMMARY
+          GZ=$(gzip -c apps/web/public/dict/dict.json | wc -c)
+          ENTRIES=$(node -e "console.log(JSON.parse(require('fs').readFileSync('apps/web/public/dict/dict.json','utf8')).entries.length)")
+          {
+            echo "### Dictionary"
+            echo ""
+            echo "- $ENTRIES entries"
+            echo "- $(( SIZE / 1000000 )) MB raw, $(( GZ / 1000000 )) MB gzipped (what phones download)"
+          } >> $GITHUB_STEP_SUMMARY
           # GitHub Pages rejects individual files over 100 MB.
           if [ "$SIZE" -gt 99000000 ]; then
             echo "::error::Dictionary exceeds the 100 MB GitHub Pages file limit"
@@ -79,9 +94,9 @@ jobs:
           cd apps/extension/dist
           zip -qr "$GITHUB_WORKSPACE/yomeyo-extension.zip" .
           cd "$GITHUB_WORKSPACE"
-          # Serve the zip from the app site so it has a stable install URL.
+          # Serve the zip from the app site too, so it has a stable install URL.
           cp yomeyo-extension.zip apps/web/dist/
-          echo "Extension package: $(du -h yomeyo-extension.zip | cut -f1)" >> $GITHUB_STEP_SUMMARY
+          echo "- Extension package: $(du -h yomeyo-extension.zip | cut -f1)" >> $GITHUB_STEP_SUMMARY
 
       - name: Upload extension as a workflow artifact
         uses: actions/upload-artifact@v4
@@ -90,21 +105,60 @@ jobs:
           path: yomeyo-extension.zip
           if-no-files-found: error
 
+      # Publishing path 1: a plain gh-pages branch. Always works with the
+      # default token, and covers the "Deploy from a branch" Pages setting.
+      - name: Publish site to the gh-pages branch
+        run: |
+          cd apps/web/dist
+          touch .nojekyll
+          git init -q
+          git checkout -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Deploy ${GITHUB_SHA}"
+          git push -qf "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
+          echo "Pushed the built site to the gh-pages branch."
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      # Publishing path 2: the GitHub Actions Pages pipeline. Skipped (without
+      # failing the build) when Pages has not been enabled yet.
       - name: Configure GitHub Pages
         id: pages
+        continue-on-error: true
         uses: actions/configure-pages@v5
-        with:
-          # Turns Pages on automatically the first time this runs, so there
-          # is no manual repository setting to flip.
-          enablement: true
 
-      - name: Upload site
+      - name: Upload site for Pages deployment
+        if: steps.pages.outcome == 'success'
         uses: actions/upload-pages-artifact@v3
         with:
           path: apps/web/dist
 
+      - name: Explain how to finish setup
+        if: steps.pages.outcome != 'success'
+        run: |
+          {
+            echo "### One setting left to turn on"
+            echo ""
+            echo "The build succeeded and the site was pushed to the **gh-pages** branch,"
+            echo "but GitHub Pages is not enabled yet and the Actions token is not allowed"
+            echo "to enable it. Turn it on once, then re-run this workflow:"
+            echo ""
+            echo "**Settings → Pages → Source → \"GitHub Actions\"**"
+            echo ""
+            echo "(Or pick \"Deploy from a branch\" → \`gh-pages\` → \`/ (root)\` — the branch"
+            echo "is already there, and that option needs no re-run.)"
+            echo ""
+            echo "The app will then be at **https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/**"
+            echo ""
+            echo "Meanwhile the extension zip is downloadable from this run's Artifacts."
+          } >> $GITHUB_STEP_SUMMARY
+          echo "::warning::GitHub Pages is not enabled — see the job summary for the one setting to flip."
+
   deploy:
     needs: build
+    if: needs.build.outputs.pages_ready == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -117,7 +171,7 @@ jobs:
       - name: Summarize
         run: |
           {
-            echo "## Yomeyo is deployed"
+            echo "## Yomeyo is live"
             echo ""
             echo "**App (install this on your phone):** ${{ steps.deployment.outputs.page_url }}"
             echo ""
