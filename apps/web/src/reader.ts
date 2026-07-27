@@ -23,6 +23,7 @@ export function renderReader(main: HTMLElement, sharedText?: string): void {
         <button id="reader-demo" class="secondary">Try demo text</button>
       </div>
     </div>
+    <div class="msg" id="reader-status"></div>
     <div id="reader-view" class="card-panel reader-text" style="display:none" lang="ja"></div>
   `;
 
@@ -30,6 +31,13 @@ export function renderReader(main: HTMLElement, sharedText?: string): void {
   const view = main.querySelector<HTMLDivElement>("#reader-view")!;
   const goBtn = main.querySelector<HTMLButtonElement>("#reader-go")!;
   const demoBtn = main.querySelector<HTMLButtonElement>("#reader-demo")!;
+  const status = main.querySelector<HTMLDivElement>("#reader-status")!;
+
+  // Warm the dictionary as soon as the Reader opens, so it is usually ready
+  // by the time the first word is tapped.
+  void activeDictionary().catch(() => {
+    /* reported when a lookup is attempted */
+  });
 
   async function show(text: string): Promise<void> {
     const trimmed = text.trim();
@@ -51,25 +59,56 @@ export function renderReader(main: HTMLElement, sharedText?: string): void {
       view.appendChild(span);
     });
 
-    const dict = await activeDictionary();
+    // Start the dictionary download now, but do NOT wait for it before
+    // listening for taps. Attaching the handler after the await silently
+    // dropped every tap made while the dictionary was still loading — on a
+    // phone that is a multi-second window in which the app looks dead.
+    const dictionaryReady = activeDictionary();
+    let ready = false;
+    void dictionaryReady.then(
+      () => {
+        ready = true;
+        status.textContent = "";
+      },
+      (err) => {
+        status.textContent = err instanceof Error ? err.message : "Could not load the dictionary.";
+        status.className = "msg error";
+      },
+    );
+    status.textContent = "Loading dictionary…";
+    status.className = "msg";
 
     view.addEventListener("click", (ev) => {
       const target = ev.target as HTMLElement;
       if (!target.dataset.i || !target.classList.contains("jp-char")) return;
       const offset = Number(target.dataset.i);
-      const matches = lookup(dict, trimmed, offset);
-      closePopup();
 
-      // Clear old highlight, highlight the best match's span range.
-      view.querySelectorAll(".hl").forEach((el) => el.classList.remove("hl"));
-      if (matches.length > 0) {
+      // A tap before the dictionary is ready is honoured once it arrives,
+      // rather than thrown away.
+      if (!ready) {
+        status.textContent = "Loading dictionary…";
+        status.className = "msg";
+      }
+
+      void dictionaryReady.then((dict) => {
+        const matches = lookup(dict, trimmed, offset);
+        closePopup();
+
+        // Clear old highlight, highlight the best match's span range.
+        view.querySelectorAll(".hl").forEach((el) => el.classList.remove("hl"));
+        if (matches.length === 0) {
+          status.textContent = "No dictionary entry for that word.";
+          status.className = "msg";
+          return;
+        }
+        status.textContent = "";
         const len = matches[0].matchLength;
         for (let i = offset; i < offset + len; i++) {
           view.querySelector(`[data-i="${i}"]`)?.classList.add("hl");
         }
         const sentence = extractSentence(trimmed, offset);
         void showLookupPopup(matches, { sentence, source: "reader" });
-      }
+      });
     });
   }
 

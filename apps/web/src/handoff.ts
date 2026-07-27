@@ -1,5 +1,6 @@
 import type { Card } from "@yomeyo/core";
 import { importCards } from "./store.js";
+import { toast } from "./toast.js";
 
 /**
  * Receive words handed over by the browser extension.
@@ -58,15 +59,11 @@ export async function consumeHandoff(): Promise<HandoffResult | null> {
 
 /** Briefly show the outcome of an import. */
 export function showHandoffToast(result: HandoffResult): void {
-  const toast = document.createElement("div");
-  toast.className = "toast";
-  toast.textContent =
+  toast(
     result.total === 0
       ? "Nothing to import from the extension."
       : result.imported === 0
         ? `Already had all ${result.total} word${result.total === 1 ? "" : "s"}.`
-        : `Imported ${result.imported} word${result.imported === 1 ? "" : "s"} from the extension.`;
-  document.body.appendChild(toast);
-  setTimeout(() => toast.classList.add("out"), 3200);
-  setTimeout(() => toast.remove(), 3700);
+        : `Imported ${result.imported} word${result.imported === 1 ? "" : "s"} from the extension.`,
+  );
 }

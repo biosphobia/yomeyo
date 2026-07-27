@@ -2,6 +2,7 @@ import {
   Card,
   MemoryDictionary,
   dictFileMeta,
+  findDuplicate,
   mergeCards,
   parseDictFile,
   runSync,
@@ -86,6 +87,21 @@ export async function saveCard(card: Card): Promise<void> {
   await putCard(stored);
 }
 
+export type SaveOutcome = "saved" | "duplicate";
+
+/**
+ * Save a newly mined word, refusing to create a second card for a word the
+ * deck already has. The same word can be reached from several dictionary
+ * entries, from the Reader and the extension, and on more than one device,
+ * so the check belongs here rather than in each caller.
+ */
+export async function saveNewCard(card: Card): Promise<SaveOutcome> {
+  const cards = await loadCards();
+  if (findDuplicate(cards.values(), card.term, card.reading)) return "duplicate";
+  await saveCard(card);
+  return "saved";
+}
+
 export async function liveCards(): Promise<StoredCard[]> {
   const cards = await loadCards();
   return [...cards.values()].filter((c) => !c.deleted);
@@ -107,7 +123,16 @@ export async function hasCardForTerm(term: string, reading: string): Promise<boo
 export async function importCards(incoming: Card[]): Promise<number> {
   const cards = await loadCards();
   const plain = new Map<string, Card>([...cards.entries()]);
-  const applied = mergeCards(plain, incoming);
+
+  // Drop incoming cards for words already in the deck under a different id —
+  // the extension and the app mint their own ids, so id-only merging would
+  // leave two cards for the same word.
+  const fresh = incoming.filter((card) => {
+    const existing = findDuplicate(plain.values(), card.term, card.reading);
+    return !existing || existing.id === card.id;
+  });
+
+  const applied = mergeCards(plain, fresh);
   const stored: StoredCard[] = applied.map((c) => ({ ...c, dirty: true }));
   for (const c of stored) cards.set(c.id, c);
   await putCards(stored);

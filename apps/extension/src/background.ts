@@ -1,6 +1,7 @@
 import {
   MemoryDictionary,
   createCard,
+  findDuplicate,
   lookup,
   mergeCards,
   parseDictFile,
@@ -50,8 +51,13 @@ async function setCards(cards: Record<string, StoredCard>): Promise<void> {
   await storageSet({ cards });
 }
 
-async function handleSave(entry: any, sentence?: string, url?: string): Promise<void> {
+async function handleSave(entry: any, sentence?: string, url?: string): Promise<"saved" | "duplicate"> {
   const cards = await getCards();
+  // One card per word: the same word is reachable from several dictionary
+  // entries and from more than one page, and a second card would carry its
+  // own review schedule.
+  if (findDuplicate(Object.values(cards), entry.term, entry.reading)) return "duplicate";
+
   const card: StoredCard = {
     ...createCard(
       {
@@ -67,6 +73,7 @@ async function handleSave(entry: any, sentence?: string, url?: string): Promise<
   };
   cards[card.id] = card;
   await setCards(cards);
+  return "saved";
 }
 
 async function isSaved(term: string, reading: string): Promise<boolean> {
@@ -163,8 +170,8 @@ ext.runtime.onMessage.addListener((message: any, _sender: any, sendResponse: (r:
         break;
       }
       case "save": {
-        await handleSave(message.entry, message.sentence, message.url);
-        sendResponse({ ok: true });
+        const outcome = await handleSave(message.entry, message.sentence, message.url);
+        sendResponse({ ok: true, outcome });
         break;
       }
       case "isSaved": {

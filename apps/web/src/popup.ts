@@ -1,6 +1,21 @@
-import { createCard, type LookupMatch } from "@yomeyo/core";
-import { hasCardForTerm, saveCard } from "./store.js";
+import { cardKey, createCard, type LookupMatch } from "@yomeyo/core";
+import { hasCardForTerm, saveNewCard } from "./store.js";
 import { speakerButton } from "./audio.js";
+import { toast } from "./toast.js";
+
+/**
+ * The same word often appears under several dictionary entries in one popup.
+ * Once it is saved, every other button for that word must show it too, or a
+ * second tap looks like it saved a second copy.
+ */
+function markDuplicates(popup: HTMLElement, term: string, reading: string): void {
+  const key = cardKey(term, reading);
+  popup.querySelectorAll<HTMLButtonElement>(`button[data-word="${CSS.escape(key)}"]`).forEach((btn) => {
+    btn.textContent = "✓ Saved";
+    btn.classList.add("saved");
+    btn.disabled = true;
+  });
+}
 
 /**
  * Shared lookup-result popup: shows candidate words for a tap and lets the
@@ -94,11 +109,21 @@ export async function showLookupPopup(matches: LookupMatch[], context: PopupCont
           },
           Date.now(),
         );
-        await saveCard(card);
+        const outcome = await saveNewCard(card);
         saveBtn.textContent = "✓ Saved";
         saveBtn.classList.add("saved");
+        // Say what happened: a silent button is indistinguishable from a
+        // broken one, and "already in your deck" is useful to know.
+        toast(
+          outcome === "duplicate"
+            ? `${entry.term} is already in your deck`
+            : `Saved ${entry.term}`,
+        );
+        // Other entries for the same word are now duplicates too.
+        markDuplicates(popup, entry.term, entry.reading);
         context.onSaved?.();
       });
+      saveBtn.dataset.word = cardKey(entry.term, entry.reading);
       row.appendChild(saveBtn);
 
       popup.appendChild(row);

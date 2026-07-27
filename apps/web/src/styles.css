@@ -710,3 +710,8 @@ label {
 .toast.out {
   opacity: 0;
 }
+
+.toast-error {
+  border-color: var(--bad);
+  color: var(--bad);
+}

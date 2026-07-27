@@ -11,6 +11,7 @@ import {
 } from "./cloud.js";
 import { formatSteps, parseFsrsWeights, parseSteps, type AudioSourceConfig } from "@yomeyo/core";
 import { getAudioConfig, saveAudioConfig, testAudioConfig } from "./audio.js";
+import { toast } from "./toast.js";
 import { getDeckConfig, resetDeckConfig, saveDeckConfig } from "./deck.js";
 import {
   importDictionary,
@@ -277,6 +278,7 @@ async function renderAudioConfig(main: HTMLElement): Promise<void> {
     await saveAudioConfig(read());
     msg.textContent = "Saved on this device.";
     msg.className = "msg ok";
+    toast("Audio settings saved");
   });
 
   box.querySelector<HTMLButtonElement>("#au-test")!.addEventListener("click", async () => {
@@ -377,6 +379,7 @@ async function renderDeckConfig(main: HTMLElement): Promise<void> {
       });
       msg.textContent = "Saved. New intervals use these settings from the next review.";
       msg.className = "msg ok";
+      toast("Scheduling settings saved");
     } catch (err) {
       msg.textContent = err instanceof Error ? err.message : String(err);
       msg.className = "msg error";
@@ -506,6 +509,7 @@ function wireServerSync(main: HTMLElement): void {
   const tokenInput = main.querySelector<HTMLInputElement>("#sync-token")!;
   main.querySelector<HTMLButtonElement>("#sync-save")!.addEventListener("click", async () => {
     await setSyncSettings({ url: urlInput.value.trim(), token: tokenInput.value });
+    toast("Sync server settings saved");
   });
 }
 
