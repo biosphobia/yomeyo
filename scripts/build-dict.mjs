@@ -14,7 +14,7 @@
  * Output is the compact `yomeyo-dict-1` format (positional tuples + interned
  * part-of-speech table), written into both apps' public/dict/ folders.
  */
-import { createWriteStream, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { pipeline } from "node:stream/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -52,15 +52,32 @@ async function downloadLatest() {
     );
   }
 
-  console.log(`Downloading ${chosen.name} (${(chosen.size / 1e6).toFixed(1)} MB)…`);
-  mkdirSync(join(root, "data"), { recursive: true });
-  const zipPath = join(root, "data", chosen.name);
+  console.log(`Downloading ${chosen.name} (${(chosen.size / 1e6).toFixed(1)} MB compressed)…`);
+  const dataDir = join(root, "data");
+  mkdirSync(dataDir, { recursive: true });
+  const zipPath = join(dataDir, chosen.name);
   const dl = await fetch(chosen.browser_download_url);
   if (!dl.ok || !dl.body) throw new Error(`Download failed: ${dl.status} ${dl.statusText}`);
   await pipeline(dl.body, createWriteStream(zipPath));
 
-  execFileSync("unzip", ["-o", "-q", zipPath, "-d", join(root, "data")], { stdio: "inherit" });
-  return join(root, "data", chosen.name.replace(/\.zip$/, ""));
+  // The file inside the archive is not necessarily named after the archive,
+  // so read the actual entry name rather than guessing it.
+  const listing = execFileSync("unzip", ["-Z1", zipPath], { encoding: "utf8" })
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const jsonEntry = listing.find((name) => name.endsWith(".json"));
+  if (!jsonEntry) {
+    throw new Error(`No .json file inside ${chosen.name}. Contents: ${listing.join(", ")}`);
+  }
+
+  execFileSync("unzip", ["-o", "-q", zipPath, "-d", dataDir], { stdio: "inherit" });
+  const jsonPath = join(dataDir, jsonEntry);
+  if (!existsSync(jsonPath)) {
+    throw new Error(`Expected ${jsonPath} after unzip, but it is missing`);
+  }
+  console.log(`  extracted ${jsonEntry} (${(statSync(jsonPath).size / 1e6).toFixed(1)} MB)`);
+  return jsonPath;
 }
 
 /**
