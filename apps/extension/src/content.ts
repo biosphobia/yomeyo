@@ -94,6 +94,14 @@ async function offerSavedWordsToApp(appUrl: string): Promise<void> {
     if (data.type === "imported") void sendMessage({ type: "handedOff", ids: data.ids });
   });
 
+  // Coming back to an app tab that was already open — from another tab, from
+  // the background, or out of the back/forward cache — is the other moment
+  // words might be waiting, and no message would otherwise arrive.
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) void offer();
+  });
+  window.addEventListener("pageshow", () => void offer());
+
   await offer();
 }
 

@@ -91,8 +91,18 @@
 
     <div class="msg" id="transfer-hint"></div>
     <div class="msg" id="version-label" style="opacity:0.55;font-size:11px"></div>
-    <button id="handoff-btn" class="secondary">Send them now</button>
     <div class="msg" id="msg"></div>
+
+    <details>
+      <summary>Words not arriving?</summary>
+      <div class="hint">
+        Words move to the app by themselves whenever it is open in a browser
+        tab. Opened from the home screen instead, a browser will not let an
+        extension reach it — use this, and it opens the app and hands them
+        over.
+      </div>
+      <button id="handoff-btn" class="secondary">Send them now</button>
+    </details>
 
     <details>
       <summary>Advanced: app location &amp; sync server</summary>

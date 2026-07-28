@@ -97,8 +97,8 @@ async function refresh(): Promise<void> {
       : stats.total === 0
         ? "Tap a Japanese word on any page to save it."
         : stats.lastHandoffAt
-          ? `Waiting for the app. Last sent ${describeWhen(stats.lastHandoffAt)}.`
-          : "These go to the app by themselves next time you open it in a tab.";
+          ? `They will move across next time the app is open. Last sent ${describeWhen(stats.lastHandoffAt)}.`
+          : "They move across by themselves next time the app is open in a tab.";
   if (stats.version) versionLabel.textContent = `Yomeyo ${stats.version}`;
 }
 

@@ -82,12 +82,20 @@ involved. The extension checks the page against the app URL in its own
 settings before handing anything over, so a site claiming to be Yomeyo is
 given nothing.
 
-That leaves one case: Yomeyo opened from the home screen as an installed app
-rather than in a tab, where a content script cannot reach it. For that, open
-the extension's toolbar popup and tap **Send them now** — the app opens and
-imports them, with the words travelling in the URL fragment, which browsers
-never send to a server. Re-sending is always harmless: cards merge by id and
-the newer version wins.
+That leaves one case, and it is a limit of the browser rather than a choice.
+An extension and a website cannot share storage, so the words can only be
+handed over while a page of the app is running — and an embedded frame will
+not do, because browsers now partition storage for third-party frames, so a
+hidden frame of the app would write into a separate box the app never reads.
+Opened from the home screen as an installed app rather than in a tab, no
+content script reaches it at all.
+
+For that case only, the extension's toolbar popup keeps a **Send them now**
+button under *Words not arriving?*: it opens the app and hands them over,
+with the words travelling in the URL fragment, which browsers never send to a
+server. Re-sending is always harmless — cards merge by id and the newer
+version wins. Signing both sides in to the same account avoids the situation
+entirely.
 
 Signing in to the same account on both, or running the sync server below,
 covers everything else — including a phone and a desktop.
