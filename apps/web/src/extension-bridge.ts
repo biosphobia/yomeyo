@@ -27,6 +27,20 @@ import { looksLikeCard } from "./handoff.js";
 const FROM_EXTENSION = "yomeyo-extension";
 const FROM_APP = "yomeyo-app";
 
+/**
+ * What the extension has told us about itself, if anything.
+ *
+ * An extension that cannot transfer words looks, from the app, exactly like
+ * no extension at all: both are silence. Recording the greeting lets the app
+ * say which of the two it is, which is the difference between "nothing
+ * happens" and knowing to update the extension.
+ */
+let seen: { version: string | null } | null = null;
+
+export function extensionStatus(): { connected: boolean; version: string | null } {
+  return { connected: seen !== null, version: seen?.version ?? null };
+}
+
 interface CardsMessage {
   source: typeof FROM_EXTENSION;
   type: "cards";
@@ -49,11 +63,23 @@ function isCardsMessage(data: unknown): data is CardsMessage {
  * `onImported` is called only when something new actually landed, so it can
  * refresh the screen and say so.
  */
-export function listenForExtensionCards(onImported: (count: number) => void): void {
+export function listenForExtensionCards(
+  onImported: (count: number) => void,
+  onExtensionSeen: () => void = () => {},
+): void {
   window.addEventListener("message", (ev) => {
     // Only messages posted into this same window, by the content script
     // sharing it — never from an embedded frame or another window.
     if (ev.source !== window) return;
+
+    const data = ev.data as { source?: string; type?: string; version?: unknown } | null;
+    if (data?.source === FROM_EXTENSION && data.type === "hello") {
+      const first = seen === null;
+      seen = { version: typeof data.version === "string" ? data.version : null };
+      if (first) onExtensionSeen();
+      return;
+    }
+
     if (!isCardsMessage(ev.data)) return;
 
     const cards = ev.data.cards.filter(looksLikeCard) as Card[];

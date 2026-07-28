@@ -102,10 +102,18 @@ await routeWithHandoff();
 
 // Words saved by the extension arrive on their own whenever the app is open,
 // so there is nothing for the user to press.
-listenForExtensionCards((count) => {
-  toast(`Added ${count} word${count === 1 ? "" : "s"} saved with the extension.`);
-  route(); // the deck on screen is now out of date
-});
+listenForExtensionCards(
+  (count) => {
+    toast(`Added ${count} word${count === 1 ? "" : "s"} saved with the extension.`);
+    route(); // the deck on screen is now out of date
+  },
+  () => {
+    // The extension introduced itself. Screens that say whether it is there
+    // were drawn before that, so redraw them.
+    const hash = location.hash.replace("#", "");
+    if (hash === "words" || hash === "settings") route();
+  },
+);
 
 // Google sign-in falls back to a redirect on mobile and in installed PWAs,
 // which lands back here; completing it updates Settings on the next render.

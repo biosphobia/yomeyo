@@ -61,7 +61,23 @@ async function offerSavedWordsToApp(appUrl: string): Promise<void> {
   isAppPage = true;
   removeHost();
 
+  // Say hello whether or not there is anything to hand over, so the app can
+  // tell "no extension here" apart from "an extension that saved nothing" —
+  // otherwise an old build that cannot transfer looks exactly like a working
+  // one with an empty deck.
+  const greet = (): void => {
+    window.postMessage(
+      {
+        source: "yomeyo-extension",
+        type: "hello",
+        version: ext.runtime?.getManifest?.().version ?? null,
+      },
+      location.origin,
+    );
+  };
+
   const offer = async (): Promise<void> => {
+    greet();
     const cards = await sendMessage<any[]>({ type: "pendingForApp" }).catch(() => null);
     if (!cards?.length) return;
     window.postMessage({ source: "yomeyo-extension", type: "cards", cards }, location.origin);
