@@ -21,7 +21,6 @@ import { pipeline } from "node:stream/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
-import { BinaryDictionary, encodeBinaryDict } from "../packages/core/dist/index.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT_PATHS = [
@@ -213,6 +212,8 @@ export function verifyDict(dict, { minEntries = 10_000, requireCompounds = false
     ["高い", "たかい", "adj-i"],
     ["日本語", "にほんご", "n"],
     ["する", "する", null],
+    ["臭い", "くさい", "adj-i"],
+    ["水臭い", "みずくさい", "adj-i"],
   ];
   // Compounds that exist in JMdict but not in its common-words subset. They
   // catch a build that silently fell back to the smaller dictionary.
@@ -248,6 +249,10 @@ async function main() {
   });
   console.log("  verification passed");
 
+  // Imported here, not at the top: the test suite imports this file for its
+  // conversion functions, and runs before the core library is built.
+  const { BinaryDictionary, encodeBinaryDict } = await import("../packages/core/dist/index.js");
+
   const payload = encodeBinaryDict({ entries: dict.entries, pos: dict.pos, meta: dict.meta });
   for (const outPath of OUT_PATHS) {
     mkdirSync(dirname(outPath), { recursive: true });
@@ -261,7 +266,18 @@ async function main() {
     throw new Error(`encoded ${check.size} entries but expected ${dict.entries.length}`);
   }
   if (check.lookupExact("読む").length === 0) throw new Error("the encoded dictionary cannot find 読む");
-  console.log("  binary dictionary reads back correctly");
+
+  // Not just "the word is in there", but "a finger landing anywhere on it
+  // finds it" — which is the thing users actually experience.
+  const { lookup } = await import("../packages/core/dist/index.js");
+  const sentence = "そんなに水臭いことを言うなよ。";
+  for (let at = 4; at <= 6; at++) {
+    const best = lookup(check, sentence, at)[0];
+    if (best?.matchedText !== "水臭い") {
+      throw new Error(`tapping index ${at} of "${sentence}" found ${best?.matchedText ?? "nothing"}, not 水臭い`);
+    }
+  }
+  console.log("  binary dictionary reads back correctly, and taps land on whole words");
 }
 
 // Only run the pipeline when invoked as a script, so tests can import the

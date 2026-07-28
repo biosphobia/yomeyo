@@ -42,6 +42,11 @@ export interface DeinflectionResult {
 export interface LookupMatch {
   /** The exact substring of the scanned text that matched. */
   matchedText: string;
+  /**
+   * Where the match begins in the scanned text. Not necessarily where the
+   * user tapped: a tap lands inside a word at least as often as at its start.
+   */
+  start: number;
   /** Length of matchedText in code points (for highlight). */
   matchLength: number;
   /** The deinflected dictionary form that was found. */

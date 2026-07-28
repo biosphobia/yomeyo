@@ -93,3 +93,33 @@ describe("combined dictionaries", () => {
     expect(japanese?.glosses[0]).toMatch(/書物/);
   });
 });
+
+describe("which dictionary's definition comes first", () => {
+  it("keeps the built-in definition above an imported one", () => {
+    // Frequencies are not on a shared scale between dictionaries: JMdict's is
+    // a rank in the tens of thousands, a Yomitan import's comes from that
+    // dictionary's own score. Comparing them across dictionaries buried the
+    // built-in definition for nearly every word.
+    const builtIn = new MemoryDictionary([
+      { term: "読む", reading: "よむ", pos: ["v5m"], glosses: ["to read"], freq: 14961 },
+    ]);
+    const imported = new MemoryDictionary([
+      { term: "読む", reading: "よむ", pos: ["v5m"], glosses: ["文字を見て意味をとる"], freq: 1000 },
+    ]);
+    const combined = new CombinedDictionary([
+      { name: "JMdict", dictionary: builtIn },
+      { name: "三省堂国語辞典", dictionary: imported },
+    ]);
+    const [best] = lookup(combined, "本を読む", 2);
+    expect(best.entries.map((e) => e.source)).toEqual(["JMdict", "三省堂国語辞典"]);
+  });
+
+  it("still orders by frequency within one dictionary", () => {
+    const dict = new MemoryDictionary([
+      { term: "生", reading: "せい", pos: ["n"], glosses: ["life"], freq: 9000 },
+      { term: "生", reading: "なま", pos: ["n"], glosses: ["raw"], freq: 200 },
+    ]);
+    const [best] = lookup(dict, "生", 0);
+    expect(best.entries.map((e) => e.reading)).toEqual(["なま", "せい"]);
+  });
+});

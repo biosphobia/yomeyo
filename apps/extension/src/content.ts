@@ -617,11 +617,13 @@ async function handleLookupAt(x: number, y: number): Promise<boolean> {
   });
   if (!matches || matches.length === 0) return false;
 
-  // Highlight the matched run, Yomitan-style.
+  // Highlight the matched run, Yomitan-style. It can begin before the tapped
+  // character: on a phone a tap lands inside a word as often as at its start.
   try {
     const range = document.createRange();
-    range.setStart(tap.node, tap.offset);
-    range.setEnd(tap.node, Math.min(tap.offset + matches[0].matchLength, tap.node.data.length));
+    const from = Math.max(0, Math.min(matches[0].start, tap.node.data.length));
+    range.setStart(tap.node, from);
+    range.setEnd(tap.node, Math.min(from + matches[0].matchLength, tap.node.data.length));
     const selection = window.getSelection();
     selection?.removeAllRanges();
     selection?.addRange(range);

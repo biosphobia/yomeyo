@@ -312,6 +312,17 @@ firestore.rules     Firestore security rules — each deck is private to its own
 - **SRS** (`packages/core/src/srs.ts`): Anki-style SM-2 — learning steps
   (1 min → 10 min), graduation at 1 day, intervals scaled by an ease factor
   (2.5 start, 1.3 floor), lapses to relearning with an ease penalty.
+- **Tap scanning** (`packages/core/src/dictionary.ts`): a desktop hover tool
+  can scan forward from the character under the cursor, because you point at
+  a word's first character. A finger cannot: Japanese has no spaces, so
+  nothing on screen marks where a word begins, and a fingertip covers several
+  characters. Scanning forward only, a tap on the 臭 of 水臭い found 臭い and a
+  tap on its い found 遺孤 — over hand-segmented sentences the top result was
+  the word actually tapped just 43% of the time. The scan now also starts up
+  to eight characters back, keeping only matches that still cover the tapped
+  character, which takes that to 87%. Candidates are ranked longest first,
+  then fewest deinflection steps, then kanji-initial (the content words people
+  mine), then dictionary frequency.
 - **Dictionary format** (`yomeyo-dict-2`, `packages/core/src/dict-binary.ts`):
   the dictionary is searched where it lies rather than parsed. Keys are stored
   sorted by their UTF-8 bytes, so a lookup is a binary search comparing raw

@@ -105,8 +105,10 @@ export function renderReader(main: HTMLElement, sharedText?: string): void {
           return;
         }
         status.textContent = "";
-        const len = matches[0].matchLength;
-        for (let i = offset; i < offset + len; i++) {
+        // The word may well have started before the character tapped, so
+        // highlight where the match actually begins.
+        const { start, matchLength } = matches[0];
+        for (let i = start; i < start + matchLength; i++) {
           view.querySelector(`[data-i="${i}"]`)?.classList.add("hl");
         }
         const sentence = extractSentence(trimmed, offset);

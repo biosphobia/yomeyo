@@ -203,46 +203,95 @@ export function isJapaneseChar(ch: string): boolean {
 const MAX_SCAN_LENGTH = 20;
 
 /**
- * Yomitan-style scan: from the given offset in `text`, try the longest
+ * How far back from the tapped character to look for the start of a word.
+ *
+ * Japanese is written without spaces, so nothing on screen tells you where a
+ * word begins — and a fingertip covers several characters anyway. Scanning
+ * only forwards, as a desktop hover tool can afford to, means a tap on the 臭
+ * of 水臭い finds 臭い, and a tap on its い finds 遺孤 or 胃: the word actually
+ * under the finger is missed. Most Japanese words are within this many
+ * characters of any point inside them.
+ */
+const MAX_LOOKBEHIND = 8;
+
+/** Step back one whole character, never into the middle of a surrogate pair. */
+function previousCharStart(text: string, index: number): number {
+  if (index <= 0) return -1;
+  const back = index - 1;
+  const code = text.charCodeAt(back);
+  if (code >= 0xdc00 && code <= 0xdfff && back > 0) {
+    const high = text.charCodeAt(back - 1);
+    if (high >= 0xd800 && high <= 0xdbff) return back - 1;
+  }
+  return back;
+}
+
+/** Character starts at or before `offset`, nearest first. */
+function scanStarts(text: string, offset: number): number[] {
+  const starts = [offset];
+  let at = offset;
+  for (let i = 0; i < MAX_LOOKBEHIND; i++) {
+    at = previousCharStart(text, at);
+    if (at < 0) break;
+    const point = text.codePointAt(at);
+    if (point === undefined) break;
+    if (!isJapaneseChar(String.fromCodePoint(point))) break; // stop at a boundary
+    starts.push(at);
+  }
+  return starts;
+}
+
+/**
+ * Yomitan-style scan around the given offset in `text`: try the longest
  * possible substring first, deinflect it, and collect dictionary matches.
- * Results are sorted by match length (longest first), then fewest
- * deinflection steps, then dictionary frequency.
+ *
+ * Unlike a hover tool this also considers words that *begin before* the
+ * tapped character, keeping only those that still cover it — on a phone a tap
+ * lands inside a word at least as often as at its start. Results are sorted
+ * by match length (longest first), then fewest deinflection steps, then
+ * kanji-initial words, then dictionary frequency, then earliest start.
  */
 export function lookup(dict: Dictionary, text: string, offset = 0): LookupMatch[] {
-  // Collect up to MAX_SCAN_LENGTH Japanese chars from offset.
-  const chars: string[] = [];
-  for (const ch of text.slice(offset)) {
-    if (!isJapaneseChar(ch)) break;
-    chars.push(ch);
-    if (chars.length >= MAX_SCAN_LENGTH) break;
-  }
-  if (chars.length === 0) return [];
-
   const matches: LookupMatch[] = [];
   const seen = new Set<string>();
 
-  for (let len = chars.length; len >= 1; len--) {
-    const fragment = chars.slice(0, len).join("");
-    const candidates = [fragment];
-    const hira = kataToHira(fragment);
-    if (hira !== fragment) candidates.push(hira);
+  for (const start of scanStarts(text, offset)) {
+    const chars: string[] = [];
+    for (const ch of text.slice(start)) {
+      if (!isJapaneseChar(ch)) break;
+      chars.push(ch);
+      if (chars.length >= MAX_SCAN_LENGTH) break;
+    }
+    if (chars.length === 0) continue;
 
-    for (const candidate of candidates) {
-      for (const deinf of deinflect(candidate)) {
-        const entries = dict
-          .lookupExact(deinf.term)
-          .filter((e) => classesMatchPos(deinf.classes, e.pos));
-        if (entries.length === 0) continue;
-        const key = fragment + " " + deinf.term;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        matches.push({
-          matchedText: fragment,
-          matchLength: len,
-          term: deinf.term,
-          reasons: deinf.reasons,
-          entries: entries.slice().sort(byFreq),
-        });
+    for (let len = chars.length; len >= 1; len--) {
+      const fragment = chars.slice(0, len).join("");
+      // A word that ends before the tapped character is not the word the
+      // user pointed at, however well it matches.
+      if (start + fragment.length <= offset) break;
+
+      const candidates = [fragment];
+      const hira = kataToHira(fragment);
+      if (hira !== fragment) candidates.push(hira);
+
+      for (const candidate of candidates) {
+        for (const deinf of deinflect(candidate)) {
+          const entries = dict
+            .lookupExact(deinf.term)
+            .filter((e) => classesMatchPos(deinf.classes, e.pos));
+          if (entries.length === 0) continue;
+          const key = start + " " + fragment + " " + deinf.term;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          matches.push({
+            matchedText: fragment,
+            start,
+            matchLength: len,
+            term: deinf.term,
+            reasons: deinf.reasons,
+            entries: rankEntries(entries),
+          });
+        }
       }
     }
   }
@@ -250,11 +299,53 @@ export function lookup(dict: Dictionary, text: string, offset = 0): LookupMatch[
   matches.sort((a, b) => {
     if (a.matchLength !== b.matchLength) return b.matchLength - a.matchLength;
     if (a.reasons.length !== b.reasons.length) return a.reasons.length - b.reasons.length;
-    return (a.entries[0]?.freq ?? 1e9) - (b.entries[0]?.freq ?? 1e9);
+    // Between equally long candidates: a word opening with a kanji is far
+    // more likely to be the content word someone is mining than a kana run
+    // that happens to align (臭い vs いか in 臭いから), and after that the
+    // commoner word is the likelier segmentation. Where the match starts
+    // relative to the finger is close to a coin flip, so it decides last.
+    const kanjiA = startsWithKanji(a.matchedText);
+    const kanjiB = startsWithKanji(b.matchedText);
+    if (kanjiA !== kanjiB) return kanjiA ? -1 : 1;
+    const freqA = a.entries[0]?.freq ?? 1e9;
+    const freqB = b.entries[0]?.freq ?? 1e9;
+    if (freqA !== freqB) return freqA - freqB;
+    return a.start - b.start;
   });
   return matches;
 }
 
-function byFreq(a: DictEntry, b: DictEntry): number {
-  return (a.freq ?? 1e9) - (b.freq ?? 1e9);
+/**
+ * Order the definitions shown for one word.
+ *
+ * Dictionaries keep their consulted order — the built-in one first — and only
+ * entries from the same dictionary are compared by frequency. The numbers are
+ * not on a shared scale: JMdict's is a rank running into the hundreds of
+ * thousands, while a Yomitan import's is derived from that dictionary's own
+ * score, so comparing across them let an imported dictionary bury the
+ * built-in definition for almost every word.
+ */
+function rankEntries(entries: DictEntry[]): DictEntry[] {
+  const order = new Map<string, number>();
+  for (const entry of entries) {
+    const key = entry.source ?? "";
+    if (!order.has(key)) order.set(key, order.size);
+  }
+  return entries
+    .map((entry, index) => ({ entry, index }))
+    .sort((a, b) => {
+      const sourceA = order.get(a.entry.source ?? "") ?? 0;
+      const sourceB = order.get(b.entry.source ?? "") ?? 0;
+      if (sourceA !== sourceB) return sourceA - sourceB;
+      const freqA = a.entry.freq ?? 1e9;
+      const freqB = b.entry.freq ?? 1e9;
+      if (freqA !== freqB) return freqA - freqB;
+      return a.index - b.index;
+    })
+    .map((x) => x.entry);
+}
+
+function startsWithKanji(text: string): boolean {
+  const code = text.codePointAt(0);
+  return code !== undefined && ((code >= 0x4e00 && code <= 0x9fff) || (code >= 0x3400 && code <= 0x4dbf));
 }

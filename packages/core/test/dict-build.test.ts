@@ -197,6 +197,8 @@ describe("dictionary verification gate", () => {
         makeWord("高い", "たかい", ["adj-i"], "tall; expensive"),
         makeWord("日本語", "にほんご", ["n"], "Japanese language"),
         makeWord("する", "する", ["vs-i"], "to do"),
+        makeWord("臭い", "くさい", ["adj-i"], "stinking; smelly"),
+        makeWord("水臭い", "みずくさい", ["adj-i"], "stand-offish; distant"),
       ],
     });
     expect(() => verifyDict(good, { minEntries: 1 })).not.toThrow();
