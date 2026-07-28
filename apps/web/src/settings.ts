@@ -115,10 +115,27 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
     if (!config) {
       body.innerHTML = `
         <div class="msg">
-          Cloud sync is off. Paste your Firebase project's web config below to
-          turn on accounts and backup. Everything works without it — this only
-          adds syncing between devices.
+          Signing in backs your deck up and syncs it between devices. It needs
+          a Firebase project of your own — Google will not let an app store
+          your data in someone else's. It is free and a one-off, and Yomeyo
+          works fully without it.
         </div>
+        <details>
+          <summary>How to get the config (about two minutes)</summary>
+          <div class="msg">
+            1. Create a project at <b>console.firebase.google.com</b>.<br/>
+            2. <b>Build → Firestore Database → Create database</b>.<br/>
+            3. <b>Authentication → Sign-in method</b>, and switch on
+               <b>Google</b> (and Email/Password if you want that too).<br/>
+            4. <b>Authentication → Settings → Authorized domains</b>: add
+               <b>${escapeHtml(location.hostname)}</b>.<br/>
+            5. <b>Project settings → Your apps → Web</b>: register an app and
+               copy the <code>firebaseConfig</code> object below.<br/><br/>
+            Doing this once per project, not per device: set it as the
+            <code>FIREBASE_CONFIG</code> repository secret and every build
+            offers Google sign-in with nothing to paste.
+          </div>
+        </details>
         <label for="fb-config">Firebase config (JSON)</label>
         <textarea id="fb-config" style="min-height:120px;font-family:ui-monospace,monospace;font-size:0.8rem"
           placeholder='{ "apiKey": "…", "authDomain": "…", "projectId": "…", "appId": "…" }'></textarea>
@@ -141,16 +158,19 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
 
     if (!account) {
       body.innerHTML = `
-        <div class="msg">Project <b>${escapeHtml(config.projectId)}</b>. Sign in to sync this deck.</div>
+        <div class="msg">Project <b>${escapeHtml(config.projectId)}</b>. Sign in to back up this deck and sync it between devices.</div>
         <div class="row-actions"><button id="google-btn">Sign in with Google</button></div>
-        <label for="email">or use an email address</label>
-        <input type="text" id="email" placeholder="you@example.com" autocomplete="username" />
-        <label for="password">Password (a new account is created if you don't have one)</label>
-        <input type="password" id="password" placeholder="at least 6 characters" autocomplete="current-password" />
-        <div class="row-actions">
-          <button id="email-btn" class="secondary">Continue with email</button>
-          ${configIsFromEnv() ? "" : `<button id="fb-forget" class="ghost">Use a different project</button>`}
-        </div>
+        <details>
+          <summary>or use an email address</summary>
+          <label for="email">Email</label>
+          <input type="text" id="email" placeholder="you@example.com" autocomplete="username" />
+          <label for="password">Password (a new account is created if you don't have one)</label>
+          <input type="password" id="password" placeholder="at least 6 characters" autocomplete="current-password" />
+          <div class="row-actions">
+            <button id="email-btn" class="secondary">Continue with email</button>
+            ${configIsFromEnv() ? "" : `<button id="fb-forget" class="ghost">Use a different project</button>`}
+          </div>
+        </details>
         <div class="msg error">${escapeHtml(accountError)}</div>
         <div class="msg" id="auth-msg"></div>
       `;

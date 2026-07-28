@@ -143,7 +143,10 @@ async function markHandedOff(ids: unknown): Promise<number> {
       marked++;
     }
   }
-  if (marked > 0) await setCards(cards);
+  if (marked > 0) {
+    await setCards(cards);
+    await storageSet({ lastHandoffAt: Date.now() });
+  }
   return marked;
 }
 
@@ -271,10 +274,13 @@ ext.runtime.onMessage.addListener((message: any, _sender: any, sendResponse: (r:
       case "stats": {
         const cards = await getCards();
         const live = Object.values(cards).filter((c) => !c.deleted);
+        const meta = await storageGet<{ lastHandoffAt?: number }>("lastHandoffAt");
         sendResponse({
           total: live.length,
           waiting: live.filter((c) => !c.handedOff).length,
           dirty: live.filter((c) => c.dirty).length,
+          lastHandoffAt: meta.lastHandoffAt ?? null,
+          version: ext.runtime.getManifest?.().version ?? null,
         });
         break;
       }

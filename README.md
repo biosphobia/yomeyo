@@ -210,20 +210,30 @@ device. Signing in adds backup and keeps devices in step.
    `biosphobia.github.io` (and any other host you serve the app from), or
    Google sign-in will be rejected.
 
-### Turning it on in the app
+### Turning it on
 
-Open **Settings → Account**, paste the `firebaseConfig` JSON, then sign in
-with Google or an email address. (An email that isn't registered yet creates
-the account, so there's one button rather than a separate sign-up flow.)
+Best done once, for every device at once: put the `firebaseConfig` JSON in a
+repository secret named **`FIREBASE_CONFIG`** (*Settings → Secrets and
+variables → Actions*). Every build then ships with the project already
+configured, and **Settings → Account** offers **Sign in with Google**
+immediately — nothing to paste on each phone or laptop.
+
+Failing that, open **Settings → Account** and paste the JSON there; it is
+stored on that device only. Either way you can also sign in with an email
+address — an address that isn't registered yet creates the account, so
+there's one button rather than a separate sign-up flow.
+
+The config is not a secret (its protection comes from the rules above); the
+only reason to keep it in a repository secret is so forks don't inherit your
+project.
 
 Press **Sync now** on each device. Sync is offline-first and last-write-wins
 per card, deletions included — mine on your phone, review on your laptop, and
 the scheduling state follows you.
 
-The Firebase config is not a secret (its protection comes from the rules
-above), but if you'd rather bake it into the build than paste it, set
-`VITE_FIREBASE_CONFIG` to the JSON at build time and the app will use that
-instead.
+Opened from the home screen rather than in a tab, Google sign-in leaves the
+app and comes back rather than opening a popup — a popup there lands in a
+separate browser window, and on Android often never returns at all.
 
 **What it costs:** a personal deck sits far inside Firebase's free tier —
 a sync reads only what changed since last time, and writes only what you

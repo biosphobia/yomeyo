@@ -21,6 +21,19 @@ const msg = $<HTMLDivElement>("msg");
 const statTotal = $<HTMLElement>("stat-total");
 const statWaiting = $<HTMLElement>("stat-waiting");
 const transferHint = $<HTMLDivElement>("transfer-hint");
+const versionLabel = $<HTMLDivElement>("version-label");
+
+/** "just now" / "12 minutes ago" / "3 days ago". */
+function describeWhen(at: number): string {
+  const seconds = Math.max(0, Math.round((Date.now() - at) / 1000));
+  if (seconds < 60) return "just now";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.round(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
 
 function setMessage(text: string, kind: "" | "ok" | "error" = ""): void {
   msg.textContent = text;
@@ -65,16 +78,28 @@ async function refresh(): Promise<void> {
   urlInput.value = settings.url ?? "";
   tokenInput.value = settings.token ?? "";
 
-  const stats = await sendMessage<{ total: number; waiting: number }>({ type: "stats" });
+  const stats = await sendMessage<{
+    total: number;
+    waiting: number;
+    lastHandoffAt: number | null;
+    version: string | null;
+  }>({ type: "stats" });
   statTotal.textContent = String(stats.total);
   statWaiting.textContent = String(stats.waiting);
   handoffBtn.disabled = stats.total === 0;
   // Words normally travel on their own; this button is the fallback for when
-  // the app is not open in a tab (an installed PWA, or another browser).
+  // the app is not open in a tab (an installed app, or another browser).
+  // Saying when the last transfer happened is the difference between "this is
+  // working" and "nothing seems to happen", which is not otherwise visible.
   transferHint.textContent =
-    stats.waiting === 0
-      ? "Everything saved here is in the app."
-      : "These go to the app by themselves next time you open it in a tab.";
+    stats.waiting === 0 && stats.total > 0
+      ? `Everything saved here is in the app${stats.lastHandoffAt ? ` (last sent ${describeWhen(stats.lastHandoffAt)})` : ""}.`
+      : stats.total === 0
+        ? "Tap a Japanese word on any page to save it."
+        : stats.lastHandoffAt
+          ? `Waiting for the app. Last sent ${describeWhen(stats.lastHandoffAt)}.`
+          : "These go to the app by themselves next time you open it in a tab.";
+  if (stats.version) versionLabel.textContent = `Yomeyo ${stats.version}`;
 }
 
 tapToggle.addEventListener("change", () => {

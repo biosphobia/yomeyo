@@ -141,26 +141,96 @@ export async function currentAccount(): Promise<AccountInfo | null> {
   return user ? toAccount(user) : null;
 }
 
+/**
+ * True when the app was launched from the home screen rather than a tab.
+ *
+ * A popup opened from there lands in a separate browser window the user has
+ * to find and come back from, and on Android it frequently never returns a
+ * result at all — so those installs go straight to the redirect flow.
+ */
+function isInstalledApp(): boolean {
+  try {
+    if ((navigator as any).standalone === true) return true; // iOS
+    return window.matchMedia("(display-mode: standalone)").matches ||
+      window.matchMedia("(display-mode: fullscreen)").matches ||
+      window.matchMedia("(display-mode: minimal-ui)").matches;
+  } catch {
+    return false;
+  }
+}
+
 export async function signInWithGoogle(): Promise<AccountInfo> {
   const { auth, mod } = await load();
   const provider = new mod.authApi.GoogleAuthProvider();
+
+  const redirect = async (): Promise<AccountInfo> => {
+    markRedirectPending();
+    await mod.authApi.signInWithRedirect(auth, provider);
+    // Navigation happens; this promise never settles in practice. The result
+    // is collected by completeRedirectSignIn() on the next load.
+    return new Promise<AccountInfo>(() => {});
+  };
+
+  if (isInstalledApp()) return redirect();
+
   try {
     const credential = await mod.authApi.signInWithPopup(auth, provider);
     return toAccount(credential.user);
   } catch (err: any) {
-    // Installed PWAs and some mobile browsers block popups; redirect works
-    // there. The redirect result is picked up on the next load.
+    // Some mobile browsers block popups even in a tab; redirect works there.
     const code = err?.code ?? "";
     if (
       code.includes("popup-blocked") ||
       code.includes("popup-closed-by-user") ||
+      code.includes("cancelled-popup-request") ||
       code.includes("operation-not-supported")
     ) {
-      await mod.authApi.signInWithRedirect(auth, provider);
-      // Navigation happens; this promise never settles in practice.
-      return new Promise<AccountInfo>(() => {});
+      return redirect();
     }
     throw new Error(friendlyAuthError(err));
+  }
+}
+
+/**
+ * Note that we are about to leave for the sign-in page.
+ *
+ * The app has to know, on the way back, that a redirect result is waiting —
+ * and it cannot ask Firebase without loading Firebase, which is the thing
+ * being avoided. This used to sniff sessionStorage for a Firebase-internal
+ * "pendingRedirect" key, which the SDK no longer writes: the redirect
+ * completed, the result was never collected, and the user landed back on the
+ * app still signed out with nothing to explain why. Recording it ourselves
+ * does not depend on Firebase's internals.
+ */
+const REDIRECT_KEY = "yomeyo:signInRedirect";
+
+function markRedirectPending(): void {
+  try {
+    localStorage.setItem(REDIRECT_KEY, String(Date.now()));
+  } catch {
+    /* storage blocked; the sessionStorage sniff below may still catch it */
+  }
+}
+
+function redirectIsPending(): boolean {
+  try {
+    if (localStorage.getItem(REDIRECT_KEY)) return true;
+  } catch {
+    /* fall through */
+  }
+  try {
+    // Older Firebase versions left their own marker; harmless to keep.
+    return Object.keys(sessionStorage).some((key) => key.includes("pendingRedirect"));
+  } catch {
+    return false;
+  }
+}
+
+function clearRedirectPending(): void {
+  try {
+    localStorage.removeItem(REDIRECT_KEY);
+  } catch {
+    /* nothing to clear */
   }
 }
 
@@ -169,26 +239,33 @@ export async function signInWithGoogle(): Promise<AccountInfo> {
  *
  * Called on every app start, so it must not drag the Firebase SDK in on a
  * normal launch — a signed-in user opening the app to review offline should
- * not wait on hundreds of KB. Firebase leaves a marker in sessionStorage
- * while a redirect is pending, so check that first and stay lazy otherwise.
+ * not wait on hundreds of KB.
  */
 export async function completeRedirectSignIn(): Promise<AccountInfo | null> {
-  let redirectPending = false;
-  try {
-    redirectPending = Object.keys(sessionStorage).some((key) => key.includes("pendingRedirect"));
-  } catch {
-    return null; // storage blocked; nothing to complete
-  }
-  if (!redirectPending) return null;
+  if (!redirectIsPending()) return null;
 
   const config = await getFirebaseConfig();
-  if (!config) return null;
+  if (!config) {
+    clearRedirectPending();
+    return null;
+  }
   try {
     const { auth, mod } = await load();
     const result = await mod.authApi.getRedirectResult(auth);
-    return result?.user ? toAccount(result.user) : null;
+    if (result?.user) return toAccount(result.user);
+    // No result, but the session may still have been restored from the
+    // redirect — ask before giving up, or the user sees no sign of success.
+    const user = await new Promise<any>((resolve) => {
+      const stop = mod.authApi.onAuthStateChanged(auth, (u: any) => {
+        stop();
+        resolve(u);
+      });
+    });
+    return user ? toAccount(user) : null;
   } catch {
     return null;
+  } finally {
+    clearRedirectPending();
   }
 }
 
@@ -230,7 +307,10 @@ function friendlyAuthError(err: any): string {
     return "This domain isn't authorised in Firebase (Authentication → Settings → Authorized domains).";
   }
   if (code.includes("operation-not-allowed")) {
-    return "That sign-in method isn't enabled in the Firebase console.";
+    return "Google sign-in isn't switched on for this project yet (Firebase console → Authentication → Sign-in method → Google).";
+  }
+  if (code.includes("account-exists-with-different-credential")) {
+    return "You already have an account with that email. Sign in with the email and password instead.";
   }
   return err?.message ?? "Sign-in failed.";
 }

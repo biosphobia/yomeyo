@@ -91,6 +91,15 @@ jobs:
           fi
 
       - name: Build web app
+        env:
+          # Optional. Set this repository secret to the Firebase project's web
+          # config JSON and the deployed app offers "Sign in with Google"
+          # straight away, with nothing to paste on each device. Without it
+          # the app still works — cloud sync is simply off until someone
+          # enters a config in Settings. The web config is not a secret (it
+          # identifies the project; Firestore rules are what protect the
+          # data), but keeping it in a secret means forks do not inherit it.
+          VITE_FIREBASE_CONFIG: ${{ secrets.FIREBASE_CONFIG }}
         run: npm run build -w @yomeyo/web
 
       - name: Build browser extension
