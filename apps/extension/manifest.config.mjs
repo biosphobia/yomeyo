@@ -6,7 +6,7 @@
  * and additionally requires an add-on id under `browser_specific_settings`.
  */
 
-export const VERSION = "0.4.1";
+export const VERSION = "0.4.2";
 
 /** Add-on id used when signing/listing the Firefox build. */
 export const GECKO_ID = "yomeyo@yomeyo.app";
@@ -22,11 +22,12 @@ function base() {
       48: "icons/icon-48.png",
       128: "icons/icon-128.png",
     },
-    // No host_permissions: a frame the extension loads is exempt from storage
-    // partitioning without them — measured, not assumed — and asking for more
-    // permissions than before makes a browser disable an already-installed
-    // extension until the user approves it again, which looks exactly like
-    // the extension having stopped working.
+    // Deliberately unchanged since 0.3.0, and deliberately small. Asking for
+    // anything more makes a browser hold an already-installed extension until
+    // the user approves it again — and an extension in that state looks
+    // exactly like one that has stopped working. The handover to the app
+    // needs neither host permissions nor an offscreen document; it runs in
+    // the content script that is already there.
     permissions: ["storage", "tabs"],
     content_scripts: [
       {
@@ -70,9 +71,6 @@ export function manifestFor(target) {
     };
   } else {
     manifest.background = { service_worker: "background.js" };
-    // A service worker has no DOM, so the handover frame lives in an
-    // offscreen document. Firefox's event page hosts it directly.
-    manifest.permissions = [...manifest.permissions, "offscreen"];
   }
 
   return manifest;

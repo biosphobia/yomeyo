@@ -1,5 +1,5 @@
 import { cardKey, mergeCards, type Card } from "@yomeyo/core";
-import { getAllCards, putCards, type StoredCard } from "./db.js";
+import { getAllCards, getMeta, putCards, type StoredCard } from "./db.js";
 
 /**
  * A drop box for words saved with the extension, on the app's own origin.
@@ -12,8 +12,9 @@ import { getAllCards, putCards, type StoredCard } from "./db.js";
  * have to be open at all.
  *
  * A frame of one origin embedded in another normally gets its own partitioned
- * storage, which would make this pointless — an extension holding host
- * permissions for the origin is exempt, which is what makes it work.
+ * storage, which would make this pointless — frames an extension creates are
+ * exempt, which is what makes it work, and no special permission is needed
+ * for that.
  *
  * This page is deliberately tiny: it must not pull in the dictionary or the
  * rest of the app, because it is loaded in the background on every save.
@@ -21,25 +22,34 @@ import { getAllCards, putCards, type StoredCard } from "./db.js";
 
 const FROM_EXTENSION = "yomeyo-extension";
 const FROM_FRAME = "yomeyo-sync-frame";
+const TOKEN_KEY = "extensionToken";
 
 /**
- * Only an extension may use this page.
+ * Proving that the extension, and not some website, is handing words over.
  *
- * Nothing is ever sent back except a list of ids that were just handed in, so
- * a hostile embedder could at worst add words to the deck rather than read
- * it — but there is no reason for anything but an extension to be here.
+ * The frame is created by the extension's content script, which lives inside
+ * whatever page the user is on — so from here the embedder looks like that
+ * page, and a hostile site making the same frame would look identical. The
+ * embedding origin therefore proves nothing.
+ *
+ * What does prove it is a secret the extension can only have got from the
+ * app itself. The app mints one and gives it to the extension over the
+ * content-script bridge, which runs on the app's own page where no other
+ * site can listen. Nothing else ever sees it, so a page that embeds this
+ * frame and starts posting cards has nothing to send.
+ *
+ * Until the app has been opened once there is no secret and nothing is
+ * accepted here — the older routes cover that gap.
  */
-function embeddedByExtension(): boolean {
-  try {
-    const ancestors = (location as unknown as { ancestorOrigins?: DOMStringList }).ancestorOrigins;
-    if (ancestors && ancestors.length > 0) {
-      return /^(chrome-extension|moz-extension|extension|safari-web-extension):\/\//.test(ancestors[0]);
-    }
-    // Firefox has no ancestorOrigins; fall back to the referrer.
-    return /^(moz-extension|chrome-extension):\/\//.test(document.referrer);
-  } catch {
-    return false;
-  }
+async function tokenMatches(offered: unknown): Promise<boolean> {
+  if (typeof offered !== "string" || offered.length < 16) return false;
+  const known = await getMeta<string>(TOKEN_KEY);
+  if (typeof known !== "string" || known.length < 16) return false;
+  // Length-independent comparison; these are equal-length random strings.
+  if (known.length !== offered.length) return false;
+  let diff = 0;
+  for (let i = 0; i < known.length; i++) diff |= known.charCodeAt(i) ^ offered.charCodeAt(i);
+  return diff === 0;
 }
 
 function looksLikeCard(value: unknown): value is Card {
@@ -78,28 +88,31 @@ async function receive(incoming: Card[]): Promise<number> {
 }
 
 function reply(type: string, payload: Record<string, unknown> = {}): void {
-  // The embedder is an extension page, whose origin is not known ahead of
-  // time; the reply carries no deck contents, only what was handed in.
+  // The embedder is whatever page the extension is running in, so its origin
+  // is not known ahead of time; the reply carries no deck contents, only the
+  // ids that were just handed in.
   parent.postMessage({ source: FROM_FRAME, type, ...payload }, "*");
 }
 
-if (embeddedByExtension()) {
-  window.addEventListener("message", (ev: MessageEvent) => {
-    const data = ev.data as { source?: string; type?: string; cards?: unknown } | null;
-    if (data?.source !== FROM_EXTENSION || data.type !== "cards" || !Array.isArray(data.cards)) return;
+/** No more than one page of mining in a single handover. */
+const MAX_CARDS = 500;
 
-    const cards = data.cards.filter(looksLikeCard);
-    if (cards.length === 0) {
+window.addEventListener("message", (ev: MessageEvent) => {
+  const data = ev.data as { source?: string; type?: string; cards?: unknown[]; token?: unknown } | null;
+  if (data?.source !== FROM_EXTENSION || data.type !== "cards" || !Array.isArray(data.cards)) return;
+
+  const offered = data.cards.filter(looksLikeCard).slice(0, MAX_CARDS);
+  void tokenMatches(data.token).then((allowed) => {
+    if (!allowed) return; // not the extension; say nothing at all
+    if (offered.length === 0) {
       reply("stored", { ids: [], added: 0 });
       return;
     }
-    void receive(cards).then(
-      (added) => reply("stored", { ids: cards.map((c) => c.id), added }),
+    void receive(offered).then(
+      (added) => reply("stored", { ids: offered.map((c) => c.id), added }),
       (err) => reply("failed", { error: err instanceof Error ? err.message : String(err) }),
     );
   });
-  reply("ready");
-} else {
-  document.body.textContent =
-    "This page is how the Yomeyo browser extension hands saved words to the app. There is nothing to do here.";
-}
+});
+
+reply("ready");

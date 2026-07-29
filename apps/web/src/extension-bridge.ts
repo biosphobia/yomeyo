@@ -1,5 +1,6 @@
 import type { Card } from "@yomeyo/core";
 import { importCards } from "./store.js";
+import { getMeta, setMeta } from "./db.js";
 import { looksLikeCard } from "./handoff.js";
 
 /**
@@ -36,6 +37,27 @@ const FROM_APP = "yomeyo-app";
  * happens" and knowing to update the extension.
  */
 let seen: { version: string | null } | null = null;
+
+/**
+ * A secret the extension can show when it hands words over from elsewhere.
+ *
+ * Words now arrive without the app being open: the extension loads sync.html
+ * in a hidden frame from whatever page you are on. That frame cannot tell the
+ * extension apart from the page hosting it, so it asks for this instead —
+ * minted here and handed over on the app's own page, where no other site can
+ * listen for it.
+ */
+const TOKEN_KEY = "extensionToken";
+
+async function handoverToken(): Promise<string> {
+  const existing = await getMeta<string>(TOKEN_KEY);
+  if (typeof existing === "string" && existing.length >= 32) return existing;
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  const token = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+  await setMeta(TOKEN_KEY, token);
+  return token;
+}
 
 export function extensionStatus(): { connected: boolean; version: string | null } {
   return { connected: seen !== null, version: seen?.version ?? null };
@@ -76,6 +98,10 @@ export function listenForExtensionCards(
     if (data?.source === FROM_EXTENSION && data.type === "hello") {
       const first = seen === null;
       seen = { version: typeof data.version === "string" ? data.version : null };
+      // Give it the secret it needs to deliver words from other pages.
+      void handoverToken().then((token) => {
+        window.postMessage({ source: FROM_APP, type: "token", token }, location.origin);
+      });
       if (first) onExtensionSeen();
       return;
     }

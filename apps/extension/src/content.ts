@@ -1,5 +1,6 @@
 import { isJapaneseChar, onTap, type DictEntry, type LookupMatch } from "@yomeyo/core";
 import { ext, sendMessage, storageGet } from "./browser.js";
+import { handOverViaFrame } from "./frame-handoff.js";
 
 /**
  * Content script: tap-to-lookup on any page, Yomitan-style.
@@ -92,6 +93,10 @@ async function offerSavedWordsToApp(appUrl: string): Promise<void> {
     if (data.type === "ready") void offer();
     // The app has these words now; stop offering them.
     if (data.type === "imported") void sendMessage({ type: "handedOff", ids: data.ids });
+    // The secret that lets words be delivered from other pages later.
+    if (data.type === "token" && typeof data.token === "string") {
+      void sendMessage({ type: "setHandoverToken", token: data.token });
+    }
   });
 
   // Coming back to an app tab that was already open — from another tab, from
@@ -738,6 +743,17 @@ ext.runtime.onMessage?.addListener((message: any, _sender: any, sendResponse: (r
   // happen here, rather than guessing the device from its own context.
   if (message?.type === "getTapState") {
     sendResponse({ active: tapModeActive(), isTouch: IS_TOUCH, explicit: tapModeSetting });
+    return true;
+  }
+  // The background has words for the app and needs a page with a DOM to
+  // hand them over from. This content script is that page: it loads the
+  // app's drop box in a hidden frame, which writes straight into the app's
+  // deck — so the app does not have to be open anywhere.
+  if (message?.type === "deliverViaFrame") {
+    handOverViaFrame(message.frameUrl, message.cards, message.token).then(
+      (ids) => sendResponse({ ids }),
+      (err) => sendResponse({ error: err instanceof Error ? err.message : String(err) }),
+    );
     return true;
   }
   // A word was just saved on another tab and the app is open here.

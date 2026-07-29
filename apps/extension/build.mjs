@@ -29,7 +29,6 @@ for (const target of TARGETS) {
       join(here, "src/content.ts"),
       join(here, "src/background.ts"),
       join(here, "src/popup.ts"),
-      join(here, "src/offscreen.ts"),
     ],
     bundle: true,
     format: "iife",
@@ -41,13 +40,12 @@ for (const target of TARGETS) {
 
   writeFileSync(join(outDir, "manifest.json"), JSON.stringify(manifestFor(target), null, 2));
   cpSync(join(here, "src/popup.html"), join(outDir, "popup.html"));
-  cpSync(join(here, "src/offscreen.html"), join(outDir, "offscreen.html"));
   cpSync(join(here, "public"), outDir, { recursive: true });
   console.log(`  built dist/${target}`);
 }
 
 // Keep the plain dist/ path working as the Chromium build.
-for (const entry of ["manifest.json", "popup.html", "offscreen.html", "content.js", "background.js", "popup.js", "offscreen.js"]) {
+for (const entry of ["manifest.json", "popup.html", "content.js", "background.js", "popup.js"]) {
   cpSync(join(dist, "chromium", entry), join(dist, entry));
 }
 cpSync(join(dist, "chromium", "icons"), join(dist, "icons"), { recursive: true });

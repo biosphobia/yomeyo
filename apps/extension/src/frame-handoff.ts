@@ -23,7 +23,7 @@ const TIMEOUT_MS = 20000;
  * Load `frameUrl` hidden, hand `cards` over, and resolve with the ids the
  * page accepted. Rejects if the page cannot be reached or does not answer.
  */
-export function handOverViaFrame(frameUrl: string, cards: unknown[]): Promise<string[]> {
+export function handOverViaFrame(frameUrl: string, cards: unknown[], token: string): Promise<string[]> {
   return new Promise<string[]>((resolve, reject) => {
     const frame = document.createElement("iframe");
     frame.style.cssText = "position:absolute;left:-9999px;top:0;width:1px;height:1px;border:0";
@@ -43,7 +43,7 @@ export function handOverViaFrame(frameUrl: string, cards: unknown[]): Promise<st
       const data = ev.data as { source?: string; type?: string; ids?: unknown; error?: string } | null;
       if (data?.source !== FROM_FRAME) return;
       if (data.type === "ready") {
-        frame.contentWindow?.postMessage({ source: FROM_EXTENSION, type: "cards", cards }, "*");
+        frame.contentWindow?.postMessage({ source: FROM_EXTENSION, type: "cards", cards, token }, "*");
       } else if (data.type === "stored") {
         finish(null, Array.isArray(data.ids) ? (data.ids as string[]) : []);
       } else if (data.type === "failed") {

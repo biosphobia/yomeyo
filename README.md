@@ -83,19 +83,22 @@ given nothing.
 
 An extension cannot write into a website's storage, so something on the app's
 origin has to do the writing. The app ships a tiny page for it, `sync.html`,
-which the extension loads in a hidden frame on each save and hands the card
-to. A frame of one origin inside another is normally given its own
-partitioned storage, which would make this pointless — an extension holding
-host permissions for the origin is exempt, so the frame writes into the very
-deck the app reads — and, measured rather than assumed, without the extension
-needing host permissions for the origin. On Chromium the frame lives in an
-offscreen document, since a service worker has no DOM; Firefox's event page
-hosts it directly.
-`sync.html` refuses to talk to anything but an extension, and never sends
-anything back beyond the ids it was just given.
+which the extension's content script loads in a hidden frame on each save and
+hands the card to. A frame of one origin inside another is normally given its
+own partitioned storage, which would make this pointless — frames an
+extension creates are exempt, and (measured, not assumed) that needs no extra
+permission at all. The extension asks for exactly what it always has.
 
-If that fails — no connection, a wrong app URL, a browser without offscreen
-support — the words simply stay pending and go across on the next save, or
+That frame cannot tell the extension apart from the page hosting it, so it
+does not try: it demands a secret instead. The app mints one and hands it to
+the extension over the bridge that runs on the app's own page, where no other
+site can listen. A page that embeds `sync.html` and posts cards at it has
+nothing to send, and gets nothing back — verified, including with a guessed
+secret. Until the app has been opened once there is no secret, and the routes
+below carry the words instead.
+
+If that fails — no connection, a wrong app URL, or a page whose own policy
+forbids frames — the words simply stay pending and go across on the next save, or
 the next time the app is open in a tab. The toolbar popup also keeps a
 **Send them now** button under *Words not arriving?* which opens the app and
 hands them over in the URL fragment, which browsers never send to a server.

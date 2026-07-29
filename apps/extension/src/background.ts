@@ -9,8 +9,8 @@ import {
   type SyncRequest,
   type SyncResponse,
 } from "@yomeyo/core";
-import { ext, resourceUrl, sendToTab, storageGet, storageSet, tabsMatching } from "./browser.js";
-import { handOverViaFrame, syncFrameUrl } from "./frame-handoff.js";
+import { activeTab, ext, resourceUrl, sendToTab, storageGet, storageSet, tabsMatching } from "./browser.js";
+import { syncFrameUrl } from "./frame-handoff.js";
 
 /**
  * Background script: owns the dictionary (loaded from the packaged
@@ -65,7 +65,12 @@ async function setCards(cards: Record<string, StoredCard>): Promise<void> {
   await storageSet({ cards });
 }
 
-async function handleSave(entry: any, sentence?: string, url?: string): Promise<"saved" | "duplicate"> {
+async function handleSave(
+  entry: any,
+  sentence?: string,
+  url?: string,
+  fromTab?: number,
+): Promise<"saved" | "duplicate"> {
   const cards = await getCards();
   // One card per word: the same word is reachable from several dictionary
   // entries and from more than one page, and a second card would carry its
@@ -88,7 +93,7 @@ async function handleSave(entry: any, sentence?: string, url?: string): Promise<
   cards[card.id] = card;
   await setCards(cards);
   void tellAppAboutNewWords();
-  deliverSoon();
+  deliverSoon(fromTab);
   return "saved";
 }
 
@@ -136,64 +141,57 @@ async function tellAppAboutNewWords(): Promise<void> {
 /**
  * Put the words into the app's deck now, whether or not the app is open.
  *
- * The app's own page is loaded in a hidden frame and does the writing; see
- * frame-handoff.ts. On Chromium that needs an offscreen document, because a
- * service worker has no DOM; Firefox's event page has one already.
+ * The writing has to happen on the app's own origin, and a service worker has
+ * no DOM to load a page with — so the content script already running in the
+ * user's tab does it, loading the app's drop box in a hidden frame. That
+ * needs no permission beyond the one that put the content script there:
+ * asking for more would make browsers hold the extension for re-approval,
+ * which is indistinguishable from it being broken.
  */
-let offscreenReady: Promise<void> | null = null;
-
-async function ensureOffscreen(): Promise<void> {
-  if (!offscreenReady) {
-    offscreenReady = (async () => {
-      try {
-        if (await ext.offscreen.hasDocument?.()) return;
-        await ext.offscreen.createDocument({
-          url: "offscreen.html",
-          reasons: ["IFRAME_SCRIPTING"],
-          justification: "Hand words saved here to the Yomeyo app's own storage.",
-        });
-      } catch (err) {
-        // "Only a single offscreen document may be created" means another
-        // call won the race, which is exactly what was wanted.
-        if (!/single offscreen document/i.test(String(err))) {
-          offscreenReady = null;
-          throw err;
-        }
-      }
-    })();
-  }
-  return offscreenReady;
-}
-
-/** True while a delivery is in flight, so saves in quick succession queue. */
 let delivering: Promise<void> = Promise.resolve();
 
-async function deliverToApp(): Promise<void> {
-  const pending = await pendingForApp();
-  if (pending.length === 0) return;
-  const frameUrl = syncFrameUrl(await appUrlSetting());
-
-  let ids: string[];
-  if (typeof document !== "undefined") {
-    ids = await handOverViaFrame(frameUrl, pending); // Firefox event page
-  } else {
-    await ensureOffscreen();
-    const res = await ext.runtime.sendMessage({ type: "deliverToApp", frameUrl, cards: pending });
-    if (!res || res.error) throw new Error(res?.error ?? "no answer from the handover document");
-    ids = res.ids ?? [];
-  }
-  await markHandedOff(ids);
+/** Tabs that can host the hidden frame, the one just used first. */
+async function deliveryTabs(preferred?: number): Promise<number[]> {
+  const ids: number[] = [];
+  if (preferred !== undefined) ids.push(preferred);
+  const active = await activeTab();
+  if (active?.id !== undefined && !ids.includes(active.id)) ids.push(active.id);
+  return ids;
 }
 
-/** Deliver, quietly: a save must never fail because the app was unreachable. */
-function deliverSoon(): void {
+async function deliverToApp(preferredTab?: number): Promise<void> {
+  const pending = await pendingForApp();
+  if (pending.length === 0) return;
+  // The app's drop box will not take words without the secret it minted, and
+  // it only hands that over on its own page. Until the app has been opened
+  // once, the older routes carry the words instead.
+  const { handoverToken } = await storageGet<{ handoverToken?: string }>("handoverToken");
+  if (!handoverToken) return;
+  const frameUrl = syncFrameUrl(await appUrlSetting());
+
+  for (const tabId of await deliveryTabs(preferredTab)) {
+    const res = await sendToTab<{ ids?: string[]; error?: string }>(tabId, {
+      type: "deliverViaFrame",
+      frameUrl,
+      cards: pending,
+      token: handoverToken,
+    });
+    if (res?.ids) {
+      await markHandedOff(res.ids);
+      return;
+    }
+  }
+  // No page could do it — a restricted tab, a page whose own policy forbids
+  // frames, or no connection. The words stay pending and go on the next save.
+}
+
+/** Deliver, quietly: saving a word must never fail because of this. */
+function deliverSoon(preferredTab?: number): void {
   delivering = delivering
     .catch(() => {})
     .then(() =>
-      deliverToApp().catch(() => {
-        // Offline, the app URL is wrong, or this browser has no offscreen
-        // support. The words stay pending and travel the moment the app is
-        // next open in a tab.
+      deliverToApp(preferredTab).catch(() => {
+        /* stays pending; tried again on the next save */
       }),
     );
 }
@@ -303,7 +301,7 @@ async function handleSync(): Promise<{ pushed: number; pulled: number }> {
   return { pushed: dirty.length, pulled: applied.length };
 }
 
-ext.runtime.onMessage.addListener((message: any, _sender: any, sendResponse: (r: any) => void) => {
+ext.runtime.onMessage.addListener((message: any, sender: any, sendResponse: (r: any) => void) => {
   (async () => {
     switch (message?.type) {
       // A page has finished loading. Start the dictionary now, while the
@@ -330,6 +328,14 @@ ext.runtime.onMessage.addListener((message: any, _sender: any, sendResponse: (r:
         sendResponse(await pendingForApp());
         break;
       }
+      case "setHandoverToken": {
+        if (typeof message.token === "string" && message.token.length >= 32) {
+          await storageSet({ handoverToken: message.token });
+          deliverSoon(sender?.tab?.id); // a backlog may be waiting on this
+        }
+        sendResponse({ ok: true });
+        break;
+      }
       case "handedOff": {
         sendResponse({ marked: await markHandedOff(message.ids) });
         break;
@@ -341,7 +347,7 @@ ext.runtime.onMessage.addListener((message: any, _sender: any, sendResponse: (r:
         break;
       }
       case "save": {
-        const outcome = await handleSave(message.entry, message.sentence, message.url);
+        const outcome = await handleSave(message.entry, message.sentence, message.url, sender?.tab?.id);
         sendResponse({ ok: true, outcome });
         break;
       }
