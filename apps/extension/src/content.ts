@@ -425,6 +425,28 @@ function renderToggle(): void {
     : "Yomeyo lookups are off — tap to turn on";
 }
 
+/** Show a plain message in the sheet, for when there is no lookup to show. */
+function showMessageSheet(text: string): void {
+  closePopup();
+  const root = ensureHost();
+  const sheet = document.createElement("div");
+  sheet.className = "sheet";
+  const note = document.createElement("div");
+  note.className = "empty";
+  note.textContent = text;
+  sheet.appendChild(note);
+  root.appendChild(sheet);
+  for (const type of ["click", "pointerdown", "pointerup", "touchstart"]) {
+    sheet.addEventListener(type, (ev) => ev.stopPropagation());
+  }
+  const dismiss = (ev: Event) => {
+    if (host && ev.composedPath().includes(host)) return;
+    closePopup();
+    document.removeEventListener("pointerdown", dismiss, true);
+  };
+  setTimeout(() => document.addEventListener("pointerdown", dismiss, true), 0);
+}
+
 async function showPopup(matches: LookupMatch[], sentence: string): Promise<void> {
   closePopup();
   const root = ensureHost();
@@ -643,8 +665,18 @@ async function handleLookupAt(x: number, y: number): Promise<boolean> {
     type: "lookup",
     text: tap.text,
     offset: tap.offset,
-  });
-  if (!matches || matches.length === 0) return false;
+  }).catch(() => undefined);
+
+  // No answer at all is different from "no such word". The first means the
+  // background is not running, and a tap that does nothing whatsoever is the
+  // least useful way to report that.
+  if (!matches) {
+    showMessageSheet(
+      "Could not reach Yomeyo's dictionary. Reload the page; if that does not help, remove the extension and install it again.",
+    );
+    return true;
+  }
+  if (matches.length === 0) return false;
 
   // Highlight the matched run, Yomitan-style. It can begin before the tapped
   // character: on a phone a tap lands inside a word as often as at its start.

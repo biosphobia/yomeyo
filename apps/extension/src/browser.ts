@@ -69,10 +69,16 @@ export async function tabsMatching(urlPattern: string): Promise<Array<{ id?: num
 /** The tab the user is currently looking at, or null. */
 export async function activeTab(): Promise<{ id?: number } | null> {
   const query = { active: true, currentWindow: true };
-  const tabs: any[] = promiseStyle
-    ? await ext.tabs.query(query)
-    : await new Promise((resolve) => ext.tabs.query(query, resolve));
-  return tabs?.[0] ?? null;
+  try {
+    const tabs: any[] = promiseStyle
+      ? await ext.tabs.query(query)
+      : await new Promise((resolve) => ext.tabs.query(query, resolve));
+    return tabs?.[0] ?? null;
+  } catch {
+    // Some engines refuse this query in some contexts. Not knowing which tab
+    // is in front is never worth failing a caller over.
+    return null;
+  }
 }
 
 /**

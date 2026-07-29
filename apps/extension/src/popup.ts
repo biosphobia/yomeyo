@@ -1,4 +1,4 @@
-import { activeTab, sendMessage, sendToTab } from "./browser.js";
+import { activeTab, sendMessage, sendToTab, storageGet } from "./browser.js";
 
 /** Toolbar popup: tap-mode toggle, deck stats, handoff to the app, sync. */
 
@@ -56,21 +56,61 @@ function updateHint(): void {
  * fall back to a local guess when no content script is listening.
  */
 async function effectiveTapMode(stored: boolean | null): Promise<boolean> {
-  const tab = await activeTab();
-  if (tab?.id !== undefined) {
-    const state = await sendToTab<{ active: boolean }>(tab.id, { type: "getTapState" });
-    if (typeof state?.active === "boolean") return state.active;
+  try {
+    const tab = await activeTab();
+    if (tab?.id !== undefined) {
+      const state = await sendToTab<{ active: boolean }>(tab.id, { type: "getTapState" });
+      if (typeof state?.active === "boolean") return state.active;
+    }
+  } catch {
+    /* no content script to ask; fall back to what was stored */
   }
   return typeof stored === "boolean" ? stored : IS_TOUCH;
 }
 
+/**
+ * Fill this menu in.
+ *
+ * Every step is allowed to fail on its own. This used to read the settings
+ * from the background and destructure the reply — and a reply that never came
+ * is `undefined`, so the whole function threw on its first line. The result
+ * was this menu showing dashes where the counts belong and both switches
+ * sitting off, with nothing to say why: the same picture whether the
+ * background was merely asleep or completely broken.
+ */
 async function refresh(): Promise<void> {
-  const { settings, tapMode, showToggle } = await sendMessage<{
+  // Storage first. The switches must work, and show the truth, even when
+  // nothing else does — reading them needs no background at all.
+  const stored = await storageGet<{ tapMode?: boolean | null; showToggle?: boolean }>([
+    "tapMode",
+    "showToggle",
+  ]).catch(() => ({}) as { tapMode?: boolean | null; showToggle?: boolean });
+
+  tapToggle.checked = await effectiveTapMode(
+    typeof stored.tapMode === "boolean" ? stored.tapMode : null,
+  );
+  showToggleInput.checked = stored.showToggle !== false;
+  updateHint();
+
+  const reply = await sendMessage<{
     settings: any;
     tapMode: boolean | null;
     showToggle: boolean;
-  }>({ type: "getSettings" });
-  // null means "follow the device default": on for touch, off for desktop.
+  }>({ type: "getSettings" }).catch(() => undefined);
+
+  if (!reply) {
+    setMessage(
+      "Yomeyo's background is not responding, so lookups will not work. Close and reopen this menu; if it keeps happening, remove the extension and install it again.",
+      "error",
+    );
+    statTotal.textContent = "?";
+    statWaiting.textContent = "?";
+    transferHint.textContent = "";
+    handoffBtn.disabled = true;
+    return;
+  }
+
+  const { settings, tapMode, showToggle } = reply;
   tapToggle.checked = await effectiveTapMode(tapMode);
   showToggleInput.checked = showToggle !== false;
   updateHint();
@@ -78,12 +118,17 @@ async function refresh(): Promise<void> {
   urlInput.value = settings.url ?? "";
   tokenInput.value = settings.token ?? "";
 
-  const stats = await sendMessage<{
+  const stats = (await sendMessage<{
     total: number;
     waiting: number;
     lastHandoffAt: number | null;
     version: string | null;
-  }>({ type: "stats" });
+  }>({ type: "stats" }).catch(() => undefined)) ?? {
+    total: 0,
+    waiting: 0,
+    lastHandoffAt: null,
+    version: null,
+  };
   statTotal.textContent = String(stats.total);
   statWaiting.textContent = String(stats.waiting);
   handoffBtn.disabled = stats.total === 0;
