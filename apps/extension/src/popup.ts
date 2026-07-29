@@ -21,6 +21,8 @@ const msg = $<HTMLDivElement>("msg");
 const statTotal = $<HTMLElement>("stat-total");
 const statWaiting = $<HTMLElement>("stat-waiting");
 const transferHint = $<HTMLDivElement>("transfer-hint");
+const audioHint = $<HTMLDivElement>("audio-hint");
+const audioAllowBtn = $<HTMLButtonElement>("audio-allow");
 const versionLabel = $<HTMLDivElement>("version-label");
 
 /** "just now" / "12 minutes ago" / "3 days ago". */
@@ -143,6 +145,7 @@ async function refresh(): Promise<void> {
         ? `Everything saved here is in the app${stats.lastHandoffAt ? ` (last added ${describeWhen(stats.lastHandoffAt)})` : ""}.`
         : "Could not reach the app just now — these go across on the next save, or when the app is next open.";
   if (stats.version) versionLabel.textContent = `Yomeyo ${stats.version}`;
+  await refreshAudioPermission();
 }
 
 tapToggle.addEventListener("change", () => {
@@ -196,3 +199,57 @@ syncBtn.addEventListener("click", async () => {
 });
 
 void refresh();
+
+/**
+ * Audio services written for Yomitan and Anki generally refuse web pages, so
+ * the app cannot fetch them itself. This extension can, once allowed — and
+ * that permission is optional and asked for here, rather than demanded up
+ * front, because requiring it would make browsers hold the extension for
+ * re-approval on every update.
+ */
+const AUDIO_ORIGINS = { origins: ["*://*/*"] };
+
+function permissionsApi(): any {
+  return (globalThis as any).chrome?.permissions ?? (globalThis as any).browser?.permissions;
+}
+
+function hasAudioPermission(): Promise<boolean> {
+  const api = permissionsApi();
+  if (!api) return Promise.resolve(false);
+  return new Promise((resolve) => {
+    try {
+      const result = api.contains(AUDIO_ORIGINS, resolve);
+      if (result && typeof result.then === "function") result.then(resolve, () => resolve(false));
+    } catch {
+      resolve(false);
+    }
+  });
+}
+
+async function refreshAudioPermission(): Promise<void> {
+  const api = permissionsApi();
+  if (!api) {
+    audioHint.textContent = "";
+    audioAllowBtn.style.display = "none";
+    return;
+  }
+  if (await hasAudioPermission()) {
+    audioHint.textContent = "Audio downloads are allowed.";
+    audioAllowBtn.style.display = "none";
+  } else {
+    audioHint.textContent =
+      "Pronunciation audio services usually refuse web pages. Allow this, and the app can fetch them through the extension.";
+    audioAllowBtn.style.display = "";
+  }
+}
+
+audioAllowBtn.addEventListener("click", () => {
+  const api = permissionsApi();
+  if (!api) return;
+  try {
+    const result = api.request(AUDIO_ORIGINS, () => void refreshAudioPermission());
+    if (result && typeof result.then === "function") result.then(() => void refreshAudioPermission());
+  } catch {
+    setMessage("This browser would not show the permission prompt.", "error");
+  }
+});

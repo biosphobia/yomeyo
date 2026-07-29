@@ -54,6 +54,44 @@ function pageIsApp(appUrl: string): boolean {
  * on Chrome for Android is buried deep enough that saved words did not, in
  * practice, ever reach the app.
  */
+/**
+ * Fetch on the app's behalf.
+ *
+ * Audio services written for Yomitan and Anki refuse web pages, so the app
+ * cannot reach them itself. This listener is registered on every page rather
+ * than only the app's own, so it works regardless of how the app URL happens
+ * to be configured; the reply carries only what was asked for.
+ */
+window.addEventListener("message", (ev) => {
+  if (ev.source !== window) return;
+  const data: any = ev.data;
+  if (data?.source !== "yomeyo-app" || data.type !== "fetch") return;
+  if (typeof data.url !== "string" || typeof data.id !== "string") return;
+
+  // Say we are on it, so the page knows an extension exists and can stop
+  // waiting on its short "is anyone there" deadline.
+  window.postMessage({ source: "yomeyo-extension", type: "fetching", id: data.id }, location.origin);
+
+  void sendMessage<{ base64?: string; contentType?: string; error?: string }>({
+    type: "fetchForApp",
+    url: data.url,
+  })
+    .catch(() => ({ error: "the extension could not be reached" }))
+    .then((res) => {
+      window.postMessage(
+        {
+          source: "yomeyo-extension",
+          type: "fetched",
+          id: data.id,
+          base64: res?.base64 ?? "",
+          contentType: res?.contentType ?? "",
+          error: res?.error ?? "",
+        },
+        location.origin,
+      );
+    });
+});
+
 /** Set on the app's own pages, so the background can push new words here. */
 let offerToApp: (() => Promise<void>) | null = null;
 
@@ -97,6 +135,7 @@ async function offerSavedWordsToApp(appUrl: string): Promise<void> {
     if (data.type === "token" && typeof data.token === "string") {
       void sendMessage({ type: "setHandoverToken", token: data.token });
     }
+
   });
 
   // Coming back to an app tab that was already open — from another tab, from

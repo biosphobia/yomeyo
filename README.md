@@ -202,6 +202,31 @@ mode** → **Load unpacked** → the unzipped `chromium` folder. Firefox →
 Hold **Alt/Option** and click any Japanese word for an instant popup, or turn
 on *Tap to look up* in the toolbar popup for click-only lookup.
 
+## Pronunciation audio
+
+Words are spoken with a real recording where one exists, a synthesised voice
+where it does not, and the device's own Japanese voice when neither is
+reachable. Clips are cached on the device after the first play.
+
+Recordings come from a list endpoint of the kind Yomitan calls a "custom
+audio source" — configured, with your key, in **Settings → Audio**. The key
+is kept in that browser only: it is never committed here, never bundled, and
+never synced.
+
+**These services usually refuse web pages.** They were built for Yomitan and
+Anki — an extension and a desktop program, neither bound by the browser's
+cross-origin rules — so most never send the `Access-Control-Allow-Origin`
+header a web page needs, and the request fails before it is even sent. The
+app now says so plainly instead of reporting a bare "Failed to fetch", and
+tells the two cases apart: a service that refuses pages, and one that is not
+answering at all.
+
+The extension is not bound by those rules either. With it installed, open its
+toolbar menu and press **Allow audio downloads**, and the app fetches through
+it. That permission is optional and asked for there rather than required up
+front, because a required one would make browsers hold the extension for
+re-approval on every update.
+
 ## Accounts and cloud sync (Firebase)
 
 Your deck works with no account at all — it lives in the browser on each

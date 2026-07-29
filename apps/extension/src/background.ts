@@ -196,6 +196,56 @@ function deliverSoon(preferredTab?: number): void {
     );
 }
 
+/**
+ * Fetch something the app's page is not allowed to fetch itself.
+ *
+ * Audio services written for Yomitan and Anki serve extensions and desktop
+ * programs, neither of which is bound by CORS, so many never send the header
+ * a web page needs. This extension is not bound by it either — given
+ * permission, which is optional and asked for in the toolbar menu.
+ */
+async function fetchForApp(url: string): Promise<{ base64?: string; contentType?: string; error?: string }> {
+  if (typeof url !== "string" || !/^https?:\/\//i.test(url)) return { error: "not a http(s) url" };
+
+  const origin = (() => {
+    try {
+      return new URL(url).origin + "/*";
+    } catch {
+      return null;
+    }
+  })();
+  if (!origin) return { error: "not a valid url" };
+
+  try {
+    const allowed = await new Promise<boolean>((resolve) => {
+      try {
+        const result = ext.permissions?.contains({ origins: [origin] }, resolve);
+        if (result && typeof result.then === "function") result.then(resolve, () => resolve(false));
+      } catch {
+        resolve(false);
+      }
+    });
+    if (!allowed) return { error: "not allowed to fetch that yet" };
+  } catch {
+    return { error: "could not check permissions" };
+  }
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return { error: `the service returned ${res.status}` };
+    const buffer = await res.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    // In chunks: one huge apply() blows the argument limit on big clips.
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    }
+    return { base64: btoa(binary), contentType: res.headers.get("content-type") ?? "application/octet-stream" };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 /** Record that the app has these words, so they stop being offered. */
 async function markHandedOff(ids: unknown): Promise<number> {
   if (!Array.isArray(ids) || ids.length === 0) return 0;
@@ -326,6 +376,10 @@ ext.runtime.onMessage.addListener((message: any, sender: any, sendResponse: (r: 
       }
       case "pendingForApp": {
         sendResponse(await pendingForApp());
+        break;
+      }
+      case "fetchForApp": {
+        sendResponse(await fetchForApp(message.url));
         break;
       }
       case "setHandoverToken": {

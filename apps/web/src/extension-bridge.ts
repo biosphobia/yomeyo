@@ -63,6 +63,89 @@ export function extensionStatus(): { connected: boolean; version: string | null 
   return { connected: seen !== null, version: seen?.version ?? null };
 }
 
+/**
+ * Fetch a URL the browser will not let this page fetch itself.
+ *
+ * Audio services built for Yomitan and Anki are used by extensions and
+ * desktop programs, which are not bound by CORS — so many of them never send
+ * the header a web page needs, and the request fails before it starts. The
+ * extension is not bound by it either, so when one is installed it can be
+ * asked to do the fetch instead.
+ *
+ * Resolves to null when there is no extension, when it has not been given
+ * permission, or when it could not fetch either — the caller then falls back
+ * as it would have anyway.
+ */
+/**
+ * Whether an extension has ever acknowledged a relay request here.
+ *
+ * Once it is known that nothing is listening, later calls must not wait for
+ * it again: audio falls back to the device voice on failure, and a pause
+ * before every spoken word is worse than no relay at all.
+ */
+let relayAnswers: boolean | null = null;
+
+export async function fetchThroughExtension(
+  url: string,
+  { ackMs = 400, totalMs = 25000 }: { ackMs?: number; totalMs?: number } = {},
+): Promise<{ body: ArrayBuffer; contentType: string } | null> {
+  if (relayAnswers === false) return null;
+
+  const id = `f${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (value: { body: ArrayBuffer; contentType: string } | null): void => {
+      if (done) return;
+      done = true;
+      clearTimeout(ackTimer);
+      clearTimeout(totalTimer);
+      window.removeEventListener("message", onMessage);
+      resolve(value);
+    };
+
+    const onMessage = (ev: MessageEvent): void => {
+      if (ev.source !== window) return;
+      const data = ev.data as
+        | { source?: string; type?: string; id?: string; base64?: string; contentType?: string }
+        | null;
+      if (data?.source !== FROM_EXTENSION || data.id !== id) return;
+
+      // An acknowledgement means an extension is there and working on it, so
+      // stop counting against the short "is anyone listening" deadline.
+      if (data.type === "fetching") {
+        relayAnswers = true;
+        clearTimeout(ackTimer);
+        return;
+      }
+      if (data.type !== "fetched") return;
+
+      if (typeof data.base64 !== "string" || data.base64.length === 0) {
+        finish(null);
+        return;
+      }
+      try {
+        const binary = atob(data.base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        finish({ body: bytes.buffer, contentType: data.contentType ?? "application/octet-stream" });
+      } catch {
+        finish(null);
+      }
+    };
+
+    // Two deadlines: a short one for "is an extension even here", and a long
+    // one for the download itself. Without the first, every failure on a
+    // machine with no extension would stall for the whole download timeout.
+    const ackTimer = setTimeout(() => {
+      relayAnswers = false; // nothing is listening; do not wait again
+      finish(null);
+    }, ackMs);
+    const totalTimer = setTimeout(() => finish(null), totalMs);
+    window.addEventListener("message", onMessage);
+    window.postMessage({ source: FROM_APP, type: "fetch", id, url }, location.origin);
+  });
+}
+
 interface CardsMessage {
   source: typeof FROM_EXTENSION;
   type: "cards";

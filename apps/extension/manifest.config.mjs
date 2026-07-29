@@ -6,7 +6,7 @@
  * and additionally requires an add-on id under `browser_specific_settings`.
  */
 
-export const VERSION = "0.4.3";
+export const VERSION = "0.5.0";
 
 /** Add-on id used when signing/listing the Firefox build. */
 export const GECKO_ID = "yomeyo@yomeyo.app";
@@ -29,6 +29,11 @@ function base() {
     // needs neither host permissions nor an offscreen document; it runs in
     // the content script that is already there.
     permissions: ["storage", "tabs"],
+    // Optional, and asked for only when the user presses the button in the
+    // toolbar menu. Optional permissions do not make a browser hold an
+    // already-installed extension for re-approval, which is what a required
+    // one would do — and did.
+    optional_host_permissions: ["*://*/*"],
     content_scripts: [
       {
         matches: ["<all_urls>"],
