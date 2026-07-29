@@ -87,8 +87,10 @@ which the extension loads in a hidden frame on each save and hands the card
 to. A frame of one origin inside another is normally given its own
 partitioned storage, which would make this pointless — an extension holding
 host permissions for the origin is exempt, so the frame writes into the very
-deck the app reads. On Chromium that frame lives in an offscreen document,
-since a service worker has no DOM; Firefox's event page hosts it directly.
+deck the app reads — and, measured rather than assumed, without the extension
+needing host permissions for the origin. On Chromium the frame lives in an
+offscreen document, since a service worker has no DOM; Firefox's event page
+hosts it directly.
 `sync.html` refuses to talk to anything but an extension, and never sends
 anything back beyond the ids it was just given.
 

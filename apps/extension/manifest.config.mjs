@@ -6,7 +6,7 @@
  * and additionally requires an add-on id under `browser_specific_settings`.
  */
 
-export const VERSION = "0.4.0";
+export const VERSION = "0.4.1";
 
 /** Add-on id used when signing/listing the Firefox build. */
 export const GECKO_ID = "yomeyo@yomeyo.app";
@@ -22,10 +22,12 @@ function base() {
       48: "icons/icon-48.png",
       128: "icons/icon-128.png",
     },
+    // No host_permissions: a frame the extension loads is exempt from storage
+    // partitioning without them — measured, not assumed — and asking for more
+    // permissions than before makes a browser disable an already-installed
+    // extension until the user approves it again, which looks exactly like
+    // the extension having stopped working.
     permissions: ["storage", "tabs"],
-    // Needed so a frame of the app's own page, loaded by this extension, is
-    // exempt from storage partitioning and can write into the app's deck.
-    host_permissions: ["<all_urls>"],
     content_scripts: [
       {
         matches: ["<all_urls>"],
