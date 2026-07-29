@@ -27,7 +27,7 @@ export async function renderWords(main: HTMLElement, isCurrent: () => boolean = 
     const ext = extensionStatus();
     const aboutExtension = ext.connected
       ? `The browser extension is connected${ext.version ? ` (${escapeHtml(ext.version)})` : ""}. Anything you save with it appears here by itself.`
-      : `Saving with the browser extension? Its words are kept inside the extension until it hands them over. If they never arrive, open the extension's toolbar popup and use <b>Send them now</b> — and update the extension if it is an older build.`;
+      : `Saving with the browser extension? It adds words here by itself. If none have arrived, it is probably an older build — reinstall it, or use <b>Send them now</b> in its toolbar popup.`;
     list.innerHTML = `<div class="empty-state"><div class="big">📖</div>No words yet.<br/>
       Tap words in the Reader to start mining.<br/><br/>
       <span style="font-size:0.85rem;opacity:0.85">${aboutExtension}</span></div>`;

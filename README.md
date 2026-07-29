@@ -68,9 +68,8 @@ folder. Follow whichever your browser supports.
 
 ### Getting extension words into the app
 
-Nothing to do: whenever Yomeyo is open in a browser tab, words saved with the
-extension come across on their own, including ones saved while that tab is
-already sitting open.
+Nothing to do: a word saved with the extension is added to the app's deck the
+moment you save it, whether or not the app is open anywhere.
 
 The extension has to keep its own deck — it must work on pages where the app
 is not open — so something has to carry the words across. Since the extension
@@ -82,20 +81,23 @@ involved. The extension checks the page against the app URL in its own
 settings before handing anything over, so a site claiming to be Yomeyo is
 given nothing.
 
-That leaves one case, and it is a limit of the browser rather than a choice.
-An extension and a website cannot share storage, so the words can only be
-handed over while a page of the app is running — and an embedded frame will
-not do, because browsers now partition storage for third-party frames, so a
-hidden frame of the app would write into a separate box the app never reads.
-Opened from the home screen as an installed app rather than in a tab, no
-content script reaches it at all.
+An extension cannot write into a website's storage, so something on the app's
+origin has to do the writing. The app ships a tiny page for it, `sync.html`,
+which the extension loads in a hidden frame on each save and hands the card
+to. A frame of one origin inside another is normally given its own
+partitioned storage, which would make this pointless — an extension holding
+host permissions for the origin is exempt, so the frame writes into the very
+deck the app reads. On Chromium that frame lives in an offscreen document,
+since a service worker has no DOM; Firefox's event page hosts it directly.
+`sync.html` refuses to talk to anything but an extension, and never sends
+anything back beyond the ids it was just given.
 
-For that case only, the extension's toolbar popup keeps a **Send them now**
-button under *Words not arriving?*: it opens the app and hands them over,
-with the words travelling in the URL fragment, which browsers never send to a
-server. Re-sending is always harmless — cards merge by id and the newer
-version wins. Signing both sides in to the same account avoids the situation
-entirely.
+If that fails — no connection, a wrong app URL, a browser without offscreen
+support — the words simply stay pending and go across on the next save, or
+the next time the app is open in a tab. The toolbar popup also keeps a
+**Send them now** button under *Words not arriving?* which opens the app and
+hands them over in the URL fragment, which browsers never send to a server.
+Re-sending is always harmless: cards merge by id and the newer version wins.
 
 Signing in to the same account on both, or running the sync server below,
 covers everything else — including a phone and a desktop.

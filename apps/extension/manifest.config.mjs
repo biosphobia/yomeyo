@@ -6,7 +6,7 @@
  * and additionally requires an add-on id under `browser_specific_settings`.
  */
 
-export const VERSION = "0.3.0";
+export const VERSION = "0.4.0";
 
 /** Add-on id used when signing/listing the Firefox build. */
 export const GECKO_ID = "yomeyo@yomeyo.app";
@@ -23,6 +23,9 @@ function base() {
       128: "icons/icon-128.png",
     },
     permissions: ["storage", "tabs"],
+    // Needed so a frame of the app's own page, loaded by this extension, is
+    // exempt from storage partitioning and can write into the app's deck.
+    host_permissions: ["<all_urls>"],
     content_scripts: [
       {
         matches: ["<all_urls>"],
@@ -65,6 +68,9 @@ export function manifestFor(target) {
     };
   } else {
     manifest.background = { service_worker: "background.js" };
+    // A service worker has no DOM, so the handover frame lives in an
+    // offscreen document. Firefox's event page hosts it directly.
+    manifest.permissions = [...manifest.permissions, "offscreen"];
   }
 
   return manifest;

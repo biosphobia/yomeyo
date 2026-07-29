@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { defineConfig } from "vite";
 
 export default defineConfig({
@@ -11,6 +12,15 @@ export default defineConfig({
   build: {
     target: "es2022",
     rollupOptions: {
+      /**
+       * sync.html is the page the browser extension loads in a hidden frame
+       * to hand saved words over. It is a separate entry so it stays tiny —
+       * it must not pull in the dictionary or the rest of the app.
+       */
+      input: {
+        index: resolve(import.meta.dirname, "index.html"),
+        sync: resolve(import.meta.dirname, "sync.html"),
+      },
       output: {
         /**
          * Keep the Firebase SDK in one predictably-named chunk. It is loaded

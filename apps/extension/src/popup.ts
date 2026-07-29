@@ -92,13 +92,11 @@ async function refresh(): Promise<void> {
   // Saying when the last transfer happened is the difference between "this is
   // working" and "nothing seems to happen", which is not otherwise visible.
   transferHint.textContent =
-    stats.waiting === 0 && stats.total > 0
-      ? `Everything saved here is in the app${stats.lastHandoffAt ? ` (last sent ${describeWhen(stats.lastHandoffAt)})` : ""}.`
-      : stats.total === 0
-        ? "Tap a Japanese word on any page to save it."
-        : stats.lastHandoffAt
-          ? `They will move across next time the app is open. Last sent ${describeWhen(stats.lastHandoffAt)}.`
-          : "They move across by themselves next time the app is open in a tab.";
+    stats.total === 0
+      ? "Tap a Japanese word on any page to save it."
+      : stats.waiting === 0
+        ? `Everything saved here is in the app${stats.lastHandoffAt ? ` (last added ${describeWhen(stats.lastHandoffAt)})` : ""}.`
+        : "Could not reach the app just now — these go across on the next save, or when the app is next open.";
   if (stats.version) versionLabel.textContent = `Yomeyo ${stats.version}`;
 }
 

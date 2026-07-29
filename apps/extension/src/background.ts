@@ -10,6 +10,7 @@ import {
   type SyncResponse,
 } from "@yomeyo/core";
 import { ext, resourceUrl, sendToTab, storageGet, storageSet, tabsMatching } from "./browser.js";
+import { handOverViaFrame, syncFrameUrl } from "./frame-handoff.js";
 
 /**
  * Background script: owns the dictionary (loaded from the packaged
@@ -87,6 +88,7 @@ async function handleSave(entry: any, sentence?: string, url?: string): Promise<
   cards[card.id] = card;
   await setCards(cards);
   void tellAppAboutNewWords();
+  deliverSoon();
   return "saved";
 }
 
@@ -129,6 +131,71 @@ async function tellAppAboutNewWords(): Promise<void> {
   for (const tab of await tabsMatching(pattern)) {
     if (tab.id !== undefined) void sendToTab(tab.id, { type: "appHasNewWords" });
   }
+}
+
+/**
+ * Put the words into the app's deck now, whether or not the app is open.
+ *
+ * The app's own page is loaded in a hidden frame and does the writing; see
+ * frame-handoff.ts. On Chromium that needs an offscreen document, because a
+ * service worker has no DOM; Firefox's event page has one already.
+ */
+let offscreenReady: Promise<void> | null = null;
+
+async function ensureOffscreen(): Promise<void> {
+  if (!offscreenReady) {
+    offscreenReady = (async () => {
+      try {
+        if (await ext.offscreen.hasDocument?.()) return;
+        await ext.offscreen.createDocument({
+          url: "offscreen.html",
+          reasons: ["IFRAME_SCRIPTING"],
+          justification: "Hand words saved here to the Yomeyo app's own storage.",
+        });
+      } catch (err) {
+        // "Only a single offscreen document may be created" means another
+        // call won the race, which is exactly what was wanted.
+        if (!/single offscreen document/i.test(String(err))) {
+          offscreenReady = null;
+          throw err;
+        }
+      }
+    })();
+  }
+  return offscreenReady;
+}
+
+/** True while a delivery is in flight, so saves in quick succession queue. */
+let delivering: Promise<void> = Promise.resolve();
+
+async function deliverToApp(): Promise<void> {
+  const pending = await pendingForApp();
+  if (pending.length === 0) return;
+  const frameUrl = syncFrameUrl(await appUrlSetting());
+
+  let ids: string[];
+  if (typeof document !== "undefined") {
+    ids = await handOverViaFrame(frameUrl, pending); // Firefox event page
+  } else {
+    await ensureOffscreen();
+    const res = await ext.runtime.sendMessage({ type: "deliverToApp", frameUrl, cards: pending });
+    if (!res || res.error) throw new Error(res?.error ?? "no answer from the handover document");
+    ids = res.ids ?? [];
+  }
+  await markHandedOff(ids);
+}
+
+/** Deliver, quietly: a save must never fail because the app was unreachable. */
+function deliverSoon(): void {
+  delivering = delivering
+    .catch(() => {})
+    .then(() =>
+      deliverToApp().catch(() => {
+        // Offline, the app URL is wrong, or this browser has no offscreen
+        // support. The words stay pending and travel the moment the app is
+        // next open in a tab.
+      }),
+    );
 }
 
 /** Record that the app has these words, so they stop being offered. */
@@ -241,6 +308,17 @@ ext.runtime.onMessage.addListener((message: any, _sender: any, sendResponse: (r:
     switch (message?.type) {
       // A page has finished loading. Start the dictionary now, while the
       // user is still reading, rather than on the tap they are waiting for.
+      // Used by the toolbar popup, and after a browser restart, to flush
+      // anything that could not be delivered at the time it was saved.
+      case "deliverNow": {
+        try {
+          await deliverToApp();
+          sendResponse({ ok: true });
+        } catch (err) {
+          sendResponse({ error: err instanceof Error ? err.message : String(err) });
+        }
+        break;
+      }
       case "warm": {
         void getDictionary().catch(() => {
           /* reported when a lookup is actually attempted */
@@ -334,3 +412,8 @@ ext.runtime.onMessage.addListener((message: any, _sender: any, sendResponse: (r:
   })();
   return true; // keep the message channel open for the async response
 });
+
+// A backlog can build up while the browser is closed, or while the app URL
+// is wrong; flush it once things are running again.
+ext.runtime.onStartup?.addListener(() => deliverSoon());
+ext.runtime.onInstalled?.addListener(() => deliverSoon());
