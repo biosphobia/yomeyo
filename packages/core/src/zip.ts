@@ -3,10 +3,11 @@
  *
  * An .apkg is a ZIP holding one collection database and every media file the
  * deck references — which for a subtitle-mined deck is thousands of images
- * and audio clips and can run past a gigabyte. Only the collection is wanted,
- * so this never holds the whole file: it reads the index at the end, then the
- * bytes of the one entry asked for. On a phone that is the difference between
- * importing a deck and running out of memory trying.
+ * and audio clips and can run past a gigabyte. Only a few entries are wanted
+ * at a time — the collection, then the media files the imported cards
+ * actually use — so this never holds the whole file: it reads the index at
+ * the end, then the bytes of the one entry asked for. On a phone that is the
+ * difference between importing a deck and running out of memory trying.
  *
  * Decompression is the platform's: `DecompressionStream("deflate-raw")` is
  * exactly the "deflate" a ZIP stores, so there is no inflater here to get

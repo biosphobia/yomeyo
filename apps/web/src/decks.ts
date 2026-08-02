@@ -2,6 +2,7 @@ import { MINING_DECK_ID, fromSharedCards, type DeckInfo } from "@yomeyo/core";
 import { currentAccount, getFirebaseConfig, type AccountInfo } from "./cloud.js";
 import { cardsInDeck, forgetDeck, listDecks, rememberDeck } from "./my-decks.js";
 import { deleteCards, importCards } from "./store.js";
+import { deleteMediaOf } from "./media.js";
 import { toast } from "./toast.js";
 import type { LibraryDeck } from "./library.js";
 
@@ -252,6 +253,8 @@ async function renderMine(
       ) {
         return;
       }
+      // The blobs first, while the cards still say which files are theirs.
+      await deleteMediaOf(cards);
       await deleteCards(cards);
       await forgetDeck(deck.id);
       toast(`Removed ${deck.name}`);

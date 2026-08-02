@@ -1,6 +1,7 @@
 import { buildQueue, deckStats, gradeCard, gradePreview, type Card, type DeckConfig, type Grade } from "@yomeyo/core";
 import { liveCards, saveCard } from "./store.js";
-import { playWord, speakerButton } from "./audio.js";
+import { clipSpeakerButton, playStoredAudio, playWord, speakerButton } from "./audio.js";
+import { getMedia } from "./media.js";
 import { getDailyCounts, getDeckConfig, recordReview } from "./deck.js";
 
 /** Review page: daily flashcards, scheduled by FSRS (or SM-2 if switched off). */
@@ -84,6 +85,7 @@ function showNext(
       <div id="answer" style="display:none">
         <div id="reading-row" class="review-reading" lang="ja">${escapeHtml(card.reading)}</div>
         <div class="review-glosses">${escapeHtml(card.glosses.join(" · "))}</div>
+        ${card.image ? `<div class="review-image"><img id="card-image" alt="" /></div>` : ""}
       </div>
       <div class="row-actions" style="justify-content:center">
         <button id="show-btn">Show answer</button>
@@ -97,18 +99,48 @@ function showNext(
     </div>
   `;
 
+  // A picture the card brought with it is part of the answer: shown once it
+  // is decoded, and simply absent on a device that does not hold the file.
+  const image = area.querySelector<HTMLImageElement>("#card-image");
+  if (image && card.image) {
+    void getMedia(card.image).then((blob) => {
+      if (!blob) {
+        image.closest(".review-image")?.remove();
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      image.onload = () => URL.revokeObjectURL(url);
+      image.onerror = () => {
+        URL.revokeObjectURL(url);
+        image.closest(".review-image")?.remove();
+      };
+      image.src = url;
+    });
+  }
+
   const showBtn = area.querySelector<HTMLButtonElement>("#show-btn")!;
   showBtn.addEventListener("click", () => {
     area.querySelector<HTMLElement>("#answer")!.style.display = "";
     area.querySelector<HTMLElement>("#grades")!.style.display = "";
     showBtn.style.display = "none";
-    // Prefers a Forvo recording, falls back to TTS, then the device voice.
-    void playWord(card.term, card.reading).catch(() => {
+    // The deck's own recording first; then a Forvo recording, TTS, the
+    // device voice — each only ever standing in for the one before it.
+    void (async () => {
+      if (card.audio && (await playStoredAudio(card.audio))) return;
+      await playWord(card.term, card.reading);
+    })().catch(() => {
       /* no audio available on this device */
     });
+    // The sentence clip appears with the answer: played sooner, it would
+    // read out the very word the front is hiding.
+    if (card.sentenceAudio) {
+      area
+        .querySelector<HTMLElement>(".review-sentence")
+        ?.appendChild(clipSpeakerButton(card.sentenceAudio, "Play the sentence audio"));
+    }
   });
 
-  area.querySelector<HTMLElement>("#reading-row")?.appendChild(speakerButton(card.term, card.reading));
+  area.querySelector<HTMLElement>("#reading-row")?.appendChild(speakerButton(card.term, card.reading, card.audio));
 
   area.querySelectorAll<HTMLButtonElement>("[data-grade]").forEach((btn) => {
     btn.addEventListener("click", async () => {

@@ -283,6 +283,22 @@ label {
   line-height: 1.6;
 }
 
+.review-image {
+  margin-top: 14px;
+}
+
+.review-image img {
+  max-width: 100%;
+  max-height: 240px;
+  object-fit: contain;
+  border-radius: 10px;
+}
+
+.review-sentence .speaker {
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
 .grade-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

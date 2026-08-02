@@ -49,7 +49,7 @@ export async function renderWords(main: HTMLElement, isCurrent: () => boolean = 
       await saveCard({ ...card, deleted: true, updatedAt: Date.now() });
       row.remove();
     });
-    row.querySelector(".word")!.after(speakerButton(card.term, card.reading));
+    row.querySelector(".word")!.after(speakerButton(card.term, card.reading, card.audio));
     list.appendChild(row);
   }
 

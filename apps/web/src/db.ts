@@ -232,3 +232,10 @@ export async function setMeta(key: string, value: unknown): Promise<void> {
   tx.objectStore("meta").put(value, key);
   await txDone(tx);
 }
+
+export async function deleteMeta(key: string): Promise<void> {
+  const db = await openNamed(metaDbName(key));
+  const tx = db.transaction("meta", "readwrite");
+  tx.objectStore("meta").delete(key);
+  await txDone(tx);
+}

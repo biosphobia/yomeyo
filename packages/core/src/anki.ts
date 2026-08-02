@@ -1,6 +1,6 @@
 import type { Card, CardState } from "./types.js";
 import { makeId } from "./card.js";
-import { openZip, openZipRanged, type ByteRangeReader } from "./zip.js";
+import { openZip, openZipRanged, type ByteRangeReader, type ZipArchive } from "./zip.js";
 import { SqliteFile, type SqlRow } from "./sqlite.js";
 
 /**
@@ -11,10 +11,12 @@ import { SqliteFile, type SqlRow } from "./sqlite.js";
  * reads the notes *and* the scheduling: a card that was on a four-month
  * interval in Anki arrives on a four-month interval.
  *
- * Two shapes are read. An `.apkg` is a ZIP holding a SQLite collection, which
- * carries everything including scheduling. A plain-text export is a TSV of
- * fields only — no scheduling exists in that format to lose — and is the
- * escape hatch when a collection uses a compression the browser cannot undo.
+ * Two shapes are read. An `.apkg` is a ZIP holding a SQLite collection, the
+ * deck's media files, and a manifest naming them; the collection carries
+ * everything including scheduling, and the fields say which media file
+ * belongs to which note. A plain-text export is a TSV of fields only — no
+ * scheduling or media exists in that format to lose — and is the escape
+ * hatch when a collection uses a compression the browser cannot undo.
  */
 
 // ---------------- field text ----------------
@@ -28,19 +30,27 @@ const ENTITIES: Record<string, string> = {
   nbsp: " ",
 };
 
+function decodeEntities(text: string): string {
+  return text
+    .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code: string) => String.fromCodePoint(parseInt(code, 16)))
+    .replace(/&([a-z]+);/gi, (whole, name: string) => ENTITIES[name.toLowerCase()] ?? whole);
+}
+
 /**
  * Anki fields are HTML. Turned into the plain text a flashcard shows, with
  * the tags that mean "new line" honoured rather than dropped, so a field of
- * three glosses in a list does not become one run-on line.
+ * three glosses in a list does not become one run-on line. `[sound:…]` tags
+ * are Anki's replay buttons, not text, so they vanish here the way they do
+ * on a card.
  */
 export function stripHtml(html: string): string {
   return html
+    .replace(/\[sound:[^\]]*\]/gi, "")
     .replace(/<\s*(br|BR)\s*\/?\s*>/g, "\n")
     .replace(/<\s*\/\s*(div|p|li|tr|h[1-6])\s*>/gi, "\n")
     .replace(/<[^>]*>/g, "")
-    .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, code: string) => String.fromCodePoint(parseInt(code, 16)))
-    .replace(/&([a-z]+);/gi, (whole, name: string) => ENTITIES[name.toLowerCase()] ?? whole)
+    .replace(/&[#a-z0-9]+;/gi, (entity) => decodeEntities(entity))
     .replace(/\u00a0/g, " ")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
@@ -90,6 +100,73 @@ export function splitGlosses(field: string): string[] {
     .split(/\n+|\s*;\s*|\s*、\s*/)
     .map((part) => part.replace(/^\s*\d+[.)]\s*/, "").trim())
     .filter((part) => part.length > 0);
+}
+
+// ---------------- media in the fields ----------------
+
+/** The media one field refers to: `[sound:…]` clips and `<img>` pictures. */
+export interface MediaRefs {
+  audio: string[];
+  images: string[];
+}
+
+const SOUND_TAG = /\[sound:([^\]]+)\]/gi;
+const IMG_TAG = /<img\b[^>]*?\ssrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>"']+))[^>]*>/gi;
+
+/**
+ * The media files a field names.
+ *
+ * The filenames sit in HTML, so entities are undone — a file with `&` in its
+ * name is stored as `&amp;` in the field but under `&` in the archive. An
+ * image fetched from the web is left out: it is not in the archive, and
+ * there is nothing local to keep.
+ */
+export function extractMediaRefs(field: string): MediaRefs {
+  const audio: string[] = [];
+  const images: string[] = [];
+  for (const match of field.matchAll(SOUND_TAG)) {
+    const name = decodeEntities(match[1]).trim();
+    if (name) audio.push(name);
+  }
+  for (const match of field.matchAll(IMG_TAG)) {
+    const name = decodeEntities(match[1] ?? match[2] ?? match[3] ?? "").trim();
+    if (name && !/^(https?:|data:|\/\/)/i.test(name)) images.push(name);
+  }
+  return { audio, images };
+}
+
+/** The media belonging to one note, by what each file is for. */
+export interface NoteMedia {
+  /** The word being pronounced. */
+  audio?: string;
+  /** The example sentence being read out. */
+  sentenceAudio?: string;
+  image?: string;
+}
+
+const SENTENCE_FIELD = /sentence|例文/i;
+
+/**
+ * Which of a note's media files is which.
+ *
+ * The mapping cannot say: media nearly always lives in fields of its own
+ * ("Vocabulary-Audio", "Picture") that map to no role at all, so every field
+ * is searched. All that is told apart is the sentence being read out — found
+ * by the field it is in — from the word being pronounced, because playing a
+ * whole sentence when the card asks for its word gives the answer away.
+ */
+export function noteMedia(fields: string[], mapping: FieldMapping, fieldNames: string[] = []): NoteMedia {
+  const media: NoteMedia = {};
+  fields.forEach((field, index) => {
+    const refs = extractMediaRefs(field);
+    const forSentence = index === mapping.sentence || SENTENCE_FIELD.test(fieldNames[index] ?? "");
+    if (refs.audio.length > 0) {
+      if (forSentence) media.sentenceAudio ??= refs.audio[0];
+      else media.audio ??= refs.audio[0];
+    }
+    if (refs.images.length > 0) media.image ??= refs.images[0];
+  });
+  return media;
 }
 
 // ---------------- which field is which ----------------
@@ -280,21 +357,22 @@ const COLLECTIONS = ["collection.anki21b", "collection.anki21", "collection.anki
  * the two ways out, rather than failing with something the user cannot act on.
  */
 export async function readApkg(bytes: Uint8Array): Promise<AnkiCollection> {
-  return readApkgFrom(await openZip(bytes));
+  return readApkgArchive(await openZip(bytes));
 }
 
 /**
  * The same, over a file this never has to hold all of.
  *
- * A collection with media can run to a gigabyte, almost all of it clips and
- * screenshots nothing here wants. Reading it by ranges means a phone only
- * ever holds the collection database.
+ * A collection with media can run to a gigabyte. Reading it by ranges means
+ * a phone only ever holds the collection database, and later one media file
+ * at a time — never the archive.
  */
 export async function readApkgRanged(read: ByteRangeReader, size: number): Promise<AnkiCollection> {
-  return readApkgFrom(await openZipRanged(read, size));
+  return readApkgArchive(await openZipRanged(read, size));
 }
 
-async function readApkgFrom(zip: Awaited<ReturnType<typeof openZip>>): Promise<AnkiCollection> {
+/** Read the collection out of an archive already opened, keeping the archive usable for media. */
+export async function readApkgArchive(zip: ZipArchive): Promise<AnkiCollection> {
   const names = new Set(zip.entries.map((e) => e.name));
 
   for (const name of COLLECTIONS) {
@@ -321,8 +399,14 @@ async function readApkgFrom(zip: Awaited<ReturnType<typeof openZip>>): Promise<A
   throw new Error("That .apkg has no Anki collection in it.");
 }
 
-/** zstd frames start with a fixed magic number; other bytes pass through. */
-async function maybeDecompressZstd(bytes: Uint8Array): Promise<Uint8Array | null> {
+/**
+ * zstd frames start with a fixed magic number; other bytes pass through.
+ *
+ * Newer exports compress the collection, the media manifest and every media
+ * file this way, so all three readers share this. Null means the bytes are
+ * zstd and this browser has no decompressor for it.
+ */
+export async function maybeDecompressZstd(bytes: Uint8Array): Promise<Uint8Array | null> {
   const isZstd =
     bytes.length > 4 &&
     bytes[0] === 0x28 &&
@@ -338,6 +422,116 @@ async function maybeDecompressZstd(bytes: Uint8Array): Promise<Uint8Array | null
     return new Uint8Array(await new Response(stream).arrayBuffer());
   } catch {
     return null;
+  }
+}
+
+// ---------------- the media manifest ----------------
+
+/**
+ * What the archive's media entries are called.
+ *
+ * Media files are stored under bare numbers — `0`, `1`, … — and a `media`
+ * entry says which number is which file. Older exports write it as JSON,
+ * `{"0": "水.mp3"}`; newer ones as a zstd-compressed protobuf list whose
+ * i-th entry names the archive member `i`.
+ *
+ * Returns filename → archive entry name. Empty when the archive has no
+ * media, and also when the manifest is zstd on a browser that cannot undo
+ * it — the words still import, so an unreadable manifest costs the pictures
+ * and sounds, not the deck.
+ */
+export async function readMediaManifest(zip: ZipArchive): Promise<Map<string, string>> {
+  if (!zip.entries.some((entry) => entry.name === "media")) return new Map();
+  let raw: Uint8Array;
+  try {
+    raw = await zip.read("media");
+  } catch {
+    return new Map();
+  }
+  const decoded = await maybeDecompressZstd(raw);
+  if (!decoded) return new Map();
+  return parseMediaManifest(decoded);
+}
+
+/** Parse an already-decompressed manifest, whichever shape it is. */
+export function parseMediaManifest(bytes: Uint8Array): Map<string, string> {
+  const names = new Map<string, string>();
+  if (bytes.length === 0) return names;
+
+  if (bytes[0] === 0x7b) {
+    // '{' — the JSON manifest of older exports: entry name → filename.
+    try {
+      const parsed = JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>;
+      for (const [entry, filename] of Object.entries(parsed)) {
+        if (typeof filename === "string" && filename) names.set(filename, entry);
+      }
+    } catch {
+      // Not a manifest after all; treated as a deck without media.
+    }
+    return names;
+  }
+
+  // The protobuf list: the message is repeated entries in field 1, and each
+  // entry carries its filename in field 1. Order is meaning — the i-th entry
+  // is the archive member named "i" — so entries without a name still count.
+  try {
+    const decoder = new TextDecoder();
+    let index = 0;
+    for (const [field, wire, value] of protoFields(bytes)) {
+      if (field !== 1 || wire !== 2) continue;
+      for (const [inner, innerWire, name] of protoFields(value as Uint8Array)) {
+        if (inner === 1 && innerWire === 2) {
+          const filename = decoder.decode(name as Uint8Array);
+          if (filename) names.set(filename, String(index));
+          break;
+        }
+      }
+      index++;
+    }
+  } catch {
+    names.clear(); // half a manifest would attach the wrong file to a card
+  }
+  return names;
+}
+
+function readVarint(bytes: Uint8Array, at: number): [value: number, next: number] {
+  let value = 0;
+  let shift = 0;
+  while (at < bytes.length && shift <= 63) {
+    const byte = bytes[at++];
+    value += (byte & 0x7f) * 2 ** shift;
+    if ((byte & 0x80) === 0) return [value, at];
+    shift += 7;
+  }
+  throw new Error("truncated varint");
+}
+
+/** Walk one protobuf message: field number, wire type, and the payload. */
+function* protoFields(bytes: Uint8Array): Generator<[number, number, Uint8Array | number]> {
+  let at = 0;
+  while (at < bytes.length) {
+    const [tag, afterTag] = readVarint(bytes, at);
+    const field = Math.floor(tag / 8);
+    const wire = tag % 8;
+    at = afterTag;
+    if (wire === 0) {
+      const [value, next] = readVarint(bytes, at);
+      at = next;
+      yield [field, wire, value];
+    } else if (wire === 2) {
+      const [length, start] = readVarint(bytes, at);
+      at = start + length;
+      if (at > bytes.length) throw new Error("truncated field");
+      yield [field, wire, bytes.subarray(start, at)];
+    } else if (wire === 5) {
+      yield [field, wire, 0];
+      at += 4;
+    } else if (wire === 1) {
+      yield [field, wire, 0];
+      at += 8;
+    } else {
+      throw new Error(`unsupported wire type ${wire}`);
+    }
   }
 }
 
@@ -402,6 +596,11 @@ export interface ImportOptions {
   keepScheduling?: boolean;
   /** Where due dates are counted from; the collection's creation, in seconds. */
   collectionCreatedAt?: number;
+  /**
+   * The note type's field names, so a clip in a "Sentence-Audio" field is
+   * kept apart from the word's own pronunciation.
+   */
+  fieldNames?: string[];
   now?: number;
 }
 
@@ -475,6 +674,10 @@ export interface ImportedCard {
  * A note with nothing in its term field produces nothing: those are the
  * empty rows every large collection accumulates, and importing them would
  * fill the deck with blanks that can never be reviewed.
+ *
+ * Media references come across as the filenames the note used; whoever has
+ * the archive swaps them for stored copies, and a caller with no archive —
+ * a plain-text import — gets the names to report as unavailable.
  */
 export function notesToCards(
   notes: { fields: string[]; id?: number; tags?: string[] }[],
@@ -503,6 +706,7 @@ export function notesToCards(
     const scheduling = schedule
       ? convertSchedule(schedule, createdAt, now)
       : { state: "new" as CardState, due: now, intervalDays: 0, ease: 2.5, stepIndex: 0, reps: 0, lapses: 0 };
+    const media = noteMedia(note.fields, mapping, options.fieldNames);
 
     cards.push({
       id: makeId(),
@@ -513,6 +717,9 @@ export function notesToCards(
       source: "Anki",
       createdAt: note.id !== undefined && note.id > 1_000_000_000_000 ? note.id : now,
       updatedAt: now,
+      ...(media.audio ? { audio: media.audio } : {}),
+      ...(media.sentenceAudio ? { sentenceAudio: media.sentenceAudio } : {}),
+      ...(media.image ? { image: media.image } : {}),
       ...scheduling,
     });
   }

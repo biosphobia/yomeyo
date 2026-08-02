@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   convertSchedule,
+  extractMediaRefs,
   guessFieldMapping,
+  noteMedia,
   notesToCards,
   openZip,
+  parseMediaManifest,
   parseTextExport,
   readApkg,
   readCollection,
+  readMediaManifest,
   SqliteFile,
   columnsOf,
   splitFurigana,
@@ -47,6 +51,94 @@ describe("field text", () => {
     expect(splitGlosses("to eat; to drink")).toEqual(["to eat", "to drink"]);
     expect(splitGlosses("<div>1. senior</div><div>2. superior</div>")).toEqual(["senior", "superior"]);
     expect(splitGlosses("   ")).toEqual([]);
+  });
+
+  it("drops sound tags the way a card hides its replay button", () => {
+    expect(stripHtml("水[sound:mizu.mp3]")).toBe("水");
+    expect(stripHtml("[sound:rec_1.mp3]water; cold water")).toBe("water; cold water");
+  });
+});
+
+describe("media in the fields", () => {
+  it("finds the clips and pictures a field names", () => {
+    expect(extractMediaRefs('水 [sound:mizu.mp3] <img src="mizu.jpg">')).toEqual({
+      audio: ["mizu.mp3"],
+      images: ["mizu.jpg"],
+    });
+  });
+
+  it("reads a src however it is quoted", () => {
+    expect(extractMediaRefs("<img src='a.png'>").images).toEqual(["a.png"]);
+    expect(extractMediaRefs("<img class=x src=b.png alt=y>").images).toEqual(["b.png"]);
+    expect(extractMediaRefs('<img alt="word" src="c.png" />').images).toEqual(["c.png"]);
+  });
+
+  it("undoes entities so the name matches the archive", () => {
+    expect(extractMediaRefs('<img src="a&amp;b.jpg">').images).toEqual(["a&b.jpg"]);
+  });
+
+  it("leaves out images that live on the web, not in the archive", () => {
+    const refs = extractMediaRefs('<img src="https://example.com/x.png"> <img src="data:image/png;base64,AA==">');
+    expect(refs.images).toEqual([]);
+  });
+
+  it("tells the sentence being read out from the word being pronounced", () => {
+    const mapping = { term: 0, reading: -1, meaning: 1, sentence: 2 };
+    const media = noteMedia(
+      ["水", "water", "水を飲む[sound:sentence_1.mp3]", "[sound:word_1.mp3]", '<img src="mizu.jpg">'],
+      mapping,
+      ["Word", "Meaning", "Sentence", "Vocabulary-Audio", "Picture"],
+    );
+    expect(media).toEqual({ audio: "word_1.mp3", sentenceAudio: "sentence_1.mp3", image: "mizu.jpg" });
+  });
+
+  it("treats a 'Sentence-Audio' field as sentence audio even though it maps to no role", () => {
+    const mapping = { term: 0, reading: -1, meaning: 1, sentence: -1 };
+    const media = noteMedia(["水", "water", "[sound:s.mp3]"], mapping, ["Word", "Meaning", "Sentence-Audio"]);
+    expect(media.sentenceAudio).toBe("s.mp3");
+    expect(media.audio).toBeUndefined();
+  });
+});
+
+describe("the media manifest", () => {
+  it("reads the JSON manifest of older exports", () => {
+    const bytes = new TextEncoder().encode('{"0": "水.mp3", "1": "水.jpg"}');
+    const names = parseMediaManifest(bytes);
+    expect(names.get("水.mp3")).toBe("0");
+    expect(names.get("水.jpg")).toBe("1");
+  });
+
+  it("reads the protobuf manifest of newer exports", () => {
+    // Two entries; each is field 1 of the list, its name field 1 of the entry.
+    const encoder = new TextEncoder();
+    const entry = (name: string): number[] => {
+      const text = encoder.encode(name);
+      return [0x0a, text.length + 2, 0x0a, text.length, ...text];
+    };
+    const bytes = new Uint8Array([...entry("a.mp3"), ...entry("b.jpg")]);
+    const names = parseMediaManifest(bytes);
+    expect(names.get("a.mp3")).toBe("0");
+    expect(names.get("b.jpg")).toBe("1");
+  });
+
+  it("returns nothing rather than something wrong for bytes it cannot read", () => {
+    expect(parseMediaManifest(new Uint8Array([0xff, 0xff, 0xff])).size).toBe(0);
+    expect(parseMediaManifest(new TextEncoder().encode("{broken")).size).toBe(0);
+    expect(parseMediaManifest(new Uint8Array()).size).toBe(0);
+  });
+
+  it("reads the manifest out of an archive", async () => {
+    const apkg = buildZip([
+      { name: "media", data: new TextEncoder().encode('{"0": "mizu.mp3"}'), stored: true },
+      { name: "0", data: new Uint8Array([1, 2, 3]), stored: true },
+    ]);
+    const names = await readMediaManifest(await openZip(apkg));
+    expect(names.get("mizu.mp3")).toBe("0");
+  });
+
+  it("treats an archive without a manifest as a deck without media", async () => {
+    const apkg = buildZip([{ name: "readme.txt", data: new TextEncoder().encode("hi") }]);
+    expect((await readMediaManifest(await openZip(apkg))).size).toBe(0);
   });
 });
 
@@ -347,6 +439,35 @@ describe("turning notes into cards", () => {
     expect(cards[0].reps).toBe(0);
   });
 
+  it("carries each note's media across as the filenames it used", () => {
+    const cards = notesToCards(
+      [
+        {
+          id: 1,
+          fields: ["水[sound:mizu.mp3]", "みず", 'water <img src="mizu.jpg">', "水を飲む[sound:s1.mp3]"],
+        },
+      ],
+      mapping,
+      { now, fieldNames: ["Word", "Reading", "Meaning", "Sentence"] },
+    );
+    expect(cards[0]).toMatchObject({
+      term: "水",
+      audio: "mizu.mp3",
+      sentenceAudio: "s1.mp3",
+      image: "mizu.jpg",
+    });
+    // The tags are gone from the text the card shows.
+    expect(cards[0].glosses).toEqual(["water"]);
+    expect(cards[0].sentence).toBe("水を飲む");
+  });
+
+  it("leaves the media fields off a card whose note has none", () => {
+    const cards = notesToCards([{ id: 1, fields: ["水", "みず", "water", ""] }], mapping, { now });
+    expect("audio" in cards[0]).toBe(false);
+    expect("sentenceAudio" in cards[0]).toBe(false);
+    expect("image" in cards[0]).toBe(false);
+  });
+
   it("gives every card its own id", () => {
     const cards = notesToCards(
       [
@@ -420,6 +541,36 @@ describe("end to end, from an .apkg to cards", () => {
       reps: 20,
     });
     expect(cards[1]).toMatchObject({ term: "玄人", reading: "くろうと", state: "new" });
+  });
+
+  it("brings a deck's pictures and audio along with its words", async () => {
+    const collection = buildCollection({
+      fieldNames: ["Word", "Meaning", "Vocabulary-Audio", "Picture"],
+      notes: [
+        { id: 1600000012000, fields: ["水", "water", "[sound:mizu.mp3]", '<img src="mizu.jpg">'] },
+      ],
+    });
+    const clip = new Uint8Array([1, 2, 3, 4]);
+    const picture = new Uint8Array([5, 6, 7, 8]);
+    const apkg = buildZip([
+      { name: "collection.anki2", data: collection },
+      { name: "media", data: new TextEncoder().encode('{"0": "mizu.mp3", "1": "mizu.jpg"}'), stored: true },
+      { name: "0", data: clip, stored: true },
+      { name: "1", data: picture, stored: true },
+    ]);
+
+    const zip = await openZip(apkg);
+    const read = await readApkg(apkg);
+    const manifest = await readMediaManifest(zip);
+    const mapping = guessFieldMapping(read.noteTypes[0].fieldNames);
+    const cards = notesToCards(read.notes, mapping, {
+      now: Date.UTC(2024, 0, 1),
+      fieldNames: read.noteTypes[0].fieldNames,
+    });
+
+    expect(cards[0]).toMatchObject({ term: "水", audio: "mizu.mp3", image: "mizu.jpg" });
+    expect(await zip.read(manifest.get(cards[0].audio!)!)).toEqual(clip);
+    expect(await zip.read(manifest.get(cards[0].image!)!)).toEqual(picture);
   });
 });
 

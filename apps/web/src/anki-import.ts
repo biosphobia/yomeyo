@@ -1,8 +1,11 @@
 import {
   guessFieldMapping,
+  maybeDecompressZstd,
   notesToCards,
+  openZipRanged,
   parseTextExport,
-  readApkgRanged,
+  readApkgArchive,
+  readMediaManifest,
   summarise,
   type AnkiSchedule,
   type Card,
@@ -11,6 +14,7 @@ import {
 } from "@yomeyo/core";
 import { importCards } from "./store.js";
 import { putCards } from "./db.js";
+import { saveMedia, mediaMime } from "./media.js";
 import { cardsInDeck, forgetDeck, rememberDeck } from "./my-decks.js";
 import type { AccountInfo } from "./cloud.js";
 
@@ -22,6 +26,13 @@ import type { AccountInfo } from "./cloud.js";
  * bytes without holding a gigabyte of media in memory, and shaping the result
  * into something the Settings screen can offer choices about.
  */
+
+/** The archive's media, kept open so files can be read one at a time at import. */
+export interface AnkiMediaSource {
+  /** Media filename → archive entry name, from the manifest. */
+  files: Map<string, string>;
+  read(entryName: string): Promise<Uint8Array>;
+}
 
 /** One note type's worth of notes, with the field roles offered for it. */
 export interface AnkiGroup {
@@ -41,6 +52,8 @@ export interface AnkiSource {
   collectionCreatedAt: number;
   schedules: Map<number, AnkiSchedule>;
   groups: AnkiGroup[];
+  /** Null for text exports, and for archives whose manifest cannot be read. */
+  media: AnkiMediaSource | null;
 }
 
 /** ZIP files start with these four bytes, whatever they are named. */
@@ -55,10 +68,16 @@ export async function readAnkiFile(file: File): Promise<AnkiSource> {
 }
 
 async function readPackage(file: File): Promise<AnkiSource> {
-  const collection = await readApkgRanged(
+  // The archive stays open (it is only the File and its index) so the media
+  // files can be read one at a time when the import is confirmed.
+  const zip = await openZipRanged(
     async (start, end) => new Uint8Array(await file.slice(start, end).arrayBuffer()),
     file.size,
   );
+  const collection = await readApkgArchive(zip);
+  const manifest = await readMediaManifest(zip);
+  const media: AnkiMediaSource | null =
+    manifest.size > 0 ? { files: manifest, read: (name) => zip.read(name) } : null;
 
   const byType = new Map<number, { id?: number; fields: string[] }[]>();
   for (const note of collection.notes) {
@@ -105,6 +124,7 @@ async function readPackage(file: File): Promise<AnkiSource> {
     collectionCreatedAt: collection.createdAt,
     schedules: collection.schedules,
     groups,
+    media,
   };
 }
 
@@ -130,6 +150,7 @@ async function readText(file: File): Promise<AnkiSource> {
         include: true,
       },
     ],
+    media: null,
   };
 }
 
@@ -141,6 +162,7 @@ export function cardsFor(source: AnkiSource, group: AnkiGroup, keepScheduling: b
     {
       keepScheduling: keepScheduling && source.hasScheduling,
       collectionCreatedAt: source.collectionCreatedAt,
+      fieldNames: group.fieldNames,
     },
     source.schedules,
   );
@@ -151,6 +173,57 @@ export interface AnkiImportResult extends ImportSummary {
   added: number;
   /** The deck the words went into, so it can be shared or removed later. */
   deckId: string;
+  /** Pictures and audio clips stored on this device. */
+  mediaCount: number;
+  /** Files the cards referred to but the archive could not supply. */
+  mediaMissing: number;
+}
+
+/**
+ * Store the media the cards refer to, swapping each filename for the key
+ * of a stored copy — or dropping the reference when the file is not there.
+ *
+ * Files are read from the archive one at a time and each is stored once,
+ * however many cards share it, so a deck whose every note carries the same
+ * "silence.mp3" costs one blob. The key includes the deck id, so removing
+ * the deck can remove exactly its files and two imports never collide.
+ */
+async function storeMedia(
+  source: AnkiSource,
+  cards: Card[],
+  deckId: string,
+): Promise<{ mediaCount: number; mediaMissing: number }> {
+  const roles = ["audio", "sentenceAudio", "image"] as const;
+  const keys = new Map<string, string>(); // filename → stored key, "" when unavailable
+  for (const card of cards) {
+    for (const role of roles) {
+      const filename = card[role];
+      if (!filename) continue;
+      let key = keys.get(filename);
+      if (key === undefined) {
+        key = "";
+        const entry = source.media?.files.get(filename);
+        if (entry) {
+          try {
+            // Newer exports zstd-compress each media file individually; a
+            // browser without a decompressor loses the file, not the import.
+            const bytes = await maybeDecompressZstd(await source.media!.read(entry));
+            if (bytes) {
+              key = `${deckId}/${filename}`;
+              await saveMedia(key, new Blob([bytes as unknown as BlobPart], { type: mediaMime(filename) }));
+            }
+          } catch {
+            key = ""; // a corrupt entry loses one file, not the import
+          }
+        }
+        keys.set(filename, key);
+      }
+      if (key) card[role] = key;
+      else delete card[role];
+    }
+  }
+  const stored = [...keys.values()].filter(Boolean).length;
+  return { mediaCount: stored, mediaMissing: keys.size - stored };
 }
 
 /**
@@ -178,6 +251,8 @@ export async function importAnki(
       cards.push({ ...card, deckId });
     }
   }
+  // Media first, so every card is stored already pointing at its files.
+  const media = await storeMedia(source, cards, deckId);
   const added = await importCards(cards);
   await rememberDeck({
     id: deckId,
@@ -186,7 +261,7 @@ export async function importAnki(
     cardCount: cards.length,
     source: source.fileName,
   });
-  return { ...summarise(cards), added, deckId };
+  return { ...summarise(cards), added, deckId, ...media };
 }
 
 /**

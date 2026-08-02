@@ -377,8 +377,8 @@ function renderAnkiImport(main: HTMLElement, account: AccountInfo | null): void 
     box!.innerHTML = `
       <div class="msg">
         Export from Anki with <b>File → Export</b>. An <code>.apkg</code> brings
-        your review history across; <i>Notes in Plain Text</i> brings the words
-        only. Words already in your deck are not added twice, so importing the
+        your review history across, and its pictures and audio when “Include media”
+        was ticked; <i>Notes in Plain Text</i> brings the words only. Words already in your deck are not added twice, so importing the
         same file again is harmless.
       </div>
       <div class="row-actions">
@@ -496,7 +496,9 @@ function renderAnkiImport(main: HTMLElement, account: AccountInfo | null): void 
                   (card) => `
                     <div class="word-row">
                       <div class="word">
-                        <div><b>${escapeHtml(card.term)}</b>${card.reading ? ` <span class="glosses">${escapeHtml(card.reading)}</span>` : ""}</div>
+                        <div><b>${escapeHtml(card.term)}</b>${card.reading ? ` <span class="glosses">${escapeHtml(card.reading)}</span>` : ""}${
+                          card.audio || card.sentenceAudio ? ` <span title="Has audio">🔊</span>` : ""
+                        }${card.image ? ` <span title="Has a picture">🖼️</span>` : ""}</div>
                         <div class="glosses">${escapeHtml(card.glosses.join("; ")) || "(no meaning)"}</div>
                         ${card.sentence ? `<div class="glosses">${escapeHtml(card.sentence)}</div>` : ""}
                       </div>
@@ -548,7 +550,8 @@ function renderAnkiImport(main: HTMLElement, account: AccountInfo | null): void 
       shareNote.innerHTML = share
         ? `This deck will be listed under <b>Decks → Premade</b> for everyone, so nobody
            else has to find the file. The <b>words</b> are shared — not your review
-           history, and not the words you mined yourself. You can withdraw it later from
+           history, not the words you mined yourself, and not the deck's pictures or
+           audio, which stay on this device. You can withdraw it later from
            the Decks screen. <b>Don't share a deck that is really your private
            collection.</b>`
         : "The deck is imported for you alone and stays on your account.";
@@ -579,6 +582,20 @@ function renderAnkiImport(main: HTMLElement, account: AccountInfo | null): void 
         }
         if (result.suspended > 0) {
           parts.push(`${result.suspended.toLocaleString()} were suspended in Anki and are marked as leeches`);
+        }
+        if (result.mediaCount > 0) {
+          parts.push(
+            `${result.mediaCount.toLocaleString()} audio clip${result.mediaCount === 1 ? "" : "s"} and picture${
+              result.mediaCount === 1 ? "" : "s"
+            } came across and play offline`,
+          );
+        }
+        if (result.mediaMissing > 0) {
+          parts.push(
+            `${result.mediaMissing.toLocaleString()} media file${
+              result.mediaMissing === 1 ? " was" : "s were"
+            } named by the cards but not readable from this file, so those cards fall back to synthesised audio`,
+          );
         }
         if (result.implausible > 0) {
           parts.push(`${result.implausible.toLocaleString()} had a due date far in the future and may need rescheduling`);

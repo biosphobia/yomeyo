@@ -77,6 +77,16 @@ export interface Card {
    * was more than one deck.
    */
   deckId?: string;
+  /**
+   * Media that came with the card, usually from an Anki import: the word
+   * spoken, the example sentence read out, and a picture. Each value is a
+   * key into the device's local media storage (the importer sets it), so the
+   * files themselves never travel with the card — a device without them
+   * falls back to synthesised audio and shows no picture.
+   */
+  audio?: string;
+  sentenceAudio?: string;
+  image?: string;
   createdAt: number;
   /** Last-modified timestamp; drives last-write-wins sync. */
   updatedAt: number;

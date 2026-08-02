@@ -8,6 +8,7 @@ import {
   type AudioSourceConfig,
 } from "@yomeyo/core";
 import { getMeta, setMeta } from "./db.js";
+import { getMedia } from "./media.js";
 import { fetchThroughExtension } from "./extension-bridge.js";
 
 /**
@@ -249,7 +250,22 @@ async function fetchClip(
 
 export interface PlayResult {
   /** Which source actually produced the sound. */
-  source: "cache" | "forvo" | "tts" | "device";
+  source: "deck" | "cache" | "forvo" | "tts" | "device";
+}
+
+/**
+ * Play a clip an imported deck brought with it.
+ *
+ * False when the key resolves to nothing — the card came from another
+ * device, or its deck's media was removed — so the caller can fall back to
+ * the synthesised chain rather than staying silent.
+ */
+export async function playStoredAudio(key: string): Promise<boolean> {
+  const blob = await getMedia(key);
+  if (!blob) return false;
+  stopPlayback();
+  await playBlob(blob);
+  return true;
 }
 
 /**
@@ -358,8 +374,12 @@ export async function audioAvailable(): Promise<boolean> {
 /**
  * A reusable speaker button. Reading is preferred over the written form so
  * kanji with several readings are pronounced the way the card teaches.
+ *
+ * A card that brought its own recording across from Anki plays that first:
+ * it is the exact clip the deck's author chose, already on this device, and
+ * anything fetched or synthesised is only ever a stand-in for it.
  */
-export function speakerButton(term: string, reading?: string): HTMLButtonElement {
+export function speakerButton(term: string, reading?: string, deckAudio?: string): HTMLButtonElement {
   const button = document.createElement("button");
   button.className = "speaker";
   button.type = "button";
@@ -373,6 +393,11 @@ export function speakerButton(term: string, reading?: string): HTMLButtonElement
     if (button.classList.contains("speaking")) return;
     button.classList.add("speaking");
     try {
+      if (deckAudio && (await playStoredAudio(deckAudio))) {
+        button.classList.remove("error");
+        button.title = "Played the deck's own recording";
+        return;
+      }
       const result = await playWord(term, reading ?? "");
       button.classList.remove("error");
       button.title =
@@ -383,6 +408,42 @@ export function speakerButton(term: string, reading?: string): HTMLButtonElement
             : result.source === "cache"
               ? "Played the saved recording"
               : "Played with the device voice";
+    } catch (err) {
+      button.classList.add("error");
+      button.title = err instanceof Error ? err.message : "Could not play audio";
+    } finally {
+      button.classList.remove("speaking");
+    }
+  });
+
+  return button;
+}
+
+/**
+ * A speaker that plays one stored clip and nothing else — for sentence
+ * audio, where a fallback voice reading the whole sentence would drown the
+ * card. Says so when the clip is not on this device, rather than guessing.
+ */
+export function clipSpeakerButton(key: string, label: string): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.className = "speaker";
+  button.type = "button";
+  button.textContent = "🔊";
+  button.title = label;
+  button.setAttribute("aria-label", label);
+
+  onTap(button, async (ev: Event) => {
+    ev.stopPropagation?.();
+    ev.preventDefault?.();
+    if (button.classList.contains("speaking")) return;
+    button.classList.add("speaking");
+    try {
+      if (await playStoredAudio(key)) {
+        button.classList.remove("error");
+      } else {
+        button.classList.add("error");
+        button.title = "This clip is not on this device — media stays where the deck was imported.";
+      }
     } catch (err) {
       button.classList.add("error");
       button.title = err instanceof Error ? err.message : "Could not play audio";
