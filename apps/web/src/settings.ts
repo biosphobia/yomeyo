@@ -10,7 +10,14 @@ import {
   type AccountInfo,
 } from "./cloud.js";
 import { signedOutDeckAdoptable } from "./accounts.js";
-import { formatSteps, parseFsrsWeights, parseSteps, type AudioSourceConfig } from "@yomeyo/core";
+import type { AnkiSource } from "./anki-import.js";
+import {
+  formatSteps,
+  parseFsrsWeights,
+  parseSteps,
+  type AudioSourceConfig,
+  type FieldMapping,
+} from "@yomeyo/core";
 import { getAudioConfig, saveAudioConfig, testAudioConfig } from "./audio.js";
 import { toast } from "./toast.js";
 import { getDeckConfig, resetDeckConfig, saveDeckConfig } from "./deck.js";
@@ -67,6 +74,11 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
     </div>
 
     <div class="card-panel">
+      <b>Import from Anki</b>
+      <div id="anki-import"></div>
+    </div>
+
+    <div class="card-panel">
       <b>Dictionary</b>
       <div class="msg" id="dict-status">Not loaded yet — open the Reader to load it.</div>
       <div class="row-actions">
@@ -105,6 +117,7 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
   renderAccount();
   void renderDeckConfig(main);
   void renderAudioConfig(main);
+  renderAnkiImport(main);
   wireDictionary(main);
   void renderExtraDictionaries(main);
   wireServerSync(main);
@@ -331,6 +344,212 @@ async function renderAudioConfig(main: HTMLElement): Promise<void> {
       msg.className = "msg error";
     }
   });
+}
+
+/**
+ * Importing a deck from Anki.
+ *
+ * Anyone coming here from Anki has years of reviews behind them, so this
+ * reads the scheduling as well as the words: a card on a four-month interval
+ * arrives on a four-month interval.
+ *
+ * What it cannot do is guess, silently, which field of somebody's note type
+ * is the word and which is the meaning — note types are whatever their author
+ * decided. So the guess is made, shown, and left editable, with a preview of
+ * the first few cards so a wrong guess is obvious before anything is added.
+ */
+function renderAnkiImport(main: HTMLElement): void {
+  const box = main.querySelector<HTMLDivElement>("#anki-import");
+  if (!box) return;
+
+  let source: AnkiSource | null = null;
+  let keepScheduling = true;
+
+  // The reader carries a ZIP inflater and a SQLite parser. Almost nobody
+  // opens this panel on any given visit, and sync.html — loaded in the
+  // background every time a word is saved — would otherwise share the cost.
+  let anki: typeof import("./anki-import.js") | null = null;
+
+  function drawChooser(message = "", kind: "" | "ok" | "error" = ""): void {
+    box!.innerHTML = `
+      <div class="msg">
+        Export from Anki with <b>File → Export</b>. An <code>.apkg</code> brings
+        your review history across; <i>Notes in Plain Text</i> brings the words
+        only. Words already in your deck are not added twice, so importing the
+        same file again is harmless.
+      </div>
+      <div class="row-actions">
+        <button id="anki-pick" class="secondary">Choose an Anki file…</button>
+        <input type="file" id="anki-file" accept=".apkg,.colpkg,.txt,.tsv,.csv" style="display:none" />
+      </div>
+      <div class="msg ${kind}" id="anki-msg">${escapeHtml(message)}</div>
+    `;
+    const input = box!.querySelector<HTMLInputElement>("#anki-file")!;
+    const msg = box!.querySelector<HTMLDivElement>("#anki-msg")!;
+    box!.querySelector<HTMLButtonElement>("#anki-pick")!.addEventListener("click", () => input.click());
+
+    input.addEventListener("change", async () => {
+      const file = input.files?.[0];
+      input.value = "";
+      if (!file) return;
+      msg.textContent = `Reading ${file.name}…`;
+      msg.className = "msg";
+      try {
+        anki ??= await import("./anki-import.js");
+        source = await anki.readAnkiFile(file);
+        keepScheduling = source.hasScheduling;
+        drawMapping();
+      } catch (err) {
+        msg.textContent = err instanceof Error ? err.message : String(err);
+        msg.className = "msg error";
+      }
+    });
+  }
+
+  function drawMapping(): void {
+    if (!source) return drawChooser();
+    const roles: [keyof FieldMapping, string][] = [
+      ["term", "Word"],
+      ["reading", "Reading"],
+      ["meaning", "Meaning"],
+      ["sentence", "Sentence"],
+    ];
+
+    const total = source.groups.reduce((sum, g) => sum + (g.include ? g.notes.length : 0), 0);
+    box!.innerHTML = `
+      <div class="msg ok">
+        <b>${escapeHtml(source.fileName)}</b> — ${total.toLocaleString()} note${total === 1 ? "" : "s"}
+        across ${source.groups.length} note type${source.groups.length === 1 ? "" : "s"}.
+      </div>
+      ${
+        source.hasScheduling
+          ? `<div class="settings-grid">
+               <label for="anki-sched">Keep review history</label>
+               <label class="switch-sm"><input type="checkbox" id="anki-sched" ${keepScheduling ? "checked" : ""} /></label>
+             </div>
+             <div class="msg">Intervals, ease and lapses come across, so nothing you have learned starts again from zero.</div>`
+          : `<div class="msg">This export has no review history in it — a plain-text export never does. Every word starts as new. Export as <code>.apkg</code> instead to keep your scheduling.</div>`
+      }
+      <div id="anki-groups"></div>
+      <div class="row-actions">
+        <button id="anki-go">Import</button>
+        <button id="anki-cancel" class="ghost">Choose another file</button>
+      </div>
+      <div class="msg" id="anki-msg"></div>
+    `;
+
+    const groups = box!.querySelector<HTMLDivElement>("#anki-groups")!;
+    for (const group of source.groups) {
+      const block = document.createElement("details");
+      block.className = "card-panel";
+      block.style.marginTop = "10px";
+      block.open = source.groups.length === 1;
+      const options = (selected: number) =>
+        [`<option value="-1" ${selected < 0 ? "selected" : ""}>— none —</option>`]
+          .concat(
+            group.fieldNames.map(
+              (name, i) =>
+                `<option value="${i}" ${selected === i ? "selected" : ""}>${escapeHtml(name || `Field ${i + 1}`)}</option>`,
+            ),
+          )
+          .join("");
+
+      block.innerHTML = `
+        <summary>
+          <label class="switch-sm" style="display:inline-flex;vertical-align:middle;margin-right:8px">
+            <input type="checkbox" class="anki-include" ${group.include ? "checked" : ""} />
+          </label>
+          ${escapeHtml(group.name)} — ${group.notes.length.toLocaleString()} notes
+        </summary>
+        <div class="settings-grid">
+          ${roles
+            .map(
+              ([role, label]) =>
+                `<label for="anki-${group.key}-${role}">${label}</label>
+                 <select id="anki-${group.key}-${role}" data-role="${role}">${options(group.mapping[role])}</select>`,
+            )
+            .join("")}
+        </div>
+        <div class="msg">Preview</div>
+        <div class="preview"></div>
+      `;
+
+      const preview = block.querySelector<HTMLDivElement>(".preview")!;
+      const drawPreview = () => {
+        const cards = anki!.cardsFor(source!, group, keepScheduling).slice(0, 3);
+        preview.innerHTML =
+          cards.length === 0
+            ? `<div class="msg error">Nothing would be imported — check which field holds the word.</div>`
+            : cards
+                .map(
+                  (card) => `
+                    <div class="word-row">
+                      <div class="word">
+                        <div><b>${escapeHtml(card.term)}</b>${card.reading ? ` <span class="glosses">${escapeHtml(card.reading)}</span>` : ""}</div>
+                        <div class="glosses">${escapeHtml(card.glosses.join("; ")) || "(no meaning)"}</div>
+                        ${card.sentence ? `<div class="glosses">${escapeHtml(card.sentence)}</div>` : ""}
+                      </div>
+                      <div class="due">${escapeHtml(card.state)}${card.state === "review" ? ` ${card.intervalDays}d` : ""}</div>
+                    </div>`,
+                )
+                .join("");
+      };
+
+      block.querySelector<HTMLInputElement>(".anki-include")!.addEventListener("change", (ev) => {
+        group.include = (ev.target as HTMLInputElement).checked;
+      });
+      for (const select of block.querySelectorAll<HTMLSelectElement>("select")) {
+        select.addEventListener("change", () => {
+          group.mapping[select.dataset.role as keyof FieldMapping] = Number(select.value);
+          drawPreview();
+        });
+      }
+
+      groups.appendChild(block);
+      drawPreview();
+    }
+
+    box!.querySelector<HTMLInputElement>("#anki-sched")?.addEventListener("change", (ev) => {
+      keepScheduling = (ev.target as HTMLInputElement).checked;
+      drawMapping();
+    });
+    box!.querySelector<HTMLButtonElement>("#anki-cancel")!.addEventListener("click", () => {
+      source = null;
+      drawChooser();
+    });
+
+    const msg = box!.querySelector<HTMLDivElement>("#anki-msg")!;
+    const go = box!.querySelector<HTMLButtonElement>("#anki-go")!;
+    go.addEventListener("click", async () => {
+      if (!source) return;
+      go.disabled = true;
+      msg.textContent = "Importing…";
+      msg.className = "msg";
+      try {
+        const result = await anki!.importAnki(source, keepScheduling);
+        const parts = [`Added ${result.added.toLocaleString()} of ${result.total.toLocaleString()} words`];
+        if (result.added < result.total) parts.push("the rest were already in your deck");
+        if (result.withScheduling > 0) {
+          parts.push(`${result.withScheduling.toLocaleString()} kept their review history`);
+        }
+        if (result.suspended > 0) {
+          parts.push(`${result.suspended.toLocaleString()} were suspended in Anki and are marked as leeches`);
+        }
+        if (result.implausible > 0) {
+          parts.push(`${result.implausible.toLocaleString()} had a due date far in the future and may need rescheduling`);
+        }
+        source = null;
+        drawChooser(`${parts.join("; ")}.`, "ok");
+        toast(`Imported ${result.added.toLocaleString()} words from Anki`);
+      } catch (err) {
+        msg.textContent = err instanceof Error ? err.message : String(err);
+        msg.className = "msg error";
+        go.disabled = false;
+      }
+    });
+  }
+
+  drawChooser();
 }
 
 /**

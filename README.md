@@ -227,10 +227,48 @@ it. That permission is optional and asked for there rather than required up
 front, because a required one would make browsers hold the extension for
 re-approval on every update.
 
+## Bringing a deck over from Anki
+
+**Settings → Import from Anki.** In Anki, **File → Export**:
+
+- **Anki Deck Package (`.apkg`)** — brings the words *and* your review
+  history. A card on a four-month interval arrives on a four-month interval,
+  with its ease, rep count and lapses. Tick **Support older Anki versions** in
+  the export dialog: recent Anki compresses the collection with zstd, which
+  browsers have no decompressor for. Media is ignored, so a huge collection
+  imports without needing to fit in memory.
+- **Notes in Plain Text (`.txt`)** — the words only. There is no scheduling in
+  that format to lose, and it always works.
+
+Yomeyo guesses which of your note type's fields is the word, the reading, the
+meaning and the sentence — the common Japanese note types (Core 2k/6k, the
+mining templates, and Japanese-named fields) land right untouched. The guess
+is shown as dropdowns with a preview of the first few cards, so a wrong one is
+obvious before anything is added. Note types you don't want can be switched
+off, and each is mapped separately.
+
+Furigana written into the expression field (`水臭[みずくさ]い`) is split into
+the word and its reading. Fields are HTML, so a meaning laid out as a list
+becomes separate glosses. Notes with an empty word field are skipped, and
+words already in your deck are not added twice — importing the same file again
+adds nothing, so you can move over gradually. Cards suspended in Anki arrive
+marked as leeches, which **Settings → Scheduling → Leech action** can be told
+to suspend.
+
 ## Accounts and cloud sync (Firebase)
 
 Your deck works with no account at all — it lives in the browser on each
-device. Signing in adds backup and keeps devices in step.
+device. Signing in adds backup, keeps devices in step, and gives each account
+its own deck, settings and daily counts, so more than one person can share a
+browser without seeing each other's words. Signing out puts an account's deck
+away and brings back the one kept for nobody in particular.
+
+The first account to sign in on a device takes over whatever was mined before
+signing in — moved, not copied, so the same word does not end up in two decks
+drifting apart. Afterwards each account starts empty and fills from its own
+cloud. A few things stay device-wide because they are not anyone's in
+particular: the Firebase config (you need it *in order to* sign in), the
+extension's handover secret, imported dictionaries, and downloaded audio.
 
 ### Setting up your Firebase project (once)
 
@@ -341,7 +379,7 @@ a fresh clone.
 ## Repository layout
 
 ```
-packages/core       lookup + deinflection + SRS scheduler + sync engine (shared)
+packages/core       lookup + deinflection + SRS scheduler + sync + Anki reader
 apps/web            the installable PWA (Vite, vanilla TS, IndexedDB, Firebase)
 apps/extension      the MV3 browser extension, built for Chromium and Gecko
 apps/sync-server    zero-dependency Node sync server (Firebase alternative)
@@ -391,6 +429,28 @@ firestore.rules     Firestore security rules — each deck is private to its own
   bucketed by codepoint so opening one character fetches ~100 KB rather than
   every stroke in the set. The animation drives a dash offset along each
   stroke path in order.
+- **Anki import** (`packages/core/src/anki.ts`, `sqlite.ts`, `zip.ts`): an
+  `.apkg` is a ZIP holding a SQLite collection. Reading it the usual way means
+  shipping SQLite compiled to WebAssembly — about a megabyte, downloaded by
+  everyone, to read a file most people open once. What is actually needed is a
+  full table scan of three tables, which is the file format's simplest path:
+  walk the b-tree, decode each row. That is ~200 lines, including the overflow
+  pages long fields spill onto. It is tested against databases written by
+  Node's own SQLite rather than by this repository, so a bug here cannot agree
+  with itself. Reading 25,000 notes takes about 0.4 s.
+
+  The ZIP side never holds the whole file: it reads the index at the end, then
+  the bytes of the one entry it wants. Media in a mined collection can run
+  past a gigabyte, and on a phone that is the difference between importing a
+  deck and running out of memory. Inflating is
+  `DecompressionStream("deflate-raw")`, which is exactly what a ZIP stores.
+- **Accounts** (`apps/web/src/accounts.ts`, `db.ts`): one IndexedDB database
+  per account, named after its uid; the signed-out deck keeps the original
+  name, so a deck mined before accounts existed is where it always was. Which
+  account is in use is itself stored in IndexedDB rather than localStorage,
+  because `sync.html` — the drop box the extension hands saved words to — has
+  to read it from inside a frame on someone else's page, and only IndexedDB is
+  known to reach the app's real storage from there.
 - **Sync** (`packages/core/src/sync.ts`): one engine behind a `SyncBackend`
   interface, so Firestore and the self-hosted server share the same
   push/pull/merge logic. The local IndexedDB deck is always the read path —

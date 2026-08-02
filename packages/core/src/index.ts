@@ -21,6 +21,15 @@ export {
   type BinaryDictSource,
 } from "./dict-binary.js";
 export * from "./kanji.js";
+export * from "./anki.js";
+export {
+  openZip,
+  openZipRanged,
+  type ByteRangeReader,
+  type ZipArchive,
+  type ZipEntry,
+} from "./zip.js";
+export { SqliteFile, columnsOf, type SqlRow, type SqlValue } from "./sqlite.js";
 export * from "./fsrs.js";
 export * from "./deck-config.js";
 export * from "./audio-sources.js";
