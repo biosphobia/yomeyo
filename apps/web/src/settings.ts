@@ -9,6 +9,7 @@ import {
   validateConfig,
   type AccountInfo,
 } from "./cloud.js";
+import { signedOutDeckAdoptable } from "./accounts.js";
 import { formatSteps, parseFsrsWeights, parseSteps, type AudioSourceConfig } from "@yomeyo/core";
 import { getAudioConfig, saveAudioConfig, testAudioConfig } from "./audio.js";
 import { toast } from "./toast.js";
@@ -43,6 +44,7 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
       accountError = err instanceof Error ? err.message : String(err);
     }
   }
+  const adoptable = !account && (await signedOutDeckAdoptable());
   if (!isCurrent()) return; // a newer render has taken over
 
   main.innerHTML = `
@@ -158,7 +160,13 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
 
     if (!account) {
       body.innerHTML = `
-        <div class="msg">Project <b>${escapeHtml(config.projectId)}</b>. Sign in to back up this deck and sync it between devices.</div>
+        <div class="msg">Project <b>${escapeHtml(config.projectId)}</b>. Sign in to back up your deck, sync it
+        between devices, and keep it separate from anyone else using this browser.
+        ${
+          adoptable
+            ? "The words already saved here come with you the first time you sign in."
+            : ""
+        }</div>
         <div class="row-actions"><button id="google-btn">Sign in with Google</button></div>
         <details>
           <summary>or use an email address</summary>
@@ -219,6 +227,12 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
     body.innerHTML = `
       <div class="msg ok">Signed in as <b>${escapeHtml(account.displayName || account.email || account.uid)}</b>
       (project ${escapeHtml(config.projectId)}).</div>
+      <div class="msg">
+        The deck, scheduling settings and daily counts on this device belong to
+        this account alone. Signing out puts them away and brings back the deck
+        kept for nobody in particular, so more than one person can share this
+        browser without seeing each other's words.
+      </div>
       <div class="row-actions">
         <button id="cloud-sync">Sync now</button>
         <button id="cloud-out" class="secondary">Sign out</button>

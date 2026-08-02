@@ -1,5 +1,6 @@
 import type { Card, SyncBackend } from "@yomeyo/core";
 import { getMeta, setMeta } from "./db.js";
+import { useAccount } from "./accounts.js";
 
 /**
  * Firebase accounts + cloud storage.
@@ -100,18 +101,21 @@ async function load(): Promise<Loaded> {
     const auth = authApi.getAuth(app);
     const db = storeApi.getFirestore(app);
 
-    // Survive reloads and app restarts without asking to sign in again.
-    await authApi.setPersistence(auth, authApi.browserLocalPersistence).catch(() => {
-      /* falls back to the default persistence */
-    });
-
-    // Point at local emulators when running the test harness.
+    // Point at local emulators when running the test harness. This has to
+    // come before anything else touches auth — Firebase resolves the stored
+    // session on first use, and doing that against the wrong endpoint loses
+    // it, which looks exactly like being signed out on every reload.
     const emulator = import.meta.env.VITE_FIREBASE_EMULATOR;
     if (emulator) {
       const [host, authPort, storePort] = String(emulator).split(":");
       authApi.connectAuthEmulator(auth, `http://${host}:${authPort}`, { disableWarnings: true });
       storeApi.connectFirestoreEmulator(db, host, Number(storePort));
     }
+
+    // Survive reloads and app restarts without asking to sign in again.
+    await authApi.setPersistence(auth, authApi.browserLocalPersistence).catch(() => {
+      /* falls back to the default persistence */
+    });
 
     return { auth, db, mod: { authApi, storeApi } };
   })().catch((err) => {
@@ -127,9 +131,26 @@ function toAccount(user: any): AccountInfo {
   return { uid: user.uid, email: user.email ?? null, displayName: user.displayName ?? null };
 }
 
+/**
+ * Every route into this module that learns who is signed in ends here.
+ *
+ * Local storage is per account, so knowing the account and pointing storage
+ * at it must not be two steps a caller can get half right — a sign-in that
+ * forgot the second step would show the previous person's deck, and a
+ * sign-out that forgot it would leave a deck on screen that is no longer
+ * anyone's. Doing it here means there is one place to get it right.
+ */
+async function adopt(user: any | null): Promise<AccountInfo | null> {
+  const account = user ? toAccount(user) : null;
+  await useAccount(account);
+  return account;
+}
+
 /** Current account, or null. Resolves once Firebase has restored the session. */
 export async function currentAccount(): Promise<AccountInfo | null> {
   const config = await getFirebaseConfig();
+  // Without a project there is nothing to ask, and nothing to correct: the
+  // remembered account stays in use so its deck is still readable offline.
   if (!config) return null;
   const { auth, mod } = await load();
   const user = await new Promise<any>((resolve) => {
@@ -138,7 +159,9 @@ export async function currentAccount(): Promise<AccountInfo | null> {
       resolve(u);
     });
   });
-  return user ? toAccount(user) : null;
+  // This is also the reconcile: if the session expired or was ended in
+  // another tab, storage follows it back to the signed-out deck.
+  return adopt(user);
 }
 
 /**
@@ -175,7 +198,7 @@ export async function signInWithGoogle(): Promise<AccountInfo> {
 
   try {
     const credential = await mod.authApi.signInWithPopup(auth, provider);
-    return toAccount(credential.user);
+    return (await adopt(credential.user))!;
   } catch (err: any) {
     // Some mobile browsers block popups even in a tab; redirect works there.
     const code = err?.code ?? "";
@@ -252,7 +275,7 @@ export async function completeRedirectSignIn(): Promise<AccountInfo | null> {
   try {
     const { auth, mod } = await load();
     const result = await mod.authApi.getRedirectResult(auth);
-    if (result?.user) return toAccount(result.user);
+    if (result?.user) return adopt(result.user);
     // No result, but the session may still have been restored from the
     // redirect — ask before giving up, or the user sees no sign of success.
     const user = await new Promise<any>((resolve) => {
@@ -261,7 +284,7 @@ export async function completeRedirectSignIn(): Promise<AccountInfo | null> {
         resolve(u);
       });
     });
-    return user ? toAccount(user) : null;
+    return user ? adopt(user) : null;
   } catch {
     return null;
   } finally {
@@ -273,13 +296,13 @@ export async function signInWithEmail(email: string, password: string): Promise<
   const { auth, mod } = await load();
   try {
     const credential = await mod.authApi.signInWithEmailAndPassword(auth, email, password);
-    return toAccount(credential.user);
+    return (await adopt(credential.user))!;
   } catch (err: any) {
     // Treat a missing account as a sign-up, so there is one button not two.
     if (err?.code === "auth/user-not-found" || err?.code === "auth/invalid-credential") {
       try {
         const created = await mod.authApi.createUserWithEmailAndPassword(auth, email, password);
-        return toAccount(created.user);
+        return (await adopt(created.user))!;
       } catch (createErr: any) {
         throw new Error(friendlyAuthError(createErr));
       }
@@ -291,7 +314,10 @@ export async function signInWithEmail(email: string, password: string): Promise<
 export async function signOut(): Promise<void> {
   const { auth, mod } = await load();
   await mod.authApi.signOut(auth);
-  await setMeta("cloudCursor", 0);
+  // The sync cursor is left alone: it belongs to this account's own database,
+  // which nobody else will read, so signing back in resumes where it left off
+  // instead of downloading the whole deck again.
+  await useAccount(null);
 }
 
 function friendlyAuthError(err: any): string {

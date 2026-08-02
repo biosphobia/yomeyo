@@ -10,7 +10,7 @@ import {
   type DictEntry,
   type Dictionary,
 } from "@yomeyo/core";
-import { getMeta, setMeta } from "./db.js";
+import { getMeta, onAccountChange, setMeta } from "./db.js";
 
 /**
  * Extra dictionaries alongside the built-in JMdict English one.
@@ -113,6 +113,12 @@ export async function removeDictionary(id: string): Promise<void> {
 // ---------------- lookup wiring ----------------
 
 let combinedCache: Promise<Dictionary> | null = null;
+
+// Imported dictionaries are stored per account, so the combined view has to
+// be rebuilt when the account changes.
+onAccountChange(() => {
+  combinedCache = null;
+});
 
 /**
  * Open a stored extra dictionary.

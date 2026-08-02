@@ -1,5 +1,6 @@
 import { cardKey, mergeCards, type Card } from "@yomeyo/core";
 import { getAllCards, getMeta, putCards, type StoredCard } from "./db.js";
+import { restoreAccount } from "./accounts.js";
 
 /**
  * A drop box for words saved with the extension, on the app's own origin.
@@ -23,6 +24,11 @@ import { getAllCards, getMeta, putCards, type StoredCard } from "./db.js";
 const FROM_EXTENSION = "yomeyo-extension";
 const FROM_FRAME = "yomeyo-sync-frame";
 const TOKEN_KEY = "extensionToken";
+
+// Words have to land in the deck of whoever is signed in — this page shares
+// the app's storage but not its startup, so it has to be said here too. The
+// handover below waits on it rather than racing it.
+const accountReady = restoreAccount();
 
 /**
  * Proving that the extension, and not some website, is handing words over.
@@ -102,17 +108,19 @@ window.addEventListener("message", (ev: MessageEvent) => {
   if (data?.source !== FROM_EXTENSION || data.type !== "cards" || !Array.isArray(data.cards)) return;
 
   const offered = data.cards.filter(looksLikeCard).slice(0, MAX_CARDS);
-  void tokenMatches(data.token).then((allowed) => {
-    if (!allowed) return; // not the extension; say nothing at all
-    if (offered.length === 0) {
-      reply("stored", { ids: [], added: 0 });
-      return;
-    }
-    void receive(offered).then(
-      (added) => reply("stored", { ids: offered.map((c) => c.id), added }),
-      (err) => reply("failed", { error: err instanceof Error ? err.message : String(err) }),
-    );
-  });
+  void accountReady
+    .then(() => tokenMatches(data.token))
+    .then((allowed) => {
+      if (!allowed) return; // not the extension; say nothing at all
+      if (offered.length === 0) {
+        reply("stored", { ids: [], added: 0 });
+        return;
+      }
+      void receive(offered).then(
+        (added) => reply("stored", { ids: offered.map((c) => c.id), added }),
+        (err) => reply("failed", { error: err instanceof Error ? err.message : String(err) }),
+      );
+    });
 });
 
 reply("ready");

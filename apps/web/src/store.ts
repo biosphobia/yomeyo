@@ -12,7 +12,15 @@ import {
 } from "@yomeyo/core";
 import { combineWith, resetCombined } from "./dictionaries.js";
 import { loadDictBytes } from "./dict-bytes.js";
-import { getAllCards, getMeta, putCard, putCards, setMeta, type StoredCard } from "./db.js";
+import {
+  getAllCards,
+  getMeta,
+  onAccountChange,
+  putCard,
+  putCards,
+  setMeta,
+  type StoredCard,
+} from "./db.js";
 import { firestoreBackend, getFirebaseConfig } from "./cloud.js";
 
 /** App-wide state: dictionary + cards, loaded once, mutated through here. */
@@ -75,6 +83,14 @@ export function dictionaryLoaded(): boolean {
 }
 
 let cardsCache: Map<string, StoredCard> | null = null;
+
+// The deck, the review counters and the settings all belong to whoever is
+// signed in. Anything remembered from the previous account has to go, or the
+// screen keeps showing a deck that is no longer in front of it.
+onAccountChange(() => {
+  cardsCache = null;
+  resetCombined();
+});
 
 export async function loadCards(): Promise<Map<string, StoredCard>> {
   if (cardsCache) return cardsCache;

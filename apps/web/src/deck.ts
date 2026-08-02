@@ -1,5 +1,5 @@
 import { DEFAULT_DECK_CONFIG, type DeckConfig } from "@yomeyo/core";
-import { getMeta, setMeta } from "./db.js";
+import { getMeta, setMeta, onAccountChange } from "./db.js";
 
 /**
  * Deck options, and the per-day counters the daily limits need.
@@ -12,6 +12,11 @@ const CONFIG_KEY = "deckConfig";
 const COUNTS_KEY = "dailyCounts";
 
 let cached: DeckConfig | null = null;
+
+// Deck options belong to the account, not the browser.
+onAccountChange(() => {
+  cached = null;
+});
 
 export async function getDeckConfig(): Promise<DeckConfig> {
   if (!cached) {

@@ -7,10 +7,17 @@ import { renderSettings } from "./settings.js";
 import { closePopup } from "./popup.js";
 import { consumeHandoff, showHandoffToast } from "./handoff.js";
 import { listenForExtensionCards } from "./extension-bridge.js";
-import { completeRedirectSignIn } from "./cloud.js";
+import { completeRedirectSignIn, currentAccount, getFirebaseConfig } from "./cloud.js";
+import { restoreAccount } from "./accounts.js";
+import { activeAccount, onAccountChange } from "./db.js";
 import { toast } from "./toast.js";
 
 /** Hash-routed SPA shell with a bottom tab bar. */
+
+// Before anything reads storage: point it at whoever was signed in last time,
+// so the first screen is already the right person's deck rather than the
+// previous account's cards replaced a moment later.
+await restoreAccount();
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 app.innerHTML = `
@@ -100,6 +107,26 @@ if (sharedText) location.hash = "#reader";
 
 await routeWithHandoff();
 
+// Signing in or out changes which deck, settings and daily counts are in
+// front of you, so whatever is on screen is about to be wrong.
+onAccountChange(() => route());
+
+/**
+ * Check the remembered account against the real session, once, in the
+ * background.
+ *
+ * The account is remembered locally so the first screen needs no network and
+ * no Firebase download. That memory can go stale — the session may have
+ * expired, or been signed out in another tab — so it is confirmed afterwards,
+ * where a slow answer costs nothing. Only for someone who has actually signed
+ * in: everyone else must never pay for the SDK.
+ */
+if (activeAccount()) {
+  void (async () => {
+    if (await getFirebaseConfig()) await currentAccount().catch(() => null);
+  })();
+}
+
 // Words saved by the extension arrive on their own whenever the app is open,
 // so there is nothing for the user to press.
 listenForExtensionCards(
@@ -116,9 +143,10 @@ listenForExtensionCards(
 );
 
 // Google sign-in falls back to a redirect on mobile and in installed PWAs,
-// which lands back here; completing it updates Settings on the next render.
+// which lands back here; completing it switches to that account's deck, and
+// the listener above redraws.
 void completeRedirectSignIn().then((account) => {
-  if (account && location.hash.replace("#", "") === "settings") route();
+  if (account) toast(`Signed in as ${account.displayName || account.email || "your account"}.`);
 });
 
 // PWA service worker (production builds only; Vite dev serves from memory).
