@@ -106,6 +106,27 @@ export async function saveCard(card: Card): Promise<void> {
   await putCard(stored);
 }
 
+/**
+ * Mark cards deleted, rather than removing them.
+ *
+ * A card that simply vanished locally would come straight back on the next
+ * sync from another device, so a deletion has to be a change like any other.
+ */
+export async function deleteCards(toDelete: Card[]): Promise<number> {
+  if (toDelete.length === 0) return 0;
+  const cards = await loadCards();
+  const now = Date.now();
+  const stored: StoredCard[] = toDelete.map((card) => ({
+    ...card,
+    deleted: true,
+    updatedAt: now,
+    dirty: true,
+  }));
+  for (const card of stored) cards.set(card.id, card);
+  await putCards(stored);
+  return stored.length;
+}
+
 export type SaveOutcome = "saved" | "duplicate";
 
 /**

@@ -10,6 +10,9 @@ import {
   type ImportSummary,
 } from "@yomeyo/core";
 import { importCards } from "./store.js";
+import { putCards } from "./db.js";
+import { cardsInDeck, forgetDeck, rememberDeck } from "./my-decks.js";
+import type { AccountInfo } from "./cloud.js";
 
 /**
  * Bringing a deck over from Anki.
@@ -146,21 +149,84 @@ export function cardsFor(source: AnkiSource, group: AnkiGroup, keepScheduling: b
 export interface AnkiImportResult extends ImportSummary {
   /** Cards actually added; the rest were already in the deck. */
   added: number;
+  /** The deck the words went into, so it can be shared or removed later. */
+  deckId: string;
 }
 
 /**
- * Import every included group.
+ * Import every included group as one premade deck.
+ *
+ * A whole vocabulary list is its own deck rather than a pile of words added
+ * to the mined ones: the two are different things — one you chose to study,
+ * one you met while reading — and keeping them apart is what lets a premade
+ * deck be shared, or removed again, without touching your own words.
  *
  * The cards go through the same door as everything else, so a word already in
  * the deck is not duplicated — someone moving over gradually can import the
  * same deck twice and end up with one copy of each word.
  */
-export async function importAnki(source: AnkiSource, keepScheduling: boolean): Promise<AnkiImportResult> {
+export async function importAnki(
+  source: AnkiSource,
+  keepScheduling: boolean,
+  deckName: string,
+): Promise<AnkiImportResult> {
+  const deckId = `local-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const cards: Card[] = [];
   for (const group of source.groups) {
     if (!group.include) continue;
-    cards.push(...cardsFor(source, group, keepScheduling));
+    for (const card of cardsFor(source, group, keepScheduling)) {
+      cards.push({ ...card, deckId });
+    }
   }
   const added = await importCards(cards);
-  return { ...summarise(cards), added };
+  await rememberDeck({
+    id: deckId,
+    name: deckName,
+    kind: "premade",
+    cardCount: cards.length,
+    source: source.fileName,
+  });
+  return { ...summarise(cards), added, deckId };
+}
+
+/**
+ * Put an imported deck in the shared library.
+ *
+ * Done after the import rather than as part of it: if the library is
+ * unreachable the words are already safely in the deck, and the deck can be
+ * shared later instead of the whole import failing.
+ *
+ * The deck is re-created under a library id, because a deck's id says who
+ * published it — that is what lets the security rules decide who may change
+ * it without reading the deck first. So the local cards are moved to the new
+ * id at the same time, and the two stay the same deck.
+ */
+export async function shareDeck(
+  account: AccountInfo,
+  localDeckId: string,
+  name: string,
+  fileName: string,
+): Promise<string> {
+  const { publishDeck } = await import("./library.js");
+  const cards = await cardsInDeck(localDeckId);
+  if (cards.length === 0) throw new Error("that deck has no words in it");
+
+  const published = await publishDeck(account, cards, { name, source: fileName });
+
+  // Re-file the local cards under the library's id, so adding the deck
+  // elsewhere and having it here are recognisably the same deck.
+  await putCards(cards.map((card) => ({ ...card, deckId: published.id, dirty: true })));
+  await forgetDeck(localDeckId);
+  await rememberDeck({
+    id: published.id,
+    name,
+    kind: "premade",
+    cardCount: cards.length,
+    source: fileName,
+    ownerUid: account.uid,
+    ownerName: published.ownerName,
+    publishedAt: published.publishedAt,
+    shared: true,
+  });
+  return published.id;
 }

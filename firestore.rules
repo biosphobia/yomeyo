@@ -2,9 +2,18 @@ rules_version = '2';
 
 // Yomeyo Firestore rules.
 //
-// A deck belongs to exactly one account. Nobody — signed in or not — can read
-// or write anyone else's cards, and there is no collection-group escape hatch
-// because nothing outside users/{uid} is readable at all.
+// Two quite different things live here.
+//
+// A **mining deck** belongs to exactly one account. Nobody — signed in or not
+// — can read or write anyone else's cards.
+//
+// The **shared library** of premade decks is the opposite: anyone signed in
+// can read every deck in it, because that is the point. Writing is limited to
+// the account that published a deck, which is decided by the deck's own id:
+// ids begin with the publisher's uid, so ownership can be checked from the
+// path without reading the deck first. A published deck carries the words
+// only — no scheduling, so nothing about anyone's review history is exposed
+// by publishing.
 //
 // Deploy with:  firebase deploy --only firestore:rules
 
@@ -26,10 +35,56 @@ service cloud.firestore {
         allow create, update: if isOwner(userId) && isValidCard();
       }
     }
+
+    // The shared library of premade decks.
+    match /decks/{deckId} {
+      allow read: if request.auth != null;
+      allow create: if publishedByCaller(deckId) && isValidDeck();
+      allow update: if publishedByCaller(deckId) && isValidDeck();
+      allow delete: if publishedByCaller(deckId);
+
+      // The cards, in compressed blocks. Same owner, same rule.
+      match /blocks/{blockId} {
+        allow read: if request.auth != null;
+        allow create, update: if publishedByCaller(deckId) && isValidBlock();
+        allow delete: if publishedByCaller(deckId);
+      }
+    }
   }
 
   function isOwner(userId) {
     return request.auth != null && request.auth.uid == userId;
+  }
+
+  // A deck's id starts with the uid of whoever published it, so who may
+  // change it is readable from the path — no lookup, and no way to publish
+  // under somebody else's name.
+  function publishedByCaller(deckId) {
+    return request.auth != null && deckId.split('__')[0] == request.auth.uid;
+  }
+
+  function isValidDeck() {
+    let deck = request.resource.data;
+    return deck.keys().hasAll(['name', 'cardCount', 'blockCount', 'ownerUid', 'publishedAt'])
+      && deck.ownerUid == request.auth.uid
+      && deck.name is string
+      && deck.name.size() > 0
+      && deck.name.size() <= 120
+      && deck.cardCount is int
+      && deck.cardCount > 0
+      // A cap, so one account cannot fill the library with a huge deck.
+      && deck.cardCount <= 100000
+      && deck.blockCount is int
+      && deck.blockCount > 0
+      && deck.blockCount <= 200
+      // Written by the server, so the ordering of the library cannot be gamed.
+      && deck.publishedAt == request.time;
+  }
+
+  function isValidBlock() {
+    return request.resource.data.keys().hasOnly(['data'])
+      && request.resource.data.data is string
+      && request.resource.data.data.size() > 0;
   }
 
   // Keep obviously malformed writes out of the deck. This is a shape check,

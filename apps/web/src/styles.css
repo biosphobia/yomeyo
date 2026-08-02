@@ -726,3 +726,42 @@ label {
   border-color: var(--bad);
   color: var(--bad);
 }
+
+/* Two-way switch inside a screen (Decks: premade vs. mine). Six tabs already
+   sit along the bottom, and a seventh would leave each one too narrow to
+   hit — a switch within the screen costs nothing there. */
+.segmented {
+  display: flex;
+  gap: 4px;
+  background: var(--panel);
+  border: 1px solid #ffffff10;
+  border-radius: var(--radius);
+  padding: 4px;
+  margin-bottom: 14px;
+}
+
+.segmented button {
+  flex: 1;
+  background: transparent;
+  color: var(--muted);
+  border: 0;
+  padding: 10px 8px;
+  border-radius: calc(var(--radius) - 6px);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.segmented button.on {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+}
+
+/* Six tabs on a narrow phone: let the labels shrink rather than wrap. */
+@media (max-width: 400px) {
+  nav a {
+    font-size: 0.68rem;
+  }
+  nav a .icon {
+    font-size: 1.15rem;
+  }
+}

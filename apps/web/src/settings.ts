@@ -12,6 +12,7 @@ import {
 import { signedOutDeckAdoptable } from "./accounts.js";
 import type { AnkiSource } from "./anki-import.js";
 import {
+  deckNameFromFile,
   formatSteps,
   parseFsrsWeights,
   parseSteps,
@@ -117,7 +118,7 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
   renderAccount();
   void renderDeckConfig(main);
   void renderAudioConfig(main);
-  renderAnkiImport(main);
+  renderAnkiImport(main, account);
   wireDictionary(main);
   void renderExtraDictionaries(main);
   wireServerSync(main);
@@ -358,12 +359,14 @@ async function renderAudioConfig(main: HTMLElement): Promise<void> {
  * decided. So the guess is made, shown, and left editable, with a preview of
  * the first few cards so a wrong guess is obvious before anything is added.
  */
-function renderAnkiImport(main: HTMLElement): void {
+function renderAnkiImport(main: HTMLElement, account: AccountInfo | null): void {
   const box = main.querySelector<HTMLDivElement>("#anki-import");
   if (!box) return;
 
   let source: AnkiSource | null = null;
   let keepScheduling = true;
+  let deckName = "";
+  let share = true;
 
   // The reader carries a ZIP inflater and a SQLite parser. Almost nobody
   // opens this panel on any given visit, and sync.html — loaded in the
@@ -398,6 +401,7 @@ function renderAnkiImport(main: HTMLElement): void {
         anki ??= await import("./anki-import.js");
         source = await anki.readAnkiFile(file);
         keepScheduling = source.hasScheduling;
+        deckName = deckNameFromFile(file.name);
         drawMapping();
       } catch (err) {
         msg.textContent = err instanceof Error ? err.message : String(err);
@@ -421,6 +425,8 @@ function renderAnkiImport(main: HTMLElement): void {
         <b>${escapeHtml(source.fileName)}</b> — ${total.toLocaleString()} note${total === 1 ? "" : "s"}
         across ${source.groups.length} note type${source.groups.length === 1 ? "" : "s"}.
       </div>
+      <label for="anki-name">Deck name</label>
+      <input type="text" id="anki-name" value="${escapeAttr(deckName)}" placeholder="Core 2k" />
       ${
         source.hasScheduling
           ? `<div class="settings-grid">
@@ -430,6 +436,11 @@ function renderAnkiImport(main: HTMLElement): void {
              <div class="msg">Intervals, ease and lapses come across, so nothing you have learned starts again from zero.</div>`
           : `<div class="msg">This export has no review history in it — a plain-text export never does. Every word starts as new. Export as <code>.apkg</code> instead to keep your scheduling.</div>`
       }
+      <div class="settings-grid">
+        <label for="anki-share">Share with everyone</label>
+        <label class="switch-sm"><input type="checkbox" id="anki-share" ${share ? "checked" : ""} /></label>
+      </div>
+      <div class="msg" id="anki-share-note"></div>
       <div id="anki-groups"></div>
       <div class="row-actions">
         <button id="anki-go">Import</button>
@@ -518,6 +529,39 @@ function renderAnkiImport(main: HTMLElement): void {
       drawChooser();
     });
 
+    const nameField = box!.querySelector<HTMLInputElement>("#anki-name")!;
+    nameField.addEventListener("input", () => {
+      deckName = nameField.value;
+    });
+
+    const shareBox = box!.querySelector<HTMLInputElement>("#anki-share")!;
+    const shareNote = box!.querySelector<HTMLDivElement>("#anki-share-note")!;
+    const drawShareNote = (): void => {
+      if (!account) {
+        shareNote.className = "msg";
+        shareNote.innerHTML =
+          "Sharing needs an account, so the deck has someone's name on it — sign in above. " +
+          "Without one the deck is imported for you alone.";
+        return;
+      }
+      shareNote.className = "msg";
+      shareNote.innerHTML = share
+        ? `This deck will be listed under <b>Decks → Premade</b> for everyone, so nobody
+           else has to find the file. The <b>words</b> are shared — not your review
+           history, and not the words you mined yourself. You can withdraw it later from
+           the Decks screen. <b>Don't share a deck that is really your private
+           collection.</b>`
+        : "The deck is imported for you alone and stays on your account.";
+    };
+    shareBox.disabled = !account;
+    if (!account) share = false;
+    shareBox.checked = share;
+    shareBox.addEventListener("change", () => {
+      share = shareBox.checked;
+      drawShareNote();
+    });
+    drawShareNote();
+
     const msg = box!.querySelector<HTMLDivElement>("#anki-msg")!;
     const go = box!.querySelector<HTMLButtonElement>("#anki-go")!;
     go.addEventListener("click", async () => {
@@ -526,7 +570,8 @@ function renderAnkiImport(main: HTMLElement): void {
       msg.textContent = "Importing…";
       msg.className = "msg";
       try {
-        const result = await anki!.importAnki(source, keepScheduling);
+        const name = deckName.trim() || "Imported deck";
+        const result = await anki!.importAnki(source, keepScheduling, name);
         const parts = [`Added ${result.added.toLocaleString()} of ${result.total.toLocaleString()} words`];
         if (result.added < result.total) parts.push("the rest were already in your deck");
         if (result.withScheduling > 0) {
@@ -538,6 +583,22 @@ function renderAnkiImport(main: HTMLElement): void {
         if (result.implausible > 0) {
           parts.push(`${result.implausible.toLocaleString()} had a due date far in the future and may need rescheduling`);
         }
+
+        // Publishing after the words are safely in the local deck: if the
+        // library is unreachable the import still stands, and the deck can be
+        // shared later from the Decks screen.
+        if (share && account) {
+          msg.textContent = "Sharing…";
+          try {
+            await anki!.shareDeck(account, result.deckId, name, source.fileName);
+            parts.push("and it is now in the shared library");
+          } catch (err) {
+            parts.push(
+              `but sharing failed (${err instanceof Error ? err.message : String(err)}) — the words are still yours`,
+            );
+          }
+        }
+
         source = null;
         drawChooser(`${parts.join("; ")}.`, "ok");
         toast(`Imported ${result.added.toLocaleString()} words from Anki`);

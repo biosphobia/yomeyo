@@ -71,6 +71,12 @@ export interface Card {
   sentence?: string;
   /** Source URL / page title, if mined from a page. */
   source?: string;
+  /**
+   * Which deck this card belongs to. Absent means the mining deck — the
+   * words you saved yourself — which is where every card was before there
+   * was more than one deck.
+   */
+  deckId?: string;
   createdAt: number;
   /** Last-modified timestamp; drives last-write-wins sync. */
   updatedAt: number;

@@ -341,6 +341,20 @@ function friendlyAuthError(err: any): string {
   return err?.message ?? "Sign-in failed.";
 }
 
+/**
+ * The Firestore handle, for the parts of the app that are not card sync.
+ *
+ * The shared deck library reads and writes a collection of its own, outside
+ * anybody's deck, so it needs the database rather than a `SyncBackend`.
+ */
+export async function firestoreApi(): Promise<{
+  db: any;
+  storeApi: typeof import("firebase/firestore");
+}> {
+  const { db, mod } = await load();
+  return { db, storeApi: mod.storeApi };
+}
+
 // ---------------- Firestore as a sync backend ----------------
 
 /**

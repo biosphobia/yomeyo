@@ -227,6 +227,32 @@ it. That permission is optional and asked for there rather than required up
 front, because a required one would make browsers hold the extension for
 re-approval on every update.
 
+## Decks
+
+Two kinds, and the **Decks** tab has both:
+
+- **Mined words** — what you saved yourself, tapping words while reading.
+  Personal, on your account, never shared.
+- **Premade decks** — whole vocabulary lists somebody imported from Anki:
+  Core 2k, a JLPT list, the words from a particular novel.
+
+Premade decks are shared. Finding the file, getting it out of Anki and mapping
+its fields is work, and it is the same work for everyone — so the first person
+to do it publishes the result, and everyone after them adds the deck from
+**Decks → Premade** with one tap and no file at all.
+
+What gets shared is the **words only**: the term, reading, meanings and
+example sentence. Not your review history — intervals and ease describe how
+well *you* know a word — and never your mined deck. Whoever adds a premade
+deck starts it as new, which is what they want anyway.
+
+Decks can be removed again (the words go with them, the deck stays in the
+library), and a deck you published can be withdrawn from **Decks → Mine**.
+
+The library needs the same Firebase project as cloud sync, and you have to be
+signed in to see it — decks carry their publisher's name. Without a project,
+Anki import still works; the deck simply stays on your device.
+
 ## Bringing a deck over from Anki
 
 **Settings → Import from Anki.** In Anki, **File → Export**:
@@ -246,6 +272,13 @@ mining templates, and Japanese-named fields) land right untouched. The guess
 is shown as dropdowns with a preview of the first few cards, so a wrong one is
 obvious before anything is added. Note types you don't want can be switched
 off, and each is mapped separately.
+
+An import becomes a deck of its own, named after the file, so it stays
+separate from the words you mined. **Share with everyone** — on by default
+when you are signed in — publishes it to the library described above, after
+the words are safely in your own deck: if the library is unreachable the
+import still stands, and the deck can be shared later from **Decks → Mine**.
+Turn it off for anything that is really your own private collection.
 
 Furigana written into the expression field (`水臭[みずくさ]い`) is split into
 the word and its reading. Fields are HTML, so a meaning laid out as a list
@@ -444,6 +477,22 @@ firestore.rules     Firestore security rules — each deck is private to its own
   past a gigabyte, and on a phone that is the difference between importing a
   deck and running out of memory. Inflating is
   `DecompressionStream("deflate-raw")`, which is exactly what a ZIP stores.
+- **The shared library** (`packages/core/src/deck-library.ts`,
+  `apps/web/src/library.ts`, `firestore.rules`): a deck travels as a handful
+  of gzipped, base64'd blocks rather than a document per card. Firestore holds
+  at most a megabyte per document and Core 6k is several times that, while a
+  write per card would spend a day's free quota on a single deck — six
+  thousand words becomes about two writes and roughly a fifth of the size.
+  Blocks are written before the deck record, so a half-written deck is
+  invisible rather than broken.
+
+  A deck's id begins with its publisher's uid, which is what lets the rules
+  decide who may change it from the path alone — no lookup on every write, and
+  no way to publish under someone else's name. `publishedAt` must be the
+  server's clock, so the top of the list cannot be claimed by backdating.
+  Those rules are tested against the emulator over its REST API with real ID
+  tokens, so nothing in the app's own code stands between the test and the
+  boundary.
 - **Accounts** (`apps/web/src/accounts.ts`, `db.ts`): one IndexedDB database
   per account, named after its uid; the signed-out deck keeps the original
   name, so a deck mined before accounts existed is where it always was. Which
