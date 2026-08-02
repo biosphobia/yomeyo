@@ -2,12 +2,14 @@ import { buildQueue, deckStats, gradeCard, gradePreview, type Card, type DeckCon
 import { liveCards, saveCard } from "./store.js";
 import { clipSpeakerButton, playStoredAudio, playWord, speakerButton } from "./audio.js";
 import { getMedia } from "./media.js";
+import { getAdvancedMode } from "./prefs.js";
 import { getDailyCounts, getDeckConfig, recordReview } from "./deck.js";
 
 /** Review page: daily flashcards, scheduled by FSRS (or SM-2 if switched off). */
 
 export async function renderReview(main: HTMLElement, isCurrent: () => boolean = () => true): Promise<void> {
   const cards = await liveCards();
+  const advanced = await getAdvancedMode();
   if (!isCurrent()) return; // a newer render has taken over
   const now = Date.now();
   const config = await getDeckConfig();
@@ -23,9 +25,12 @@ export async function renderReview(main: HTMLElement, isCurrent: () => boolean =
   main.innerHTML = `
     <h1>Review</h1>
     <p class="subtitle">${
-      config.fsrs
-        ? `FSRS · ${Math.round(config.desiredRetention * 100)}% target retention`
-        : "SM-2 scheduling"
+      // The scheduler's name is jargon anyone in basic mode never chose to see.
+      !advanced
+        ? "Today's flashcards"
+        : config.fsrs
+          ? `FSRS · ${Math.round(config.desiredRetention * 100)}% target retention`
+          : "SM-2 scheduling"
     }</p>
     <div class="stats-row">
       <div class="stat"><div class="num">${queue.length}</div><div class="lbl">to study</div></div>

@@ -69,10 +69,9 @@ async function renderPremade(
     body.innerHTML = `
       <div class="card-panel">
         <div class="msg">
-          Premade decks are shared through the same Firebase project as cloud
-          sync, so this needs one setting up first — see
-          <b>Settings → Account</b>. Without it you can still import Anki decks
-          from a file; they simply stay on this device.
+          Premade decks need cloud sync — set it up under <b>Settings →
+          Account</b>. You can still import Anki decks from a file; they stay
+          on this device.
         </div>
       </div>
     `;
@@ -109,8 +108,7 @@ async function renderPremade(
       <div class="card-panel">
         <div class="empty-state"><div class="big">📦</div>
           No decks shared yet.<br/>
-          Import one from Anki under <b>Settings → Import from Anki</b> and it
-          appears here for everyone.
+          Import one under <b>Settings → Import from Anki</b> to share it.
         </div>
       </div>
     `;

@@ -1,21 +1,27 @@
 import { liveCards, saveCard } from "./store.js";
 import { speakerButton } from "./audio.js";
 import { extensionStatus } from "./extension-bridge.js";
+import { getAdvancedMode } from "./prefs.js";
 
-/** Words page: browse, delete, export/import the deck. */
+/** Words page: browse and delete the deck; JSON export/import in Advanced mode. */
 
 export async function renderWords(main: HTMLElement, isCurrent: () => boolean = () => true): Promise<void> {
   const cards = (await liveCards()).sort((a, b) => b.createdAt - a.createdAt);
+  const advanced = await getAdvancedMode();
   if (!isCurrent()) return; // a newer render has taken over
 
   main.innerHTML = `
     <h1>Words</h1>
     <p class="subtitle">${cards.length} saved word${cards.length === 1 ? "" : "s"}</p>
-    <div class="row-actions" style="margin-bottom:14px">
-      <button id="export-btn" class="secondary">Export JSON</button>
-      <button id="import-btn" class="secondary">Import JSON</button>
-      <input type="file" id="import-file" accept="application/json" style="display:none" />
-    </div>
+    ${
+      advanced
+        ? `<div class="row-actions" style="margin-bottom:14px">
+             <button id="export-btn" class="secondary">Export JSON</button>
+             <button id="import-btn" class="secondary">Import JSON</button>
+             <input type="file" id="import-file" accept="application/json" style="display:none" />
+           </div>`
+        : ""
+    }
     <div id="word-list" class="card-panel" style="padding:6px 14px"></div>
   `;
 
@@ -27,7 +33,7 @@ export async function renderWords(main: HTMLElement, isCurrent: () => boolean = 
     const ext = extensionStatus();
     const aboutExtension = ext.connected
       ? `The browser extension is connected${ext.version ? ` (${escapeHtml(ext.version)})` : ""}. Anything you save with it appears here by itself.`
-      : `Saving with the browser extension? It adds words here by itself. If none have arrived, it is probably an older build — reinstall it, or use <b>Send them now</b> in its toolbar popup.`;
+      : `Using the browser extension? Its words appear here by themselves. If none arrive, reinstall it or press <b>Send them now</b> in its popup.`;
     list.innerHTML = `<div class="empty-state"><div class="big">📖</div>No words yet.<br/>
       Tap words in the Reader to start mining.<br/><br/>
       <span style="font-size:0.85rem;opacity:0.85">${aboutExtension}</span></div>`;
@@ -52,6 +58,8 @@ export async function renderWords(main: HTMLElement, isCurrent: () => boolean = 
     row.querySelector(".word")!.after(speakerButton(card.term, card.reading, card.audio));
     list.appendChild(row);
   }
+
+  if (!advanced) return; // no export/import buttons to wire up
 
   main.querySelector<HTMLButtonElement>("#export-btn")!.addEventListener("click", async () => {
     const data = JSON.stringify(await liveCards(), null, 2);

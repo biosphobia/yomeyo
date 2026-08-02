@@ -20,6 +20,7 @@ import {
   type FieldMapping,
 } from "@yomeyo/core";
 import { getAudioConfig, saveAudioConfig, testAudioConfig } from "./audio.js";
+import { getAdvancedMode, setAdvancedMode } from "./prefs.js";
 import { toast } from "./toast.js";
 import { getDeckConfig, resetDeckConfig, saveDeckConfig } from "./deck.js";
 import {
@@ -41,6 +42,7 @@ import {
 /** Settings page: account + cloud sync, dictionary status, install help. */
 
 export async function renderSettings(main: HTMLElement, isCurrent: () => boolean = () => true): Promise<void> {
+  const advanced = await getAdvancedMode();
   const settings = await getSyncSettings();
   const config = await getFirebaseConfig();
   let account: AccountInfo | null = null;
@@ -57,7 +59,6 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
 
   main.innerHTML = `
     <h1>Settings</h1>
-    <p class="subtitle">Your deck lives on this device. Sign in to keep it backed up and in step across devices.</p>
 
     <div class="card-panel">
       <b>Account</b>
@@ -69,10 +70,7 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
       <div id="deck-config"></div>
     </div>
 
-    <div class="card-panel">
-      <b>Audio</b>
-      <div id="audio-config"></div>
-    </div>
+    ${advanced ? `<div class="card-panel"><b>Audio</b><div id="audio-config"></div></div>` : ""}
 
     <div class="card-panel">
       <b>Import from Anki</b>
@@ -85,43 +83,57 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
       <div class="row-actions">
         <button id="dict-load" class="secondary">Download for offline use</button>
       </div>
-      <div id="extra-dicts" style="margin-top:14px"></div>
+      ${advanced ? `<div id="extra-dicts" style="margin-top:14px"></div>` : ""}
     </div>
 
     <div class="card-panel">
       <b>Install on Android</b>
       <div class="msg">
-        <b>1. Add to home screen.</b> Chrome menu (⋮) → <i>Add to Home screen</i>.
-        Yomeyo then opens like a normal app and works offline.<br/><br/>
-        <b>2. Mine words while browsing.</b> Select Japanese text on any page →
-        tap <i>Share</i> → choose <b>Yomeyo</b>, or install the browser
-        extension and tap words directly on the page. Words saved with the
-        extension come across on their own whenever Yomeyo is open in a
-        browser tab — there is nothing to press. Opened from the home screen
-        instead, use <i>Send them now</i> in the extension's toolbar popup.
+        Chrome menu (⋮) → <i>Add to Home screen</i>: Yomeyo then opens like an
+        app and works offline. To save words while browsing, select text and
+        share it to Yomeyo — or install the browser extension and tap words
+        right on the page.
       </div>
     </div>
 
-    <details class="card-panel">
-      <summary>Self-hosted sync server (alternative to Firebase)</summary>
-      <label for="sync-url">Sync server URL</label>
-      <input type="url" id="sync-url" placeholder="https://your-server:8787" value="${escapeAttr(settings?.url ?? "")}" />
-      <label for="sync-token">Token</label>
-      <input type="password" id="sync-token" placeholder="shared secret" value="${escapeAttr(settings?.token ?? "")}" />
-      <div class="row-actions">
-        <button id="sync-save" class="secondary">Save</button>
+    ${
+      advanced
+        ? `<details class="card-panel">
+             <summary>Self-hosted sync server (alternative to Firebase)</summary>
+             <label for="sync-url">Sync server URL</label>
+             <input type="url" id="sync-url" placeholder="https://your-server:8787" value="${escapeAttr(settings?.url ?? "")}" />
+             <label for="sync-token">Token</label>
+             <input type="password" id="sync-token" placeholder="shared secret" value="${escapeAttr(settings?.token ?? "")}" />
+             <div class="row-actions">
+               <button id="sync-save" class="secondary">Save</button>
+             </div>
+           </details>`
+        : ""
+    }
+
+    <div class="card-panel">
+      <div class="settings-grid">
+        <label for="adv-mode">Advanced settings</label>
+        <label class="switch-sm"><input type="checkbox" id="adv-mode" ${advanced ? "checked" : ""} /></label>
       </div>
-      <div class="msg">Only used when no Firebase project is configured above.</div>
-    </details>
+      <div class="msg">Audio services, FSRS tuning, extra dictionaries, field mapping and more.</div>
+    </div>
   `;
 
+  main.querySelector<HTMLInputElement>("#adv-mode")!.addEventListener("change", async (ev) => {
+    await setAdvancedMode((ev.target as HTMLInputElement).checked);
+    void renderSettings(main);
+  });
+
   renderAccount();
-  void renderDeckConfig(main);
-  void renderAudioConfig(main);
-  renderAnkiImport(main, account);
+  void renderDeckConfig(main, advanced);
+  if (advanced) void renderAudioConfig(main);
+  renderAnkiImport(main, account, advanced);
   wireDictionary(main);
-  void renderExtraDictionaries(main);
-  wireServerSync(main);
+  if (advanced) {
+    void renderExtraDictionaries(main);
+    wireServerSync(main);
+  }
 
   // ---------------- account panel ----------------
 
@@ -129,12 +141,22 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
     const body = main.querySelector<HTMLDivElement>("#account-body")!;
 
     if (!config) {
+      // Setting up a Firebase project is real work; without Advanced mode
+      // the panel only says the feature exists and where the door is.
+      if (!advanced) {
+        body.innerHTML = `
+          <div class="msg">
+            Yomeyo works fully on this device without an account. Signing in —
+            which backs your deck up and syncs it between devices — needs a
+            one-off setup: switch on <b>Advanced settings</b> below to do it.
+          </div>
+        `;
+        return;
+      }
       body.innerHTML = `
         <div class="msg">
-          Signing in backs your deck up and syncs it between devices. It needs
-          a Firebase project of your own — Google will not let an app store
-          your data in someone else's. It is free and a one-off, and Yomeyo
-          works fully without it.
+          Sync needs a free Firebase project of your own — Yomeyo has no
+          server, so your data can only live in a project you control.
         </div>
         <details>
           <summary>How to get the config (about two minutes)</summary>
@@ -146,10 +168,7 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
             4. <b>Authentication → Settings → Authorized domains</b>: add
                <b>${escapeHtml(location.hostname)}</b>.<br/>
             5. <b>Project settings → Your apps → Web</b>: register an app and
-               copy the <code>firebaseConfig</code> object below.<br/><br/>
-            Doing this once per project, not per device: set it as the
-            <code>FIREBASE_CONFIG</code> repository secret and every build
-            offers Google sign-in with nothing to paste.
+               copy the <code>firebaseConfig</code> object below.
           </div>
         </details>
         <label for="fb-config">Firebase config (JSON)</label>
@@ -174,12 +193,8 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
 
     if (!account) {
       body.innerHTML = `
-        <div class="msg">Project <b>${escapeHtml(config.projectId)}</b>. Sign in to back up your deck, sync it
-        between devices, and keep it separate from anyone else using this browser.
-        ${
-          adoptable
-            ? "The words already saved here come with you the first time you sign in."
-            : ""
+        <div class="msg">Sign in to back up your deck and keep it in step across devices.${
+          adoptable ? " The words already saved here come with you." : ""
         }</div>
         <div class="row-actions"><button id="google-btn">Sign in with Google</button></div>
         <details>
@@ -239,14 +254,7 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
     }
 
     body.innerHTML = `
-      <div class="msg ok">Signed in as <b>${escapeHtml(account.displayName || account.email || account.uid)}</b>
-      (project ${escapeHtml(config.projectId)}).</div>
-      <div class="msg">
-        The deck, scheduling settings and daily counts on this device belong to
-        this account alone. Signing out puts them away and brings back the deck
-        kept for nobody in particular, so more than one person can share this
-        browser without seeing each other's words.
-      </div>
+      <div class="msg ok">Signed in as <b>${escapeHtml(account.displayName || account.email || account.uid)}</b>.</div>
       <div class="row-actions">
         <button id="cloud-sync">Sync now</button>
         <button id="cloud-out" class="secondary">Sign out</button>
@@ -292,14 +300,13 @@ async function renderAudioConfig(main: HTMLElement): Promise<void> {
       <label class="switch-sm"><input type="checkbox" id="au-enabled" ${config.enabled ? "checked" : ""} /></label>
     </div>
     <div class="msg">
-      Real recordings (Forvo) are played first, synthesised audio second, and
-      your device's Japanese voice if neither is available. Clips are cached
-      on the device after the first play, so replays work offline.
+      Real recordings first, synthesised audio second, the device voice as a
+      fallback. Clips are cached, so replays work offline.
     </div>
 
     <label for="au-key">API key</label>
     <input type="password" id="au-key" placeholder="paste your key" autocomplete="off" value="${escapeAttr(config.apiKey)}" />
-    <div class="msg">Kept on this device only — never uploaded with the app or synced.</div>
+    <div class="msg">Stays on this device — never uploaded or synced.</div>
 
     <details>
       <summary>Endpoints</summary>
@@ -354,12 +361,13 @@ async function renderAudioConfig(main: HTMLElement): Promise<void> {
  * reads the scheduling as well as the words: a card on a four-month interval
  * arrives on a four-month interval.
  *
- * What it cannot do is guess, silently, which field of somebody's note type
- * is the word and which is the meaning — note types are whatever their author
- * decided. So the guess is made, shown, and left editable, with a preview of
- * the first few cards so a wrong guess is obvious before anything is added.
+ * Which field is the word and which the meaning is guessed and shown as a
+ * preview of the first few cards, so a wrong guess is obvious before anything
+ * is added. The mapping controls themselves appear only in Advanced mode —
+ * the guess lands right for the common decks — or when the guess found
+ * nothing, in which case they are the only way forward.
  */
-function renderAnkiImport(main: HTMLElement, account: AccountInfo | null): void {
+function renderAnkiImport(main: HTMLElement, account: AccountInfo | null, advanced: boolean): void {
   const box = main.querySelector<HTMLDivElement>("#anki-import");
   if (!box) return;
 
@@ -376,10 +384,9 @@ function renderAnkiImport(main: HTMLElement, account: AccountInfo | null): void 
   function drawChooser(message = "", kind: "" | "ok" | "error" = ""): void {
     box!.innerHTML = `
       <div class="msg">
-        Export from Anki with <b>File → Export</b>. An <code>.apkg</code> brings
-        your review history across, and its pictures and audio when “Include media”
-        was ticked; <i>Notes in Plain Text</i> brings the words only. Words already in your deck are not added twice, so importing the
-        same file again is harmless.
+        In Anki: <b>File → Export</b>, keep the <code>.apkg</code> format, and
+        your words, review history, pictures and audio all come across.
+        Importing the same file again is harmless.
       </div>
       <div class="row-actions">
         <button id="anki-pick" class="secondary">Choose an Anki file…</button>
@@ -433,8 +440,8 @@ function renderAnkiImport(main: HTMLElement, account: AccountInfo | null): void 
                <label for="anki-sched">Keep review history</label>
                <label class="switch-sm"><input type="checkbox" id="anki-sched" ${keepScheduling ? "checked" : ""} /></label>
              </div>
-             <div class="msg">Intervals, ease and lapses come across, so nothing you have learned starts again from zero.</div>`
-          : `<div class="msg">This export has no review history in it — a plain-text export never does. Every word starts as new. Export as <code>.apkg</code> instead to keep your scheduling.</div>`
+             <div class="msg">Nothing you have learned starts again from zero.</div>`
+          : `<div class="msg">This export has no review history, so every word starts as new. Export as <code>.apkg</code> to keep your scheduling.</div>`
       }
       <div class="settings-grid">
         <label for="anki-share">Share with everyone</label>
@@ -465,6 +472,10 @@ function renderAnkiImport(main: HTMLElement, account: AccountInfo | null): void 
           )
           .join("");
 
+      // The guessed mapping is usually right, so the selects are Advanced-mode
+      // furniture — except when the guess produced nothing, where showing them
+      // is the only way the import can still happen.
+      const needsMapping = anki!.cardsFor(source!, group, keepScheduling).length === 0;
       block.innerHTML = `
         <summary>
           <label class="switch-sm" style="display:inline-flex;vertical-align:middle;margin-right:8px">
@@ -472,15 +483,19 @@ function renderAnkiImport(main: HTMLElement, account: AccountInfo | null): void 
           </label>
           ${escapeHtml(group.name)} — ${group.notes.length.toLocaleString()} notes
         </summary>
-        <div class="settings-grid">
-          ${roles
-            .map(
-              ([role, label]) =>
-                `<label for="anki-${group.key}-${role}">${label}</label>
-                 <select id="anki-${group.key}-${role}" data-role="${role}">${options(group.mapping[role])}</select>`,
-            )
-            .join("")}
-        </div>
+        ${
+          advanced || needsMapping
+            ? `<div class="settings-grid">
+                 ${roles
+                   .map(
+                     ([role, label]) =>
+                       `<label for="anki-${group.key}-${role}">${label}</label>
+                        <select id="anki-${group.key}-${role}" data-role="${role}">${options(group.mapping[role])}</select>`,
+                   )
+                   .join("")}
+               </div>`
+            : ""
+        }
         <div class="msg">Preview</div>
         <div class="preview"></div>
       `;
@@ -541,20 +556,15 @@ function renderAnkiImport(main: HTMLElement, account: AccountInfo | null): void 
     const drawShareNote = (): void => {
       if (!account) {
         shareNote.className = "msg";
-        shareNote.innerHTML =
-          "Sharing needs an account, so the deck has someone's name on it — sign in above. " +
-          "Without one the deck is imported for you alone.";
+        shareNote.innerHTML = "Sharing needs an account — sign in above. Without one the deck is yours alone.";
         return;
       }
       shareNote.className = "msg";
       shareNote.innerHTML = share
-        ? `This deck will be listed under <b>Decks → Premade</b> for everyone, so nobody
-           else has to find the file. The <b>words</b> are shared — not your review
-           history, not the words you mined yourself, and not the deck's pictures or
-           audio, which stay on this device. You can withdraw it later from
-           the Decks screen. <b>Don't share a deck that is really your private
-           collection.</b>`
-        : "The deck is imported for you alone and stays on your account.";
+        ? `The deck's <b>words</b> are listed for everyone under <b>Decks → Premade</b> —
+           not your review history, mined words, pictures or audio. You can withdraw it
+           later. <b>Don't share a private collection.</b>`
+        : "The deck is imported for you alone.";
     };
     shareBox.disabled = !account;
     if (!account) share = false;
@@ -587,14 +597,14 @@ function renderAnkiImport(main: HTMLElement, account: AccountInfo | null): void 
           parts.push(
             `${result.mediaCount.toLocaleString()} audio clip${result.mediaCount === 1 ? "" : "s"} and picture${
               result.mediaCount === 1 ? "" : "s"
-            } came across and play offline`,
+            } came across`,
           );
         }
         if (result.mediaMissing > 0) {
           parts.push(
             `${result.mediaMissing.toLocaleString()} media file${
-              result.mediaMissing === 1 ? " was" : "s were"
-            } named by the cards but not readable from this file, so those cards fall back to synthesised audio`,
+              result.mediaMissing === 1 ? "" : "s"
+            } could not be read from this export and were left out`,
           );
         }
         if (result.implausible > 0) {
@@ -631,28 +641,31 @@ function renderAnkiImport(main: HTMLElement, account: AccountInfo | null): void 
 }
 
 /**
- * Deck options, laid out like Anki's preset screen so the same settings are
- * recognisable: FSRS and its parameters, daily limits, learning steps, and
- * what to do with leeches.
+ * Deck options. What everyone adjusts — how many cards a day — is always
+ * there; the Anki-preset depths (FSRS and its parameters, learning steps,
+ * leeches) appear in Advanced mode, laid out like Anki's own screen so the
+ * same settings are recognisable.
  */
-async function renderDeckConfig(main: HTMLElement): Promise<void> {
+async function renderDeckConfig(main: HTMLElement, advanced: boolean): Promise<void> {
   const box = main.querySelector<HTMLDivElement>("#deck-config");
   if (!box) return;
   const config = await getDeckConfig();
 
   box.innerHTML = `
     <div class="settings-grid">
-      <label for="cfg-fsrs">FSRS scheduler</label>
-      <label class="switch-sm"><input type="checkbox" id="cfg-fsrs" ${config.fsrs ? "checked" : ""} /></label>
-
-      <label for="cfg-retention">Desired retention</label>
-      <input type="number" id="cfg-retention" min="70" max="99" step="1" value="${Math.round(config.desiredRetention * 100)}" />
-
       <label for="cfg-new">New cards/day</label>
       <input type="number" id="cfg-new" min="0" max="9999" value="${config.newPerDay}" />
 
       <label for="cfg-max">Maximum reviews/day</label>
       <input type="number" id="cfg-max" min="0" max="99999" value="${config.maxReviewsPerDay}" />
+      ${
+        advanced
+          ? `
+      <label for="cfg-fsrs">FSRS scheduler</label>
+      <label class="switch-sm"><input type="checkbox" id="cfg-fsrs" ${config.fsrs ? "checked" : ""} /></label>
+
+      <label for="cfg-retention">Desired retention</label>
+      <input type="number" id="cfg-retention" min="70" max="99" step="1" value="${Math.round(config.desiredRetention * 100)}" />
 
       <label for="cfg-learn">Learning steps</label>
       <input type="text" id="cfg-learn" value="${escapeAttr(formatSteps(config.learningStepsSec))}" />
@@ -673,18 +686,23 @@ async function renderDeckConfig(main: HTMLElement): Promise<void> {
       <select id="cfg-order">
         <option value="added" ${config.newCardOrder === "added" ? "selected" : ""}>Order added</option>
         <option value="random" ${config.newCardOrder === "random" ? "selected" : ""}>Random</option>
-      </select>
+      </select>`
+          : ""
+      }
     </div>
-
+    ${
+      advanced
+        ? `
     <label for="cfg-weights">FSRS parameters (21 values)</label>
     <textarea id="cfg-weights" style="min-height:96px;font-family:ui-monospace,monospace;font-size:0.75rem">${escapeHtml(
       config.fsrsWeights.join(", "),
     )}</textarea>
-    <div class="msg">Paste an optimised set from Anki (Deck options → FSRS → FSRS parameters).</div>
-
+    <div class="msg">Paste an optimised set from Anki (Deck options → FSRS → FSRS parameters).</div>`
+        : ""
+    }
     <div class="row-actions">
       <button id="cfg-save">Save</button>
-      <button id="cfg-reset" class="ghost">Reset to defaults</button>
+      ${advanced ? `<button id="cfg-reset" class="ghost">Reset to defaults</button>` : ""}
     </div>
     <div class="msg" id="cfg-msg"></div>
   `;
@@ -694,24 +712,29 @@ async function renderDeckConfig(main: HTMLElement): Promise<void> {
 
   box.querySelector<HTMLButtonElement>("#cfg-save")!.addEventListener("click", async () => {
     try {
-      const retention = Number(value("#cfg-retention"));
-      if (!Number.isFinite(retention) || retention < 70 || retention > 99) {
-        throw new Error("Desired retention must be between 70 and 99.");
-      }
-      await saveDeckConfig({
+      const next = {
         ...config,
-        fsrs: box.querySelector<HTMLInputElement>("#cfg-fsrs")!.checked,
-        desiredRetention: retention / 100,
-        fsrsWeights: parseFsrsWeights(box.querySelector<HTMLTextAreaElement>("#cfg-weights")!.value),
         newPerDay: Math.max(0, Number(value("#cfg-new")) || 0),
         maxReviewsPerDay: Math.max(0, Number(value("#cfg-max")) || 0),
-        learningStepsSec: parseSteps(value("#cfg-learn")),
-        relearningStepsSec: parseSteps(value("#cfg-relearn")),
-        leechThreshold: Math.max(1, Number(value("#cfg-leech")) || 1),
-        leechAction: box.querySelector<HTMLSelectElement>("#cfg-leech-action")!.value as "tag" | "suspend",
-        newCardOrder: box.querySelector<HTMLSelectElement>("#cfg-order")!.value as "added" | "random",
-      });
-      msg.textContent = "Saved. New intervals use these settings from the next review.";
+      };
+      // The hidden options keep their stored values; only what is on screen
+      // can change, so basic mode can never quietly reset a tuned setup.
+      if (advanced) {
+        const retention = Number(value("#cfg-retention"));
+        if (!Number.isFinite(retention) || retention < 70 || retention > 99) {
+          throw new Error("Desired retention must be between 70 and 99.");
+        }
+        next.fsrs = box.querySelector<HTMLInputElement>("#cfg-fsrs")!.checked;
+        next.desiredRetention = retention / 100;
+        next.fsrsWeights = parseFsrsWeights(box.querySelector<HTMLTextAreaElement>("#cfg-weights")!.value);
+        next.learningStepsSec = parseSteps(value("#cfg-learn"));
+        next.relearningStepsSec = parseSteps(value("#cfg-relearn"));
+        next.leechThreshold = Math.max(1, Number(value("#cfg-leech")) || 1);
+        next.leechAction = box.querySelector<HTMLSelectElement>("#cfg-leech-action")!.value as "tag" | "suspend";
+        next.newCardOrder = box.querySelector<HTMLSelectElement>("#cfg-order")!.value as "added" | "random";
+      }
+      await saveDeckConfig(next);
+      msg.textContent = "Saved.";
       msg.className = "msg ok";
       toast("Scheduling settings saved");
     } catch (err) {
@@ -720,9 +743,9 @@ async function renderDeckConfig(main: HTMLElement): Promise<void> {
     }
   });
 
-  box.querySelector<HTMLButtonElement>("#cfg-reset")!.addEventListener("click", async () => {
+  box.querySelector<HTMLButtonElement>("#cfg-reset")?.addEventListener("click", async () => {
     await resetDeckConfig();
-    void renderDeckConfig(main);
+    void renderDeckConfig(main, advanced);
   });
 }
 
@@ -750,9 +773,8 @@ async function renderExtraDictionaries(main: HTMLElement, status?: DictStatus): 
     <b style="font-size:0.85rem">Additional dictionaries</b>
     <div id="dict-list"></div>
     <div class="msg">
-      Add a Japanese-Japanese or other bilingual dictionary. Unzip a
-      Yomitan/Yomichan dictionary and select its <code>term_bank_*.json</code>
-      files. Definitions are labelled with the dictionary they came from.
+      Unzip a Yomitan/Yomichan dictionary and choose its
+      <code>term_bank_*.json</code> files.
     </div>
     <label for="dict-name">Name</label>
     <input type="text" id="dict-name" placeholder="e.g. 三省堂国語辞典" />

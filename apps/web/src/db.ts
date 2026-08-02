@@ -40,12 +40,15 @@ function dbName(): string {
  *    hundreds of megabytes — copying them per account would fill the disk.
  *  - downloaded audio clips are a cache of public recordings, keyed by the
  *    word itself.
+ *  - `advancedMode` says how much of the Settings screen to show, which is
+ *    about who is holding the device, not whose deck is open.
  */
 const DEVICE_KEYS = new Set([
   "activeAccount",
   "firebaseConfig",
   "extensionToken",
   "extraDictionaries",
+  "advancedMode",
 ]);
 const DEVICE_PREFIXES = ["dictData:", "audioClip:"];
 
