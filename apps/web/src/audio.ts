@@ -113,18 +113,22 @@ function stopPlayback(): void {
   }
 }
 
+function playFromUrl(url: string): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const audio = new Audio(url);
+    currentAudio = audio;
+    audio.onended = () => resolve();
+    audio.onerror = () => reject(new Error("Could not play that audio file."));
+    // Never hang the UI if the file stalls.
+    setTimeout(resolve, 20000);
+    void audio.play().catch(reject);
+  });
+}
+
 async function playBlob(blob: Blob): Promise<void> {
   const url = URL.createObjectURL(blob);
   try {
-    await new Promise<void>((resolve, reject) => {
-      const audio = new Audio(url);
-      currentAudio = audio;
-      audio.onended = () => resolve();
-      audio.onerror = () => reject(new Error("Could not play that audio file."));
-      // Never hang the UI if the file stalls.
-      setTimeout(resolve, 20000);
-      void audio.play().catch(reject);
-    });
+    await playFromUrl(url);
   } finally {
     URL.revokeObjectURL(url);
   }
@@ -161,14 +165,29 @@ async function fetchMaybeViaExtension(url: string): Promise<Response> {
     return await fetch(url);
   } catch (err) {
     const relayed = await fetchThroughExtension(url);
-    if (relayed) {
+    if (relayed.ok) {
       return new Response(relayed.body, { headers: { "content-type": relayed.contentType } });
     }
+
+    // The extension is here, one press away from working — say exactly that,
+    // not the generic advice to install what is already installed.
+    if (relayed.reason === "no-permission") {
+      throw new Error(
+        "The Yomeyo extension is installed but has not been allowed to download audio yet. " +
+          "Open its toolbar popup, press “Allow audio downloads”, and try again.",
+      );
+    }
+    if (relayed.reason === "failed" && relayed.detail) {
+      throw new Error(`The extension tried to fetch it but could not: ${relayed.detail}.`);
+    }
+
     if (await refusedByCors(url)) {
       throw new Error(
-        "The audio service does not allow requests from a web page (no CORS header). " +
-          "Install the Yomeyo extension and allow audio downloads in its menu, and this page can " +
-          "borrow its access.",
+        "The audio service answers, but does not let web pages read its replies (no CORS header), " +
+          "and no Yomeyo extension answered on this page. In a browser with the extension, open its " +
+          "toolbar popup and press “Allow audio downloads”. In a browser without extensions — like " +
+          "Chrome for Android — this service cannot be reached from a page, and the device voice is " +
+          "used instead.",
       );
     }
     throw new Error(
@@ -179,13 +198,28 @@ async function fetchMaybeViaExtension(url: string): Promise<Response> {
   }
 }
 
+/**
+ * What one source offered: the clip's bytes when they could be read, or
+ * failing that the clip URLs themselves.
+ *
+ * The distinction exists because CORS forbids *reading* a cross-origin reply,
+ * not *playing* one — an <audio> element will happily play a URL whose bytes
+ * this page may never see. So when the list is readable but the clip host
+ * refuses pages, the recording can still be heard; it just cannot be cached
+ * for offline replay.
+ */
+interface ClipResult {
+  blob: Blob | null;
+  playableUrls: string[];
+}
+
 /** Ask one source for a clip and download the first playable result. */
 async function fetchClip(
   template: string,
   config: AudioSourceConfig,
   term: string,
   reading: string,
-): Promise<Blob | null> {
+): Promise<ClipResult> {
   const url = buildAudioUrl(template, { term, reading }, config.apiKey);
 
   const response = await fetchMaybeViaExtension(url);
@@ -205,12 +239,12 @@ async function fetchClip(
       const clip = await fetchMaybeViaExtension(candidate.url);
       if (!clip.ok) continue;
       const blob = await clip.blob();
-      if (blob.size > 0) return blob;
+      if (blob.size > 0) return { blob, playableUrls: [] };
     } catch {
       // Try the next candidate rather than giving up on the whole source.
     }
   }
-  return null;
+  return { blob: null, playableUrls: candidates.map((candidate) => candidate.url) };
 }
 
 export interface PlayResult {
@@ -247,11 +281,22 @@ export async function playWord(
     ] as const) {
       if (!template?.trim()) continue;
       try {
-        const blob = await fetchClip(template, config, term, reading);
+        const { blob, playableUrls } = await fetchClip(template, config, term, reading);
         if (blob) {
           await setMeta(clipKey(term, reading), blob);
           await playBlob(blob);
           return { source };
+        }
+        // The bytes were refused, but playing is not reading: hand the URL
+        // straight to an <audio> element. No caching — there is nothing this
+        // page is allowed to keep — but the recording is heard.
+        for (const clipUrl of playableUrls) {
+          try {
+            await playFromUrl(clipUrl);
+            return { source };
+          } catch {
+            // A dead or undecodable clip; the next candidate may play.
+          }
         }
       } catch {
         // Fall through to the next source; the device voice is always there.
@@ -279,12 +324,25 @@ export async function testAudioConfig(
     ["TTS", config.ttsUrl],
   ] as const) {
     try {
-      const blob = await fetchClip(template, config, term, reading);
-      results.push(blob ? `${label}: ok (${Math.round(blob.size / 1024)} KB)` : `${label}: no audio found`);
+      const { blob, playableUrls } = await fetchClip(template, config, term, reading);
+      results.push(
+        blob
+          ? `${label}: ok (${Math.round(blob.size / 1024)} KB)`
+          : playableUrls.length > 0
+            ? `${label}: found a clip this page may play but not save — it will play online, without offline caching`
+            : `${label}: no audio found`,
+      );
     } catch (err) {
       results.push(`${label}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
+  // Failures above never mean silence — say what actually happens instead.
+  const voice = await japaneseVoice();
+  results.push(
+    voice
+      ? `Device voice: ready (${voice.name || "Japanese"}) — used whenever the sources above fail`
+      : "Device voice: no Japanese voice installed on this device",
+  );
   return results.join(" · ");
 }
 

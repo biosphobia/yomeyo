@@ -790,18 +790,29 @@ document.addEventListener(
 
     const x = ev.clientX;
     const y = ev.clientY;
-    // Look up first; only swallow the event if a word was actually found,
-    // so taps on links and buttons behave normally.
-    const target = ev.target as HTMLElement | null;
-    const interactive = target?.closest?.("a,button,input,textarea,select,[contenteditable]");
+
+    // Whether to cancel this click must be decided *now*, synchronously —
+    // once the handler returns, the click has already happened everywhere
+    // else. The dictionary lookup is asynchronous, so it cannot be the
+    // basis; but textAtPoint is not, and it answers the question that
+    // matters: is there actually a Japanese character under the finger?
+    // Cancelling without asking swallowed every tap on every button and
+    // link on every page — the app's own Save and Settings included.
+    const tap = textAtPoint(x, y);
+    if (!tap) {
+      closePopup();
+      return;
+    }
 
     void handleLookupAt(x, y).then((found) => {
       if (!found) closePopup();
     });
 
+    const target = ev.target as HTMLElement | null;
+    const interactive = target?.closest?.("a,button,input,textarea,select,[contenteditable]");
     if (interactive) {
-      // A tap on a link that contains Japanese should show the definition
-      // rather than navigate; the user can tap again to follow the link.
+      // A tap on Japanese inside a link should show the definition rather
+      // than navigate; the user can tap again to follow the link.
       ev.preventDefault();
       ev.stopPropagation();
     }

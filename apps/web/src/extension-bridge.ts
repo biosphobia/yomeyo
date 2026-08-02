@@ -85,16 +85,26 @@ export function extensionStatus(): { connected: boolean; version: string | null 
  */
 let relayAnswers: boolean | null = null;
 
+/**
+ * Why a relay produced no bytes — each wants something different done:
+ * "no-extension" means this browser cannot help at all, "no-permission"
+ * means one press in the extension's toolbar popup fixes it, and "failed"
+ * carries whatever the extension itself ran into.
+ */
+export type RelayResult =
+  | { ok: true; body: ArrayBuffer; contentType: string }
+  | { ok: false; reason: "no-extension" | "no-permission" | "failed"; detail: string };
+
 export async function fetchThroughExtension(
   url: string,
   { ackMs = 400, totalMs = 25000 }: { ackMs?: number; totalMs?: number } = {},
-): Promise<{ body: ArrayBuffer; contentType: string } | null> {
-  if (relayAnswers === false) return null;
+): Promise<RelayResult> {
+  if (relayAnswers === false) return { ok: false, reason: "no-extension", detail: "" };
 
   const id = `f${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
   return new Promise((resolve) => {
     let done = false;
-    const finish = (value: { body: ArrayBuffer; contentType: string } | null): void => {
+    const finish = (value: RelayResult): void => {
       if (done) return;
       done = true;
       clearTimeout(ackTimer);
@@ -106,7 +116,7 @@ export async function fetchThroughExtension(
     const onMessage = (ev: MessageEvent): void => {
       if (ev.source !== window) return;
       const data = ev.data as
-        | { source?: string; type?: string; id?: string; base64?: string; contentType?: string }
+        | { source?: string; type?: string; id?: string; base64?: string; contentType?: string; error?: string }
         | null;
       if (data?.source !== FROM_EXTENSION || data.id !== id) return;
 
@@ -120,16 +130,21 @@ export async function fetchThroughExtension(
       if (data.type !== "fetched") return;
 
       if (typeof data.base64 !== "string" || data.base64.length === 0) {
-        finish(null);
+        const error = typeof data.error === "string" ? data.error : "";
+        // The installed extension says "not allowed to fetch that yet" when
+        // its optional host permission has not been granted; matched loosely
+        // so a future build can reword it without stranding this side.
+        const reason = /not allowed|permission/i.test(error) ? "no-permission" : "failed";
+        finish({ ok: false, reason, detail: error });
         return;
       }
       try {
         const binary = atob(data.base64);
         const bytes = new Uint8Array(binary.length);
         for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        finish({ body: bytes.buffer, contentType: data.contentType ?? "application/octet-stream" });
+        finish({ ok: true, body: bytes.buffer, contentType: data.contentType || "application/octet-stream" });
       } catch {
-        finish(null);
+        finish({ ok: false, reason: "failed", detail: "the reply could not be decoded" });
       }
     };
 
@@ -138,9 +153,12 @@ export async function fetchThroughExtension(
     // machine with no extension would stall for the whole download timeout.
     const ackTimer = setTimeout(() => {
       relayAnswers = false; // nothing is listening; do not wait again
-      finish(null);
+      finish({ ok: false, reason: "no-extension", detail: "" });
     }, ackMs);
-    const totalTimer = setTimeout(() => finish(null), totalMs);
+    const totalTimer = setTimeout(
+      () => finish({ ok: false, reason: "failed", detail: "the extension did not answer in time" }),
+      totalMs,
+    );
     window.addEventListener("message", onMessage);
     window.postMessage({ source: FROM_APP, type: "fetch", id, url }, location.origin);
   });
