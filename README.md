@@ -20,6 +20,41 @@ paths are published, so either works.)
 
 A minute later the app is live at **https://biosphobia.github.io/yomeyo/**
 
+## Hosting on your own domain (cPanel / any FTP host)
+
+Every push can also upload the built site to a host of your own — say
+`https://duugu.moe/yomeyo/`. The app uses relative paths throughout, so it
+works from any folder with no code change. One-time setup:
+
+1. **Make the folder** on your host: in cPanel → *File Manager*, create
+   `public_html/yomeyo`.
+2. **Make an FTP account scoped to it**: cPanel → *FTP Accounts* → create one
+   with **Directory** set to `public_html/yomeyo`. Scoped this way, the
+   credentials can touch that folder and nothing else on your hosting.
+3. **Add three repository secrets** on GitHub (*Settings → Secrets and
+   variables → Actions → New repository secret*):
+
+   | Secret | Value |
+   |---|---|
+   | `CPANEL_FTP_HOST` | your FTP server, e.g. `ftp.duugu.moe` or the server cPanel shows |
+   | `CPANEL_FTP_USER` | the FTP account, e.g. `deploy@duugu.moe` |
+   | `CPANEL_FTP_PASSWORD` | its password |
+
+   Optional extras: `CPANEL_FTP_DIR` if the account is *not* rooted in the
+   target folder (e.g. `public_html/yomeyo/`), and `CPANEL_FTP_PROTOCOL`
+   set to `ftp` only if your host offers no FTPS.
+
+4. **Push** (or re-run the workflow). The site appears at your domain and
+   every later push updates it — only changed files are uploaded.
+
+Two notes: the first upload moves the whole dictionary (tens of megabytes),
+so it takes a few minutes; later deploys are quick. And if you use cloud
+sync, add your domain under **Firebase → Authentication → Settings →
+Authorized domains**, or Google sign-in will refuse the new address.
+
+GitHub Pages keeps working alongside this; if you want the move to be
+complete, switch Pages off under **Settings → Pages**.
+
 ## Install on Android
 
 1. **Open** https://biosphobia.github.io/yomeyo/ in Chrome.
@@ -379,8 +414,9 @@ then **Import JSON** on the other device.
    高い/日本語/する are present with the right readings and parts of speech, so
    an upstream format change fails the build instead of shipping a dictionary
    that silently looks nothing up,
-4. builds the app and publishes it both to the `gh-pages` branch and through
-   the Actions Pages pipeline, so whichever Pages source you chose works,
+4. builds the app and publishes it to your own host over FTPS (when the
+   `CPANEL_FTP_*` secrets are set), to the `gh-pages` branch, and through
+   the Actions Pages pipeline, so whichever you chose works,
 5. zips the extension for both engines and publishes them alongside the app.
 
 If Pages is not enabled yet, the build still succeeds and says so in the job

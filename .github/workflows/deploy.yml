@@ -11,6 +11,10 @@ name: Build and deploy Yomeyo
 # This workflow publishes both ways, so whichever you pick goes live. Until
 # Pages is enabled, the build still runs and the extension zip is still
 # produced as a workflow artifact.
+#
+# It can also publish to your own web host (cPanel or anything with FTP):
+# add the CPANEL_FTP_* repository secrets described in the README and every
+# push uploads the site there too. Without the secrets that step is skipped.
 
 on:
   push:
@@ -38,6 +42,11 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       pages_ready: ${{ steps.pages.outcome == 'success' }}
+    env:
+      # Present only when the repository is set up to publish to its own web
+      # host; the step below keys off it. (Secrets cannot be read inside an
+      # `if:` directly, so the host lands in the environment first.)
+      CPANEL_FTP_HOST: ${{ secrets.CPANEL_FTP_HOST }}
     steps:
       - uses: actions/checkout@v4
 
@@ -123,7 +132,30 @@ jobs:
           path: yomeyo-extension-*.zip
           if-no-files-found: error
 
-      # Publishing path 1: a plain gh-pages branch. Always works with the
+      # Publishing path 1: your own web host, over FTP(S) — how a cPanel host
+      # gets updated on every push. Runs only when the CPANEL_FTP_* secrets
+      # exist. Placed before the gh-pages publish, which git-inits inside
+      # dist/ and would otherwise leave its droppings in the upload. Only
+      # changed files are transferred after the first run (the action keeps a
+      # sync-state file on the server), so pushes that touch no assets are
+      # quick even though the dictionary is tens of megabytes.
+      - name: Publish site to your own host (cPanel)
+        if: env.CPANEL_FTP_HOST != ''
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.CPANEL_FTP_HOST }}
+          username: ${{ secrets.CPANEL_FTP_USER }}
+          password: ${{ secrets.CPANEL_FTP_PASSWORD }}
+          # FTPS (explicit TLS) is what cPanel offers by default; set the
+          # CPANEL_FTP_PROTOCOL secret to "ftp" only if your host has no TLS.
+          protocol: ${{ secrets.CPANEL_FTP_PROTOCOL || 'ftps' }}
+          local-dir: apps/web/dist/
+          # "./" is right for an FTP account whose directory *is* the target
+          # folder (the recommended setup). Set CPANEL_FTP_DIR to a path like
+          # "public_html/yomeyo/" if the account is rooted elsewhere.
+          server-dir: ${{ secrets.CPANEL_FTP_DIR || './' }}
+
+      # Publishing path 2: a plain gh-pages branch. Always works with the
       # default token, and covers the "Deploy from a branch" Pages setting.
       - name: Publish site to the gh-pages branch
         run: |
@@ -140,7 +172,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
-      # Publishing path 2: the GitHub Actions Pages pipeline. Skipped (without
+      # Publishing path 3: the GitHub Actions Pages pipeline. Skipped (without
       # failing the build) when Pages has not been enabled yet.
       - name: Configure GitHub Pages
         id: pages
