@@ -78,3 +78,26 @@ export function groupById(id: string): KanaGroup | undefined {
 export function isCorrect(entry: KanaEntry, answer: string): boolean {
   return entry.romaji.includes(answer.trim().toLowerCase());
 }
+
+const DIGRAPHS = new Set(
+  KANA_GROUPS.flatMap((group) => group.entries.map((entry) => entry.kana)).filter(
+    (kana) => kana.length === 2,
+  ),
+);
+
+/** Split a kana string into its sounds, digraphs (きゃ) kept whole. */
+export function kanaSegments(kana: string): string[] {
+  const out: string[] = [];
+  let at = 0;
+  while (at < kana.length) {
+    const pair = kana.slice(at, at + 2);
+    if (DIGRAPHS.has(pair)) {
+      out.push(pair);
+      at += 2;
+    } else {
+      out.push(kana[at]);
+      at += 1;
+    }
+  }
+  return out;
+}

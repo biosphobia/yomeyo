@@ -1,6 +1,7 @@
 import { getMeta, setMeta } from "./db.js";
 import { speak } from "./audio.js";
 import { recordQuestEvents } from "./quests.js";
+import { startGameSession, type GameSession } from "./kana-stats.js";
 import { assetUrl, loadDictionary } from "./store.js";
 import { KANA_GROUPS, isCorrect, type KanaEntry, type KanaGroup } from "./kana-data.js";
 
@@ -368,6 +369,17 @@ async function runLevel(
   let timer: ReturnType<typeof setInterval> | null = null;
   bestStreak = (await getMeta<number>(BEST_STREAK_KEY)) ?? bestStreak;
 
+  // The learn level asks nothing, so it records nothing; every other run
+  // goes into the permanent per-kana record from its first answer.
+  const session: GameSession | null = learning
+    ? null
+    : startGameSession({
+        level,
+        groups: game.groups,
+        poolSize: level >= 5 ? items.length : pool.length,
+        words: level >= 5,
+      });
+
   const stopTimer = (): void => {
     if (timer !== null) clearInterval(timer);
     timer = null;
@@ -375,6 +387,7 @@ async function runLevel(
 
   const fail = async (): Promise<void> => {
     stopTimer();
+    session?.end("failed");
     game.health = MAX_HEALTH; // a fresh attempt starts with fresh hearts
     await saveGame(game);
     if (!isCurrent()) return;
@@ -393,6 +406,7 @@ async function runLevel(
 
   const finish = async (): Promise<void> => {
     stopTimer();
+    session?.end("cleared");
     game.unlocked = Math.max(game.unlocked, level + 1);
     if (useLives) game.health = Math.min(MAX_HEALTH, health + 1);
     // Levels count towards the day's quests; the learn level is a stroll,
@@ -500,6 +514,7 @@ async function runLevel(
     body.querySelector<HTMLButtonElement>("#kana-quit")!.addEventListener("click", () => {
       active = false;
       stopTimer();
+      session?.end("quit");
       renderSelection(body, game, main, isCurrent);
     });
 
@@ -517,6 +532,7 @@ async function runLevel(
     const succeed = (): void => {
       settled = true;
       stopTimer();
+      session?.answer(item.kana, { correct: true });
       streak++;
       if (streak > bestStreak) {
         bestStreak = streak;
@@ -531,9 +547,10 @@ async function runLevel(
       setTimeout(advance, 1100);
     };
 
-    const miss = (label: string): void => {
+    const miss = (label: string, mistake?: string, timeout = false): void => {
       settled = true;
       stopTimer();
+      session?.answer(item.kana, { correct: false, mistake, timeout });
       streak = 0;
       missedAny = true;
       // Back into the deck: the level ends only when everything is right.
@@ -586,7 +603,7 @@ async function runLevel(
             body
               .querySelector<HTMLButtonElement>(`#kana-choices button[data-choice="${cssEscape(itemAnswer(item))}"]`)
               ?.classList.add("right");
-            miss(`✗ ${escapeHtml(item.kana)} = <b>${escapeHtml(itemAnswer(item))}</b>`);
+            miss(`✗ ${escapeHtml(item.kana)} = <b>${escapeHtml(itemAnswer(item))}</b>`, choice);
           }
         });
       }
@@ -601,7 +618,7 @@ async function runLevel(
         if (!answer.trim()) return;
         input.disabled = true;
         if (itemMatches(item, answer)) succeed();
-        else miss(`✗ ${escapeHtml(item.kana)} = <b>${escapeHtml(itemAnswer(item))}</b>`);
+        else miss(`✗ ${escapeHtml(item.kana)} = <b>${escapeHtml(itemAnswer(item))}</b>`, answer);
       });
     }
 
@@ -615,7 +632,7 @@ async function runLevel(
         if (left <= 0 && !settled) {
           const input = body.querySelector<HTMLInputElement>("#kana-answer");
           if (input) input.disabled = true;
-          miss(`⏰ Time! ${escapeHtml(item.kana)} = <b>${escapeHtml(itemAnswer(item))}</b>`);
+          miss(`⏰ Time! ${escapeHtml(item.kana)} = <b>${escapeHtml(itemAnswer(item))}</b>`, undefined, true);
         }
       }, 100);
     }
