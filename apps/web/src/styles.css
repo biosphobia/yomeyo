@@ -430,6 +430,15 @@ label {
   font-size: 0.95rem;
 }
 
+.kana-skip-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
 .kana-start-row {
   position: sticky;
   bottom: 76px;

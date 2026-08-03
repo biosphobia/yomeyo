@@ -231,11 +231,14 @@ from either syllabary — then climb seven levels over exactly that pool:
    their meanings; no clock
 6. **Words, timed** — the same, ten seconds each
 
-A missed item goes back into the queue, so a level is only cleared once
-everything has been answered right — a progress bar shows how far that is.
-Completing a level unlocks the next and restores one heart; running out of
-hearts means retrying the level fresh. Every answer is spoken, and changing
-the group selection starts a new climb.
+The game runs by itself: Start begins the climb (a toggle skips the level-0
+tutorial for anyone who knows the shapes), each cleared level flows into the
+next, and hearts only appear once the levels that use them do. A missed item
+goes back into the queue, so a level is only cleared once everything has
+been answered right — a progress bar shows how far that is. Completing a
+level restores one heart; running out of hearts means retrying the level
+fresh. Every answer is spoken, and changing the group selection starts a
+new climb.
 
 Right and wrong answers pop a reaction — an image and a line of text. Both
 are yours to change without touching code: they live in

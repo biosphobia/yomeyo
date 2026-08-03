@@ -29,8 +29,11 @@ const GAME_KEY = "kanaGame";
 
 interface GameState {
   groups: string[];
+  /** The next level to clear; levels below it are done. */
   unlocked: number;
   health: number;
+  /** Start at level 1 — for someone who already knows the shapes. */
+  skipLearn?: boolean;
 }
 
 const MAX_HEALTH = 5;
@@ -158,7 +161,7 @@ export async function renderKana(main: HTMLElement, isCurrent: () => boolean = (
 
   main.innerHTML = `
     <h1>Kana</h1>
-    <p class="subtitle">Pick the groups to practice, then climb the levels.</p>
+    <p class="subtitle">Pick the groups to practice — the game climbs the levels by itself.</p>
     <div id="kana-body"></div>
   `;
   renderSelection(main.querySelector<HTMLDivElement>("#kana-body")!, game, main, isCurrent);
@@ -196,14 +199,25 @@ function renderSelection(
       </div>`;
   };
 
+  let skipLearn = game?.skipLearn ?? false;
+
   body.innerHTML = `
     ${section("hiragana", "Hiragana ひらがな")}
     ${section("katakana", "Katakana カタカナ")}
+    <label class="kana-skip-row">
+      <input type="checkbox" id="kana-skip" ${skipLearn ? "checked" : ""} />
+      Skip level 0 — I already know these shapes
+    </label>
     <div class="kana-start-row">
       <button id="kana-start" disabled>Start</button>
       <span class="glosses" id="kana-start-note"></span>
     </div>
   `;
+
+  body.querySelector<HTMLInputElement>("#kana-skip")!.addEventListener("change", (ev) => {
+    skipLearn = (ev.target as HTMLInputElement).checked;
+    refresh();
+  });
 
   const startButton = body.querySelector<HTMLButtonElement>("#kana-start")!;
   const note = body.querySelector<HTMLSpanElement>("#kana-start-note")!;
@@ -213,9 +227,13 @@ function renderSelection(
       0,
     );
     startButton.disabled = chosen.size === 0;
-    startButton.textContent =
-      game && sameGroups(game.groups, chosen) && game.unlocked > 0 ? "Continue" : "Start";
-    note.textContent = chosen.size === 0 ? "Pick at least one group." : `${count} kana selected`;
+    const resuming = game !== null && sameGroups(game.groups, chosen) && game.unlocked > 0;
+    startButton.textContent = resuming ? "Continue" : "Start";
+    const startAt = resuming && game ? Math.min(game.unlocked, LEVELS.length - 1) : skipLearn ? 1 : 0;
+    note.textContent =
+      chosen.size === 0
+        ? "Pick at least one group."
+        : `${count} kana · from level ${startAt}: ${LEVELS[startAt].name}`;
   };
 
   for (const label of body.querySelectorAll<HTMLLabelElement>(".kana-group")) {
@@ -242,10 +260,11 @@ function renderSelection(
     // A different pool is a different game: the levels start over.
     const next: GameState =
       game && sameGroups(game.groups, chosen)
-        ? game
-        : { groups: [...chosen].sort(), unlocked: 0, health: MAX_HEALTH };
+        ? { ...game, skipLearn }
+        : { groups: [...chosen].sort(), unlocked: 0, health: MAX_HEALTH, skipLearn };
+    if (skipLearn) next.unlocked = Math.max(next.unlocked, 1);
     await saveGame(next);
-    renderMenu(body, next, main, isCurrent);
+    void runLevel(body, next, Math.min(next.unlocked, LEVELS.length - 1), main, isCurrent);
   });
 
   refresh();
@@ -263,43 +282,6 @@ function poolOf(game: GameState): KanaEntry[] {
 
 function heartsHtml(health: number): string {
   return `<span class="kana-hearts">${"❤️".repeat(health)}${"🤍".repeat(MAX_HEALTH - health)}</span>`;
-}
-
-function renderMenu(
-  body: HTMLDivElement,
-  game: GameState,
-  main: HTMLElement,
-  isCurrent: () => boolean,
-): void {
-  const pool = poolOf(game);
-  body.innerHTML = `
-    <div class="kana-menu-head">
-      <div class="glosses">${pool.length} kana in play · hearts from level 3: ${heartsHtml(game.health)}</div>
-      <button id="kana-groups" class="ghost">Change groups</button>
-    </div>
-    <div class="kana-grid">
-      ${LEVELS.map((level, index) => {
-        const locked = index > game.unlocked;
-        const done = index < game.unlocked;
-        return `
-          <button class="kana-level${done ? " done" : ""}" data-level="${index}" ${locked ? "disabled" : ""}>
-            <div class="kana-level-no">Level ${index} ${done ? "✓" : locked ? "🔒" : ""}</div>
-            <div class="kana-level-title">${level.name}</div>
-            <div class="kana-level-best">${level.detail}</div>
-          </button>`;
-      }).join("")}
-    </div>
-  `;
-
-  body.querySelector<HTMLButtonElement>("#kana-groups")!.addEventListener("click", () => {
-    renderSelection(body, game, main, isCurrent);
-  });
-  for (const button of body.querySelectorAll<HTMLButtonElement>(".kana-level[data-level]")) {
-    if (button.disabled) continue;
-    button.addEventListener("click", () => {
-      void runLevel(body, game, Number(button.dataset.level), main, isCurrent);
-    });
-  }
 }
 
 // ---------------- the level engine ----------------
@@ -350,10 +332,10 @@ async function runLevel(
           <div>Not enough short words can be written with only these kana.</div>
           <div class="glosses" style="margin-top:8px">Add more groups — the k, s and vowel rows open up the most words.</div>
           <div class="row-actions" style="justify-content:center;margin-top:12px">
-            <button id="kana-back" class="secondary">Back to levels</button>
+            <button id="kana-back" class="secondary">Change groups</button>
           </div>
         </div>`;
-      body.querySelector("#kana-back")!.addEventListener("click", () => renderMenu(body, game, main, isCurrent));
+      body.querySelector("#kana-back")!.addEventListener("click", () => renderSelection(body, game, main, isCurrent));
       return;
     }
     items = words;
@@ -384,14 +366,14 @@ async function runLevel(
       <div class="card-panel kana-quiz">
         <div class="big">💔</div>
         <div class="kana-score">Out of hearts</div>
-        <div class="glosses">Level ${level} keeps its lock off — try it again with ${MAX_HEALTH} fresh hearts.</div>
+        <div class="glosses">Try level ${level} again with ${MAX_HEALTH} fresh hearts.</div>
         <div class="row-actions" style="justify-content:center;margin-top:12px">
           <button id="kana-retry">Try again</button>
-          <button id="kana-back" class="secondary">Back to levels</button>
+          <button id="kana-back" class="secondary">Change groups</button>
         </div>
       </div>`;
     body.querySelector("#kana-retry")!.addEventListener("click", () => void runLevel(body, game, level, main, isCurrent));
-    body.querySelector("#kana-back")!.addEventListener("click", () => renderMenu(body, game, main, isCurrent));
+    body.querySelector("#kana-back")!.addEventListener("click", () => renderSelection(body, game, main, isCurrent));
   };
 
   const finish = async (): Promise<void> => {
@@ -401,20 +383,57 @@ async function runLevel(
     await saveGame(game);
     if (!isCurrent()) return;
     const next = level + 1 < LEVELS.length ? LEVELS[level + 1] : null;
+
+    if (!next) {
+      // The top of the ladder.
+      body.innerHTML = `
+        <div class="card-panel kana-quiz">
+          <div class="big">🏆</div>
+          <div class="kana-score">All seven levels clear</div>
+          <div class="glosses">These kana are yours. Widen the selection for a taller climb.</div>
+          <div class="row-actions" style="justify-content:center;margin-top:12px">
+            <button id="kana-again">Play again</button>
+            <button id="kana-back" class="secondary">Change groups</button>
+          </div>
+        </div>`;
+      body.querySelector("#kana-again")!.addEventListener("click", async () => {
+        game.unlocked = game.skipLearn ? 1 : 0;
+        game.health = MAX_HEALTH;
+        await saveGame(game);
+        void runLevel(body, game, game.unlocked, main, isCurrent);
+      });
+      body.querySelector("#kana-back")!.addEventListener("click", () => renderSelection(body, game, main, isCurrent));
+      return;
+    }
+
+    // The climb continues by itself; the button is for the impatient.
     body.innerHTML = `
       <div class="card-panel kana-quiz">
         <div class="big">🎉</div>
         <div class="kana-score">Level ${level} clear</div>
-        <div class="glosses">${
-          useLives ? `One heart restored: ${heartsHtml(game.health)}` : next ? `Level ${level + 1} unlocked: ${next.name}` : ""
-        }</div>
+        <div class="glosses">${useLives ? `One heart restored: ${heartsHtml(game.health)}<br/>` : ""}
+          Next up — level ${level + 1}: ${next.name}…</div>
         <div class="row-actions" style="justify-content:center;margin-top:12px">
-          ${next ? `<button id="kana-next">Level ${level + 1}: ${next.name}</button>` : ""}
-          <button id="kana-back" class="secondary">Back to levels</button>
+          <button id="kana-next">Continue now</button>
+          <button id="kana-back" class="secondary">Stop here</button>
         </div>
       </div>`;
-    body.querySelector("#kana-next")?.addEventListener("click", () => void runLevel(body, game, level + 1, main, isCurrent));
-    body.querySelector("#kana-back")!.addEventListener("click", () => renderMenu(body, game, main, isCurrent));
+    let advanced = false;
+    const goNext = (): void => {
+      if (advanced) return;
+      advanced = true;
+      void runLevel(body, game, level + 1, main, isCurrent);
+    };
+    const autoNext = setTimeout(goNext, 2200);
+    body.querySelector("#kana-next")!.addEventListener("click", () => {
+      clearTimeout(autoNext);
+      goNext();
+    });
+    body.querySelector("#kana-back")!.addEventListener("click", () => {
+      advanced = true; // stops the pending auto-continue
+      clearTimeout(autoNext);
+      renderSelection(body, game, main, isCurrent);
+    });
   };
 
   const draw = (): void => {
@@ -448,7 +467,7 @@ async function runLevel(
         }
         <div class="kana-feedback" id="kana-feedback"></div>
         <div class="row-actions" style="justify-content:center">
-          <button id="kana-quit" class="ghost">Back to levels</button>
+          <button id="kana-quit" class="ghost">Stop</button>
         </div>
       </div>
       <div class="kana-cheer" id="kana-cheer"></div>
@@ -457,7 +476,7 @@ async function runLevel(
     body.querySelector<HTMLButtonElement>("#kana-quit")!.addEventListener("click", () => {
       active = false;
       stopTimer();
-      renderMenu(body, game, main, isCurrent);
+      renderSelection(body, game, main, isCurrent);
     });
 
     const feedback = body.querySelector<HTMLDivElement>("#kana-feedback")!;
