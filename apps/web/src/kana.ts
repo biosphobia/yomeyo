@@ -42,7 +42,7 @@ const LEVELS = [
   { name: "Learn", detail: "Meet each kana once, with its sound." },
   { name: "Multiple choice", detail: "Three options; every kana at least twice." },
   { name: "Type it", detail: "Type the romaji yourself." },
-  { name: "Lives", detail: "Typing, five hearts — a miss costs one." },
+  { name: "Lives", detail: "Typing, five hearts. A miss costs one." },
   { name: "Timed", detail: "Hearts, and six seconds a question." },
   { name: "Real words", detail: "Short dictionary words from your kana. No clock." },
   { name: "Words, timed", detail: "The words again, ten seconds each." },
@@ -220,7 +220,7 @@ function renderSelection(
     ${section("katakana", "Katakana カタカナ")}
     <label class="kana-skip-row">
       <input type="checkbox" id="kana-skip" ${skipLearn ? "checked" : ""} />
-      Skip level 0 — I already know these shapes
+      Skip level 0 (tutorial)
     </label>
     <div class="kana-start-row">
       <button id="kana-start" disabled>Start</button>
@@ -344,7 +344,7 @@ async function runLevel(
         <div class="card-panel kana-quiz">
           <div class="big">🔍</div>
           <div>Not enough short words can be written with only these kana.</div>
-          <div class="glosses" style="margin-top:8px">Add more groups — the k, s and vowel rows open up the most words.</div>
+          <div class="glosses" style="margin-top:8px">Add more groups.</div>
           <div class="row-actions" style="justify-content:center;margin-top:12px">
             <button id="kana-back" class="secondary">Change groups</button>
           </div>
@@ -382,7 +382,6 @@ async function runLevel(
       <div class="card-panel kana-quiz">
         <div class="big">💔</div>
         <div class="kana-score">Out of hearts</div>
-        <div class="glosses">Try level ${level} again with ${MAX_HEALTH} fresh hearts.</div>
         <div class="row-actions" style="justify-content:center;margin-top:12px">
           <button id="kana-retry">Try again</button>
           <button id="kana-back" class="secondary">Change groups</button>
@@ -437,7 +436,7 @@ async function runLevel(
         <div class="big">🎉</div>
         <div class="kana-score">Level ${level} clear</div>
         <div class="glosses">${useLives ? `One heart restored: ${heartsHtml(game.health)}<br/>` : ""}
-          Next up — level ${level + 1}: ${next.name}…</div>
+          Starting level ${level + 1}: ${next.name}…</div>
         <div class="row-actions" style="justify-content:center;margin-top:12px">
           <button id="kana-next">Continue now</button>
           <button id="kana-back" class="secondary">Stop here</button>

@@ -109,9 +109,7 @@ function groupQuest(group: KanaGroup, day: number): QuestDef {
   return {
     id: `learn-${group.id}`,
     title: `New kana: ${group.title}`,
-    detail: `${group.entries.map((entry) => entry.kana).join(" ")} — clear ${CLEARS_PER_GROUP} kana levels with this group in the mix${
-      day > 1 ? ", together with everything learned so far" : ""
-    }.`,
+    detail: `${group.entries.map((entry) => entry.kana).join(" ")}. Clear ${CLEARS_PER_GROUP} kana levels with this group selected.`,
     goal: CLEARS_PER_GROUP,
     event: `group-cleared:${group.id}`,
   };
@@ -127,7 +125,7 @@ function drillQuest(day: number, newKanaCount: number): QuestDef {
   return {
     id: `drill-day-${day}`,
     title: "Daily drill",
-    detail: `Answer ${goal} kana questions correctly — keep every group learned so far in the rotation.`,
+    detail: `Answer ${goal} kana questions correctly.`,
     goal,
     event: "kana-correct",
   };
@@ -139,7 +137,7 @@ function vanityQuest(day: number): QuestDef {
     ? {
         id: "hot-streak",
         title: "Hot streak",
-        detail: "Reach a 20-answer streak without a single miss.",
+        detail: "Reach a 20-answer streak.",
         goal: 1,
         event: "kana-streak-20",
       }
@@ -190,7 +188,7 @@ export async function planForDay(key: string): Promise<DayPlan> {
         {
           id: "hiragana-exam",
           title: "Hiragana exam",
-          detail: "The final test over all of hiragana — arriving in an update.",
+          detail: "The final hiragana test. Coming soon.",
           goal: 1,
           event: "hiragana-exam",
         },

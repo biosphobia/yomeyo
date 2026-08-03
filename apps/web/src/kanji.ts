@@ -93,7 +93,7 @@ async function renderList(body: HTMLElement): Promise<void> {
   let empty = "";
   if (activeTab === "mine") {
     list = mineChars.map((c) => index.get(c)).filter((k): k is KanjiInfo => !!k);
-    empty = "No kanji yet — save some words and the kanji in them show up here.";
+    empty = "No kanji yet. They come from your saved words.";
   } else {
     list = [...index.values()].filter(isJoyo).sort((a, b) => a.grade - b.grade || (a.freq || 9999) - (b.freq || 9999));
     empty = "No jōyō data available yet.";
@@ -185,7 +185,7 @@ async function showDetail(info: KanjiInfo, cards: Awaited<ReturnType<typeof live
     const msg = document.createElement("div");
     msg.className = "msg";
     msg.textContent =
-      "Stroke order isn't available for this kanji yet — it is built alongside the dictionary.";
+      "Stroke order isn't available for this kanji yet.";
     strokesBox.appendChild(msg);
     return;
   }

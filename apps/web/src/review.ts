@@ -93,8 +93,8 @@ function showNext(
         <div class="big">🎉</div>
         <div>${
           totalDue > 0
-            ? "That's the daily limit — more cards are waiting tomorrow."
-            : "All caught up!<br/>Mine some new words in the Reader, or check back later."
+            ? "Daily limit reached. More tomorrow."
+            : "All caught up!"
         }</div>
       </div>
     `;

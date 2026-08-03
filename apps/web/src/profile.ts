@@ -117,7 +117,7 @@ export async function ensureProfile(): Promise<Profile> {
         // Astronomically unlikely collision; the next stamp differs.
       }
     }
-    if (!name) throw new Error("Could not assign a username — try again.");
+    if (!name) throw new Error("Could not assign a username. Try again.");
     profile = { name };
     await writeProfile(me.uid, profile);
   } else {
@@ -161,7 +161,7 @@ export async function setProfilePhoto(file: File): Promise<Profile> {
   const current = await ensureProfile();
 
   const photo = await squareThumbnail(file, 128);
-  if (photo.length > 100000) throw new Error("That image did not compress well — try a simpler one.");
+  if (photo.length > 100000) throw new Error("Could not shrink that image. Try another.");
   const next: Profile = { ...current, photo };
   await writeProfile(me.uid, next);
   return next;

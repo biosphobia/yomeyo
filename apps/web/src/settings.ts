@@ -77,7 +77,7 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
 
     <div class="card-panel">
       <b>Dictionary</b>
-      <div class="msg" id="dict-status">Not loaded yet — open the Reader to load it.</div>
+      <div class="msg" id="dict-status">Not downloaded yet.</div>
       <div class="row-actions">
         <button id="dict-load" class="secondary">Download for offline use</button>
       </div>
@@ -89,8 +89,7 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
       <div class="msg">
         Chrome menu (⋮) → <i>Add to Home screen</i>: Yomeyo then opens like an
         app and works offline. To save words while browsing, select text and
-        share it to Yomeyo — or install the browser extension and tap words
-        right on the page.
+        share it to Yomeyo, or install the browser extension.
       </div>
     </div>
 
@@ -155,9 +154,8 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
         body.innerHTML = `
           ${bakedNote}
           <div class="msg">
-            Yomeyo works fully on this device without an account. Signing in —
-            which backs your deck up and syncs it between devices — needs a
-            one-off setup: switch on <b>Advanced settings</b> below to do it.
+            Yomeyo works fully on this device without an account. To back up
+            and sync your deck, switch on <b>Advanced settings</b> below.
           </div>
         `;
         return;
@@ -165,8 +163,7 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
       body.innerHTML = `
         ${bakedNote}
         <div class="msg">
-          Sync needs a free Firebase project of your own — Yomeyo has no
-          server, so your data can only live in a project you control.
+          Sync needs a free Firebase project of your own.
         </div>
         <details>
           <summary>How to get the config (about two minutes)</summary>
@@ -286,15 +283,14 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
       <input type="text" id="prof-name" value="${escapeAttr(profile.name)}" maxlength="20"
         autocapitalize="none" autocorrect="off" spellcheck="false" />
       <div class="msg">
-        Yours alone — no two accounts can share one. It is what everyone sees;
-        your real name never is.
+        Shown to others instead of your real name.
       </div>
       <div class="row-actions">
         <button id="prof-save" class="secondary">Change username</button>
         <button id="prof-photo-pick" class="secondary">Profile picture…</button>
         <input type="file" id="prof-photo" accept="image/*" style="display:none" />
       </div>`
-          : `<div class="msg">Your profile could not be loaded — check the connection and reopen Settings.</div>`
+          : `<div class="msg">Could not load your profile. Reopen Settings to retry.</div>`
       }
       <div class="row-actions">
         <button id="cloud-sync">Sync now</button>
@@ -503,7 +499,7 @@ function renderAnkiImport(main: HTMLElement, account: AccountInfo | null, advanc
                    )
                    .join("")}
                </div>
-               <div class="msg">Audio and pictures need no mapping — they are found in whichever fields they live.</div>`
+               <div class="msg">Audio and pictures are found automatically.</div>`
             : ""
         }
         <div class="msg">Preview</div>
@@ -515,7 +511,7 @@ function renderAnkiImport(main: HTMLElement, account: AccountInfo | null, advanc
         const cards = anki!.cardsFor(source!, group, keepScheduling).slice(0, 3);
         preview.innerHTML =
           cards.length === 0
-            ? `<div class="msg error">Nothing would be imported — check which field holds the word.</div>`
+            ? `<div class="msg error">Nothing would be imported. Check which field holds the word.</div>`
             : cards
                 .map(
                   (card) => `
@@ -568,14 +564,14 @@ function renderAnkiImport(main: HTMLElement, account: AccountInfo | null, advanc
     const drawShareNote = (): void => {
       if (!account) {
         shareNote.className = "msg";
-        shareNote.innerHTML = "Sharing needs an account — sign in above. Without one the deck is yours alone.";
+        shareNote.innerHTML = "Sharing needs an account. Sign in above.";
         return;
       }
       shareNote.className = "msg";
       shareNote.innerHTML = share
-        ? `The deck's <b>words</b> are listed for everyone under <b>Decks → Premade</b> —
-           not your review history, mined words, pictures or audio. You can withdraw it
-           later. <b>Don't share a private collection.</b>`
+        ? `The deck's <b>words</b> are listed for everyone under <b>Decks → Premade</b>.
+           Your review history, mined words, pictures and audio stay private.
+           <b>Don't share a private collection.</b>`
         : "The deck is imported for you alone.";
     };
     shareBox.disabled = !account;
@@ -614,8 +610,8 @@ function renderAnkiImport(main: HTMLElement, account: AccountInfo | null, advanc
         }
         if (result.withoutMeaning > 0) {
           parts.push(
-            `⚠ ${result.withoutMeaning.toLocaleString()} came across without an English meaning — ` +
-              `check which field is mapped as Meaning and import again`,
+            `⚠ ${result.withoutMeaning.toLocaleString()} came across without an English meaning. ` +
+              `Check which field is mapped as Meaning and import again`,
           );
         }
         if (result.mediaMissing > 0) {
@@ -639,7 +635,7 @@ function renderAnkiImport(main: HTMLElement, account: AccountInfo | null, advanc
             parts.push("and it is now in the shared library");
           } catch (err) {
             parts.push(
-              `but sharing failed (${err instanceof Error ? err.message : String(err)}) — the words are still yours`,
+              `but sharing failed (${err instanceof Error ? err.message : String(err)})`,
             );
           }
         }
@@ -901,7 +897,7 @@ function wireServerSync(main: HTMLElement): void {
     // send them readable to anyone on the path; only a server on this very
     // machine is exempt, because that traffic never crosses a wire.
     if (/^http:\/\//i.test(url) && !/^http:\/\/(localhost|127\.0\.0\.1)([:/]|$)/i.test(url)) {
-      toast("Use an https:// address — plain http would send your words and token unencrypted.", "error");
+      toast("Use an https:// address.", "error");
       return;
     }
     await setSyncSettings({ url, token: tokenInput.value });

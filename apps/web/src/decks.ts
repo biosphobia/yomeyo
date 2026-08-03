@@ -68,9 +68,7 @@ async function renderPremade(
     body.innerHTML = `
       <div class="card-panel">
         <div class="msg">
-          Premade decks need cloud sync — set it up under <b>Settings →
-          Account</b>. You can still import Anki decks from a file; they stay
-          on this device.
+          Premade decks need cloud sync. Set it up under <b>Settings → Account</b>.
         </div>
       </div>
     `;
@@ -86,7 +84,7 @@ async function renderPremade(
     if (!account) {
       body.innerHTML = `
         <div class="card-panel">
-          <div class="msg">Sign in to see the decks people have shared — <b>Settings → Account</b>.</div>
+          <div class="msg">Sign in to see shared decks (<b>Settings → Account</b>).</div>
         </div>
       `;
       return;
@@ -119,8 +117,7 @@ async function renderPremade(
     body.innerHTML = `
       <div class="card-panel">
         <div class="empty-state"><div class="big">📦</div>
-          No decks shared yet.<br/>
-          Import one under <b>Settings → Import from Anki</b> to share it.
+          No decks shared yet.
         </div>
       </div>
     `;

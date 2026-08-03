@@ -286,7 +286,7 @@ export function clipSpeakerButton(key: string, label: string): HTMLButtonElement
         button.classList.remove("error");
       } else {
         button.classList.add("error");
-        button.title = "This clip is not on this device — media stays where the deck was imported.";
+        button.title = "This clip is not on this device.";
       }
     } catch (err) {
       button.classList.add("error");

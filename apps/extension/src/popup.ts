@@ -46,8 +46,8 @@ function updateHint(): void {
   tapHint.textContent = tapToggle.checked
     ? "Tap any Japanese word on a page to look it up."
     : IS_TOUCH
-      ? "Off — nothing happens when you tap words."
-      : "Off — hold Alt/Option and click a word instead.";
+      ? "Off."
+      : "Off. Hold Alt/Option and click a word instead.";
 }
 
 /**
@@ -143,7 +143,7 @@ async function refresh(): Promise<void> {
       ? "Tap a Japanese word on any page to save it."
       : stats.waiting === 0
         ? `Everything saved here is in the app${stats.lastHandoffAt ? ` (last added ${describeWhen(stats.lastHandoffAt)})` : ""}.`
-        : "Could not reach the app just now — these go across on the next save, or when the app is next open.";
+        : "Could not reach the app just now. They will go across on the next save.";
   if (stats.version) versionLabel.textContent = `Yomeyo ${stats.version}`;
   await refreshAudioPermission();
 }

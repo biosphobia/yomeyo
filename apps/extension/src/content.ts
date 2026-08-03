@@ -471,8 +471,8 @@ function renderToggle(): void {
   toggleEl.setAttribute("aria-checked", String(on));
   toggleEl.querySelector(".label")!.textContent = on ? "Tap: on" : "Tap: off";
   toggleEl.title = on
-    ? "Yomeyo lookups are on — tap to turn off and use the page normally"
-    : "Yomeyo lookups are off — tap to turn on";
+    ? "Tap to turn lookups off"
+    : "Tap to turn lookups on";
 }
 
 /** Show a plain message in the sheet, for when there is no lookup to show. */
