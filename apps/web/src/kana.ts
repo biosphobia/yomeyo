@@ -1,6 +1,6 @@
 import { getMeta, setMeta } from "./db.js";
 import { speak } from "./audio.js";
-import { recordQuestEvent, recordQuestEvents } from "./quests.js";
+import { recordQuestEvents } from "./quests.js";
 import { assetUrl, loadDictionary } from "./store.js";
 import { KANA_GROUPS, isCorrect, type KanaEntry, type KanaGroup } from "./kana-data.js";
 
@@ -525,7 +525,8 @@ async function runLevel(
         bestStreak = streak;
         void setMeta(BEST_STREAK_KEY, bestStreak);
       }
-      void recordQuestEvent("kana-correct");
+      // Crossing 20 in a row is a quest-worthy moment, counted once per run.
+      void recordQuestEvents(["kana-correct", ...(streak === 20 ? ["kana-streak-20"] : [])]);
       feedback.innerHTML = `<span class="ok-text">✓ ${escapeHtml(itemAnswer(item))}</span>
         <span class="kana-streak">🔥 ${streak}</span>`;
       showReaction(body, cheer.correct);

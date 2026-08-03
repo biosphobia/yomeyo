@@ -78,7 +78,9 @@ export async function renderCalendar(main: HTMLElement, isCurrent: () => boolean
     const isToday = key === todayKey;
     const plan = await planForDay(key);
     let status = "";
-    if (!future) {
+    if (plan.beforeJourney) {
+      status = "grace";
+    } else if (!future) {
       const events = await eventsOf(key);
       const done = plan.quests.filter((quest) => questProgress(quest, events) >= quest.goal).length;
       status = done === plan.quests.length ? "done" : done > 0 || Object.keys(events).length > 0 ? "partial" : "idle";
@@ -94,9 +96,11 @@ export async function renderCalendar(main: HTMLElement, isCurrent: () => boolean
         ? `<span class="cal-mark">🏁</span>`
         : status === "done"
           ? `<span class="cal-mark">★</span>`
-          : status === "partial"
-            ? `<span class="cal-mark">·</span>`
-            : ""
+          : status === "grace"
+            ? `<span class="cal-mark cal-grace">✓</span>`
+            : status === "partial"
+              ? `<span class="cal-mark">·</span>`
+              : ""
     }`;
     // Every day is readable, future ones included — the quests are known
     // ahead of time; only the attempting waits for the day itself.
@@ -128,6 +132,17 @@ async function renderDay(
 
   const isToday = key === todayKey;
   const future = key > todayKey;
+
+  if (plan.beforeJourney) {
+    box.innerHTML = `
+      <div class="card-panel">
+        <b>${key}</b><span class="glosses"> · cleared ✓</span>
+        <div class="glosses" style="margin-top:6px">Before your journey began — nothing was asked of you.</div>
+      </div>
+    `;
+    return;
+  }
+
   const complete =
     !future && plan.quests.every((quest) => questProgress(quest, events) >= quest.goal);
 

@@ -533,6 +533,15 @@ label {
   border-color: #ffb54d88;
 }
 
+.cal-cell.grace {
+  opacity: 0.6;
+}
+
+.cal-grace {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
 .cal-cell.future {
   cursor: pointer;
 }

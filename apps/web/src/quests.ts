@@ -31,6 +31,8 @@ export interface DayPlan {
   quests: QuestDef[];
   /** Set on landmark days — shown as 🏁 on the calendar. */
   milestone?: string;
+  /** True for days before the journey began — cleared by grace, not effort. */
+  beforeJourney?: boolean;
 }
 
 /** The pool for days beyond the scheduled curriculum. */
@@ -100,40 +102,91 @@ function dayNumber(key: string, start: string): number {
   return Math.round((localTime(key) - localTime(start)) / 86400000) + 1;
 }
 
+/** How many level clears each new group asks for — one pass is a glance. */
+const CLEARS_PER_GROUP = 2;
+
 function groupQuest(group: KanaGroup, day: number): QuestDef {
   return {
     id: `learn-${group.id}`,
     title: `New kana: ${group.title}`,
-    detail: `${group.entries.map((entry) => entry.kana).join(" ")} — clear a kana level with this group in the mix${
+    detail: `${group.entries.map((entry) => entry.kana).join(" ")} — clear ${CLEARS_PER_GROUP} kana levels with this group in the mix${
       day > 1 ? ", together with everything learned so far" : ""
     }.`,
-    goal: 1,
+    goal: CLEARS_PER_GROUP,
     event: `group-cleared:${group.id}`,
   };
 }
 
 /**
+ * The day's volume: enough repetitions that the new kana actually stick —
+ * roughly eight sightings each — clamped so no day is a marathon. Across
+ * the week this drills the whole syllabary several hundred times over.
+ */
+function drillQuest(day: number, newKanaCount: number): QuestDef {
+  const goal = Math.max(60, Math.min(120, newKanaCount * 8));
+  return {
+    id: `drill-day-${day}`,
+    title: "Daily drill",
+    detail: `Answer ${goal} kana questions correctly — keep every group learned so far in the rotation.`,
+    goal,
+    event: "kana-correct",
+  };
+}
+
+/** The bragging-rights extras, appearing every other day, alternating. */
+function vanityQuest(day: number): QuestDef {
+  return day % 4 === 0
+    ? {
+        id: "hot-streak",
+        title: "Hot streak",
+        detail: "Reach a 20-answer streak without a single miss.",
+        goal: 1,
+        event: "kana-streak-20",
+      }
+    : {
+        id: "kana-flawless",
+        title: "Flawless",
+        detail: "Clear a kana level without a single miss.",
+        goal: 1,
+        event: "kana-level-perfect",
+      };
+}
+
+/**
  * What a given day asks for. Future days answer too — their quests are
  * viewable ahead of time; they just cannot be attempted until they arrive.
+ * Days from before the journey began ask for nothing and count as cleared:
+ * nobody misses a quest that was never put to them.
  */
 export async function planForDay(key: string): Promise<DayPlan> {
   const start = await questStart();
   const day = dayNumber(key, start);
   const hiragana = KANA_GROUPS.filter((group) => group.script === "hiragana");
 
-  // Week one: two groups a day, in order, on top of the ones before.
+  if (day < 1) return { quests: [], beforeJourney: true };
+
+  // Week one: two groups a day, in order, on top of the ones before —
+  // drilled hard enough that a week covers the whole syllabary properly.
   if (day >= 1 && day <= 7) {
     const first = hiragana[(day - 1) * 2];
     const second = hiragana[(day - 1) * 2 + 1];
-    return { quests: [groupQuest(first, day), groupQuest(second, day)] };
+    const quests = [
+      groupQuest(first, day),
+      groupQuest(second, day),
+      drillQuest(day, first.entries.length + second.entries.length),
+    ];
+    if (day % 2 === 0) quests.push(vanityQuest(day));
+    return { quests };
   }
 
-  // Day 8: the last group, and the exam over everything.
+  // Day 8: the last group, the exam over everything, and a full drill.
   if (day === 8) {
+    const finalGroup = hiragana[hiragana.length - 1];
     return {
       milestone: "Hiragana complete",
       quests: [
-        groupQuest(hiragana[hiragana.length - 1], day),
+        groupQuest(finalGroup, day),
+        drillQuest(day, finalGroup.entries.length + 8),
         {
           id: "hiragana-exam",
           title: "Hiragana exam",
@@ -141,6 +194,7 @@ export async function planForDay(key: string): Promise<DayPlan> {
           goal: 1,
           event: "hiragana-exam",
         },
+        vanityQuest(day),
       ],
     };
   }
@@ -227,12 +281,15 @@ export async function dayComplete(key: string): Promise<boolean> {
 /**
  * Consecutive fully-completed days ending today (or yesterday, so a streak
  * is not "broken" at breakfast before today's quests are even possible).
+ * Days from before the journey are cleared by grace but earn no streak, so
+ * the walk stops at day 1.
  */
 export async function dayStreak(now: Date = new Date()): Promise<number> {
+  const start = await questStart();
   let streak = 0;
   const cursor = new Date(now);
   if (!(await dayComplete(dateKey(cursor)))) cursor.setDate(cursor.getDate() - 1);
-  while (await dayComplete(dateKey(cursor))) {
+  while (dateKey(cursor) >= start && (await dayComplete(dateKey(cursor)))) {
     streak++;
     cursor.setDate(cursor.getDate() - 1);
   }

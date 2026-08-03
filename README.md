@@ -249,10 +249,14 @@ enough). The next push deploys them.
 ## Calendar
 
 The **Calendar** tab gives every local day its quests. The journey's first
-week is a fixed curriculum: two hiragana groups a day in textbook order,
-practised together with everything learned before, and day 8 is a
-**milestone** (🏁) — the final group plus the hiragana exam. Beyond the
-schedule, days draw from a pool. Every day is readable ahead of time —
+week is a fixed curriculum sized to actually drill the syllabary: two
+hiragana groups a day in textbook order, each cleared twice at level play,
+plus a daily drill of 60–120 correct answers (about eight sightings per new
+kana), with vanity quests — Flawless, Hot streak — joining every other day.
+Day 8 is a **milestone** (🏁): the final group, a full drill, and the
+hiragana exam. Beyond the schedule, days draw from a pool. Days from before
+the journey began are cleared by grace — nobody misses a quest that was
+never put to them. Every day is readable ahead of time —
 future quests show locked — but only the current day can be attempted;
 quests turn over at local midnight. Screens report plain events (a correct
 kana answer, a level cleared with certain groups in play) and quests are
