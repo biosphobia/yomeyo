@@ -1,5 +1,6 @@
 import type { Card, CardState } from "./types.js";
 import { makeId } from "./card.js";
+import { parsePitchAccents } from "./pitch.js";
 import { openZip, openZipRanged, type ByteRangeReader, type ZipArchive } from "./zip.js";
 import { SqliteFile, type SqlRow } from "./sqlite.js";
 
@@ -94,6 +95,44 @@ export function splitFurigana(field: string): Furigana {
   return { text: text.trim(), reading: reading.trim() };
 }
 
+export interface FuriganaSegment {
+  text: string;
+  /** The reading over this run of text; absent for plain kana runs. */
+  ruby?: string;
+}
+
+/**
+ * Split Anki's furigana notation into renderable pieces — each kanji run
+ * with its reading, each plain run as itself — so a sentence can be shown
+ * as real ruby text instead of flattened.
+ */
+export function furiganaSegments(field: string): FuriganaSegment[] {
+  const source = field.replace(/&nbsp;/g, " ");
+  if (!/\[[^\]]+\]/.test(source)) {
+    const text = source.trim();
+    return text ? [{ text }] : [];
+  }
+
+  const segments: FuriganaSegment[] = [];
+  let plain = "";
+  const flush = () => {
+    if (plain) segments.push({ text: plain });
+    plain = "";
+  };
+  const pattern = / ?([^\s[\]]+)\[([^\]]*)\]|([^[\]])/g;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(source)) !== null) {
+    if (match[2] !== undefined) {
+      flush();
+      segments.push({ text: match[1] ?? "", ruby: match[2] });
+    } else {
+      plain += match[3] ?? "";
+    }
+  }
+  flush();
+  return segments;
+}
+
 /** Break one field into separate meanings, the way a card would show them. */
 export function splitGlosses(field: string): string[] {
   return stripHtml(field)
@@ -177,14 +216,25 @@ export type FieldRole =
   | "meaning"
   | "sentence"
   | "sentenceMeaning"
+  | "sentenceFurigana"
   | "notes"
+  | "pitchAccent"
   | "ignore";
 
 /** Which field of a note type holds what, by index into its field list. */
 export type FieldMapping = Record<Exclude<FieldRole, "ignore">, number>;
 
 /** The roles, in the order they are guessed and offered. */
-export const FIELD_ROLES = ["term", "reading", "meaning", "sentence", "sentenceMeaning", "notes"] as const;
+export const FIELD_ROLES = [
+  "term",
+  "reading",
+  "meaning",
+  "sentence",
+  "sentenceMeaning",
+  "sentenceFurigana",
+  "notes",
+  "pitchAccent",
+] as const;
 
 const HINTS: Record<Exclude<FieldRole, "ignore">, RegExp[]> = {
   term: [
@@ -206,7 +256,9 @@ const HINTS: Record<Exclude<FieldRole, "ignore">, RegExp[]> = {
   ],
   sentence: [/^(sentence|example|context|expression sentence|cloze|snippet)$/i, /^(sentence|example|context)(?![-_ ]?(meaning|translation|english|audio|furigana|reading|kana))/i, /例文|文/],
   sentenceMeaning: [/^(sentence|example|context)[-_ ]?(meaning|translation|english)/i, /例文.*(意味|訳)/],
+  sentenceFurigana: [/^(sentence|example|context)[-_ ]?(furigana|reading|kana)/i, /例文.*(ふりがな|読み)/],
   notes: [/^notes?\b/i, /備考|メモ|ノート/],
+  pitchAccent: [/^pitch[-_ ]?accent(?![-_ ]?notes?)/i, /^(pitch|accent)$/i, /アクセント/],
 };
 
 /**
@@ -224,7 +276,9 @@ export function guessFieldMapping(fieldNames: string[]): FieldMapping {
     meaning: -1,
     sentence: -1,
     sentenceMeaning: -1,
+    sentenceFurigana: -1,
     notes: -1,
+    pitchAccent: -1,
   };
   const taken = new Set<number>();
 
@@ -730,6 +784,11 @@ export function notesToCards(
     const rawSentence = field(mapping.sentence);
     const sentenceMeaning = stripHtml(field(mapping.sentenceMeaning));
     const noteText = stripHtml(field(mapping.notes));
+    const pitchAccents = parsePitchAccents(stripHtml(field(mapping.pitchAccent)));
+    // Kept only when it actually carries ruby brackets — flattened it would
+    // just repeat the sentence.
+    const sentenceFurigana = stripHtml(field(mapping.sentenceFurigana));
+    const hasRuby = /\[[^\]]+\]/.test(sentenceFurigana);
 
     // The reading is often not in a field of its own but written into the
     // term as furigana, so take it from there when the field is empty.
@@ -751,7 +810,9 @@ export function notesToCards(
       glosses: splitGlosses(rawMeaning),
       sentence: splitFurigana(stripHtml(rawSentence)).text || undefined,
       ...(sentenceMeaning ? { sentenceMeaning } : {}),
+      ...(hasRuby ? { sentenceFurigana } : {}),
       ...(noteText ? { notes: noteText } : {}),
+      ...(pitchAccents.length > 0 ? { pitchAccents } : {}),
       source: "Anki",
       createdAt: note.id !== undefined && note.id > 1_000_000_000_000 ? note.id : now,
       updatedAt: now,

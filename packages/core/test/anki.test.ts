@@ -83,7 +83,7 @@ describe("media in the fields", () => {
   });
 
   it("tells the sentence being read out from the word being pronounced", () => {
-    const mapping = { term: 0, reading: -1, meaning: 1, sentence: 2, sentenceMeaning: -1, notes: -1 };
+    const mapping = { term: 0, reading: -1, meaning: 1, sentence: 2, sentenceMeaning: -1, sentenceFurigana: -1, notes: -1, pitchAccent: -1 };
     const media = noteMedia(
       ["水", "water", "水を飲む[sound:sentence_1.mp3]", "[sound:word_1.mp3]", '<img src="mizu.jpg">'],
       mapping,
@@ -93,7 +93,7 @@ describe("media in the fields", () => {
   });
 
   it("treats a 'Sentence-Audio' field as sentence audio even though it maps to no role", () => {
-    const mapping = { term: 0, reading: -1, meaning: 1, sentence: -1, sentenceMeaning: -1, notes: -1 };
+    const mapping = { term: 0, reading: -1, meaning: 1, sentence: -1, sentenceMeaning: -1, sentenceFurigana: -1, notes: -1, pitchAccent: -1 };
     const media = noteMedia(["水", "water", "[sound:s.mp3]"], mapping, ["Word", "Meaning", "Sentence-Audio"]);
     expect(media.sentenceAudio).toBe("s.mp3");
     expect(media.audio).toBeUndefined();
@@ -185,7 +185,9 @@ describe("guessing which field is which", () => {
       meaning: 2,
       sentence: 5,
       sentenceMeaning: 6,
+      sentenceFurigana: 7,
       notes: 9,
+      pitchAccent: 10, // and never "Pitch Accent Notes"
     });
   });
 
@@ -422,7 +424,7 @@ describe("Anki scheduling in Yomeyo's terms", () => {
 });
 
 describe("turning notes into cards", () => {
-  const mapping = { term: 0, reading: 1, meaning: 2, sentence: 3, sentenceMeaning: -1, notes: -1 };
+  const mapping = { term: 0, reading: 1, meaning: 2, sentence: 3, sentenceMeaning: -1, sentenceFurigana: -1, notes: -1, pitchAccent: -1 };
   const now = Date.UTC(2024, 0, 1);
 
   it("carries the sentence meaning and notes across when mapped", () => {
@@ -436,6 +438,25 @@ describe("turning notes into cards", () => {
       sentenceMeaning: "Drink water.",
       notes: "Common word.",
     });
+  });
+
+  it("carries pitch accent and sentence furigana across when mapped", () => {
+    const cards = notesToCards(
+      [{ id: 1, fields: ["水", "みず", "water", "水を飲む", "①", "水[みず]を 飲[の]む"] }],
+      { ...mapping, pitchAccent: 4, sentenceFurigana: 5 },
+      { now },
+    );
+    expect(cards[0].pitchAccents).toEqual([1]);
+    expect(cards[0].sentenceFurigana).toBe("水[みず]を 飲[の]む");
+  });
+
+  it("does not keep a furigana field with no ruby in it", () => {
+    const cards = notesToCards(
+      [{ id: 1, fields: ["水", "みず", "water", "", "", "みずをのむ"] }],
+      { ...mapping, sentenceFurigana: 5 },
+      { now },
+    );
+    expect("sentenceFurigana" in cards[0]).toBe(false);
   });
 
   it("makes one card per note", () => {

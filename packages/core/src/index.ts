@@ -22,6 +22,7 @@ export {
 } from "./dict-binary.js";
 export * from "./kanji.js";
 export * from "./anki.js";
+export * from "./pitch.js";
 export * from "./deck-library.js";
 export {
   openZip,

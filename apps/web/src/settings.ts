@@ -268,11 +268,15 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
     // person as is theirs, and nothing here ever displays it. A brand-new
     // account is given a unique username right here, before choosing one.
     const profile = await ensureProfile().catch(() => null);
+    const isAdmin = await import("./library.js")
+      .then((library) => library.adminState())
+      .then((state) => state.isAdmin)
+      .catch(() => false);
     body.innerHTML = `
       <div class="profile-row">
         ${avatarHtml(profile)}
         <div class="msg ok" style="margin:0">Signed in${
-          profile ? ` as <b>@${escapeHtml(profile.name)}</b>` : ""
+          profile ? ` as <b>${isAdmin ? "👑 " : ""}@${escapeHtml(profile.name)}</b>` : ""
         }.</div>
       </div>
       ${
@@ -426,7 +430,9 @@ function renderAnkiImport(main: HTMLElement, account: AccountInfo | null, advanc
       ["meaning", "Meaning"],
       ["sentence", "Sentence"],
       ["sentenceMeaning", "Sentence meaning"],
+      ["sentenceFurigana", "Sentence furigana"],
       ["notes", "Notes"],
+      ["pitchAccent", "Pitch accent"],
     ];
 
     const total = source.groups.reduce((sum, g) => sum + (g.include ? g.notes.length : 0), 0);

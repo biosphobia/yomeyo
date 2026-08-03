@@ -71,8 +71,12 @@ export interface Card {
   sentence?: string;
   /** What the sentence means, when the deck carried a translation. */
   sentenceMeaning?: string;
+  /** The sentence in Anki's 漢字[かんじ] notation, for showing real ruby. */
+  sentenceFurigana?: string;
   /** Free-form notes from the deck's author: usage, nuance, mnemonics. */
   notes?: string;
+  /** Pitch accents (mora the pitch drops after; 0 = heiban), when known. */
+  pitchAccents?: number[];
   /** Source URL / page title, if mined from a page. */
   source?: string;
   /**

@@ -1,4 +1,16 @@
-import { buildQueue, deckStats, gradeCard, gradePreview, type Card, type DeckConfig, type Grade } from "@yomeyo/core";
+import {
+  buildQueue,
+  deckStats,
+  dropAfter,
+  furiganaSegments,
+  gradeCard,
+  gradePreview,
+  moraeOf,
+  pitchLevels,
+  type Card,
+  type DeckConfig,
+  type Grade,
+} from "@yomeyo/core";
 import { liveCards, saveCard } from "./store.js";
 import { clipSpeakerButton, playStoredAudio, playWord, speakerButton } from "./audio.js";
 import { cardInDeck, deckPicker, getDeckChoice } from "./deck-picker.js";
@@ -97,8 +109,13 @@ function showNext(
       <div class="review-term" lang="ja">${escapeHtml(card.term)}</div>
       ${card.sentence ? `<div class="review-sentence" lang="ja">${escapeHtml(hideTerm(card.sentence, card.term))}</div>` : ""}
       <div id="answer" style="display:none">
-        <div id="reading-row" class="review-reading" lang="ja">${escapeHtml(card.reading)}</div>
+        <div id="reading-row" class="review-reading" lang="ja">${readingHtml(card)}</div>
         <div class="review-glosses">${escapeHtml(card.glosses.join(" · "))}</div>
+        ${
+          card.sentenceFurigana
+            ? `<div class="review-sentence" lang="ja">${rubyHtml(card.sentenceFurigana)}</div>`
+            : ""
+        }
         ${card.sentenceMeaning ? `<div class="review-sentence">${escapeHtml(card.sentenceMeaning)}</div>` : ""}
         ${card.notes ? `<div class="review-notes">${escapeHtml(card.notes)}</div>` : ""}
         ${card.image ? `<div class="review-image"><img id="card-image" alt="" /></div>` : ""}
@@ -200,6 +217,37 @@ function formatDelay(ms: number): string {
 /** Mask the target word in its sentence so the front isn't a giveaway. */
 function hideTerm(sentence: string, term: string): string {
   return sentence.split(term).join("〇".repeat(Math.min(term.length, 4)));
+}
+
+/**
+ * The reading, drawn with its pitch when the card knows it: a line over the
+ * high morae, a leg where the pitch drops, and the accent numbers after.
+ */
+function readingHtml(card: Card): string {
+  const accents = card.pitchAccents ?? [];
+  if (!card.reading || accents.length === 0) return escapeHtml(card.reading);
+  const morae = moraeOf(card.reading);
+  const levels = pitchLevels(morae.length, accents[0]);
+  const drop = dropAfter(morae.length, accents[0]);
+  const spans = morae
+    .map(
+      (mora, i) =>
+        `<span class="mora${levels[i] ? " high" : ""}${i === drop ? " drop" : ""}">${escapeHtml(mora)}</span>`,
+    )
+    .join("");
+  const numbers = accents.map((a) => `[${a}]`).join(" ");
+  return `<span class="pitch">${spans}</span><span class="pitch-num">${numbers}</span>`;
+}
+
+/** Anki furigana notation as real ruby text. */
+function rubyHtml(notation: string): string {
+  return furiganaSegments(notation)
+    .map((segment) =>
+      segment.ruby !== undefined
+        ? `<ruby>${escapeHtml(segment.text)}<rt>${escapeHtml(segment.ruby)}</rt></ruby>`
+        : escapeHtml(segment.text),
+    )
+    .join("");
 }
 
 function escapeHtml(s: string): string {

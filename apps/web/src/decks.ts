@@ -141,7 +141,9 @@ async function renderPremade(
       <div class="word">
         <div><b>${escapeHtml(deck.name)}</b></div>
         <div class="glosses">${deck.cardCount.toLocaleString()} words${
-          deck.ownerName ? ` · shared by ${escapeHtml(deck.ownerName)}` : ""
+          deck.ownerName
+            ? ` · shared by ${deck.ownerUid && deck.ownerUid === admin.adminUid ? "👑 " : ""}${escapeHtml(deck.ownerName)}`
+            : ""
         }${isMine ? " · yours" : ""}</div>
         ${deck.description ? `<div class="glosses">${escapeHtml(deck.description)}</div>` : ""}
       </div>

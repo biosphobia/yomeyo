@@ -54,7 +54,9 @@ export interface SharedCard {
   glosses: string[];
   sentence?: string;
   sentenceMeaning?: string;
+  sentenceFurigana?: string;
   notes?: string;
+  pitchAccents?: number[];
 }
 
 /** Which deck a card belongs to; cards from before decks existed are mined. */
@@ -71,7 +73,9 @@ export function toSharedCards(cards: Card[]): SharedCard[] {
       glosses: card.glosses,
       ...(card.sentence ? { sentence: card.sentence } : {}),
       ...(card.sentenceMeaning ? { sentenceMeaning: card.sentenceMeaning } : {}),
+      ...(card.sentenceFurigana ? { sentenceFurigana: card.sentenceFurigana } : {}),
       ...(card.notes ? { notes: card.notes } : {}),
+      ...(card.pitchAccents?.length ? { pitchAccents: card.pitchAccents } : {}),
     }));
 }
 
@@ -88,7 +92,13 @@ export function fromSharedCards(shared: SharedCard[], deckId: string, now: numbe
       ...(typeof card.sentenceMeaning === "string" && card.sentenceMeaning
         ? { sentenceMeaning: card.sentenceMeaning }
         : {}),
+      ...(typeof card.sentenceFurigana === "string" && card.sentenceFurigana
+        ? { sentenceFurigana: card.sentenceFurigana }
+        : {}),
       ...(typeof card.notes === "string" && card.notes ? { notes: card.notes } : {}),
+      ...(Array.isArray(card.pitchAccents) && card.pitchAccents.some((a) => typeof a === "number")
+        ? { pitchAccents: card.pitchAccents.filter((a): a is number => typeof a === "number") }
+        : {}),
       deckId,
       createdAt: now,
       updatedAt: now,

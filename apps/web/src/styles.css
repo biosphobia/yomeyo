@@ -347,6 +347,38 @@ label {
   white-space: pre-line;
 }
 
+/* Pitch accent: a line over the high morae, a leg where the pitch drops. */
+.pitch {
+  display: inline-flex;
+}
+
+.pitch .mora {
+  padding: 2px 1px 0;
+  border-top: 2px solid transparent;
+}
+
+.pitch .high {
+  border-top-color: var(--accent);
+}
+
+.pitch .drop {
+  border-right: 2px solid var(--accent);
+  padding-right: 2px;
+}
+
+.pitch-num {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+/* Furigana: readable but subordinate to the text it annotates. */
+.review-sentence ruby rt {
+  font-size: 0.55em;
+  color: var(--muted);
+}
+
 .grade-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
