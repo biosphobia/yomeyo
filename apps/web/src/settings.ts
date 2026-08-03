@@ -20,6 +20,7 @@ import {
   type FieldMapping,
 } from "@yomeyo/core";
 import { getAdvancedMode, setAdvancedMode } from "./prefs.js";
+import { levelState } from "./levels.js";
 import { changeUsername, ensureProfile, setProfilePhoto } from "./profile.js";
 import { toast } from "./toast.js";
 import { getDeckConfig, resetDeckConfig, saveDeckConfig } from "./deck.js";
@@ -136,6 +137,78 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
   async function renderAccount(): Promise<void> {
     const body = main.querySelector<HTMLDivElement>("#account-body")!;
 
+    // The profile and its level are for everybody, signed in or not: the
+    // name, picture and XP live in the local database until there is an
+    // account to carry them further.
+    const profile = await ensureProfile().catch(() => null);
+    const level = await levelState();
+    const isAdmin = account
+      ? await import("./library.js")
+          .then((library) => library.adminState())
+          .then((state) => state.isAdmin)
+          .catch(() => false)
+      : false;
+    const percent = Math.min(100, Math.round((level.into / level.need) * 100));
+    const identity = profile
+      ? `
+      <div class="profile-row">
+        ${avatarHtml(profile)}
+        <div class="profile-id">
+          <div class="profile-name">${isAdmin ? "👑 " : ""}@${escapeHtml(profile.name)}</div>
+          <div class="level-line">
+            <span class="level-chip">Lv ${level.level}</span>
+            <span class="level-bar"><span style="width:${percent}%"></span></span>
+            <span class="glosses">${level.into}/${level.need} XP</span>
+          </div>
+        </div>
+      </div>
+      <details class="profile-edit">
+        <summary>Edit profile</summary>
+        <label for="prof-name">Username</label>
+        <input type="text" id="prof-name" value="${escapeAttr(profile.name)}" maxlength="20"
+          autocapitalize="none" autocorrect="off" spellcheck="false" />
+        <div class="msg">Shown instead of your real name.</div>
+        <div class="row-actions">
+          <button id="prof-save" class="secondary">Change username</button>
+          <button id="prof-photo-pick" class="secondary">Profile picture…</button>
+          <input type="file" id="prof-photo" accept="image/*" style="display:none" />
+        </div>
+        <div class="msg" id="prof-msg"></div>
+      </details>`
+      : "";
+
+    const wireIdentity = (): void => {
+      const profMsg = body.querySelector<HTMLDivElement>("#prof-msg");
+      const fail = (err: unknown): void => {
+        if (!profMsg) return;
+        profMsg.textContent = err instanceof Error ? err.message : String(err);
+        profMsg.className = "msg error";
+      };
+      body.querySelector<HTMLButtonElement>("#prof-save")?.addEventListener("click", async () => {
+        try {
+          await changeUsername(body.querySelector<HTMLInputElement>("#prof-name")!.value);
+          toast("Username changed");
+          void renderSettings(main);
+        } catch (err) {
+          fail(err);
+        }
+      });
+      const photoInput = body.querySelector<HTMLInputElement>("#prof-photo");
+      body.querySelector<HTMLButtonElement>("#prof-photo-pick")?.addEventListener("click", () => photoInput?.click());
+      photoInput?.addEventListener("change", async () => {
+        const file = photoInput.files?.[0];
+        photoInput.value = "";
+        if (!file) return;
+        try {
+          await setProfilePhoto(file);
+          toast("Profile picture updated");
+          void renderSettings(main);
+        } catch (err) {
+          fail(err);
+        }
+      });
+    };
+
     if (!config) {
       // A deployment that *tried* to bake a config in deserves to hear what
       // went wrong — swallowed, a broken secret is indistinguishable from a
@@ -152,15 +225,18 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
       // the panel only says the feature exists and where the door is.
       if (!advanced) {
         body.innerHTML = `
+          ${identity}
           ${bakedNote}
           <div class="msg">
             Yomeyo works fully on this device without an account. To back up
             and sync your deck, switch on <b>Advanced settings</b> below.
           </div>
         `;
+        wireIdentity();
         return;
       }
       body.innerHTML = `
+        ${identity}
         ${bakedNote}
         <div class="msg">
           Sync needs a free Firebase project of your own.
@@ -184,6 +260,7 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
         <div class="row-actions"><button id="fb-save">Enable cloud sync</button></div>
         <div class="msg" id="fb-msg"></div>
       `;
+      wireIdentity();
       body.querySelector<HTMLButtonElement>("#fb-save")!.addEventListener("click", async () => {
         const msg = body.querySelector<HTMLDivElement>("#fb-msg")!;
         const raw = body.querySelector<HTMLTextAreaElement>("#fb-config")!.value.trim();
@@ -201,6 +278,7 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
 
     if (!account) {
       body.innerHTML = `
+        ${identity}
         <div class="msg">Sign in to back up your deck and keep it in step across devices.${
           adoptable ? " The words already saved here come with you." : ""
         }</div>
@@ -219,6 +297,7 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
         <div class="msg error">${escapeHtml(accountError)}</div>
         <div class="msg" id="auth-msg"></div>
       `;
+      wireIdentity();
 
       const msg = body.querySelector<HTMLDivElement>("#auth-msg")!;
       const fail = (err: unknown) => {
@@ -261,72 +340,18 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
       return;
     }
 
-    // The profile, not the account's real name: what Google knows the
-    // person as is theirs, and nothing here ever displays it. A brand-new
-    // account is given a unique username right here, before choosing one.
-    const profile = await ensureProfile().catch(() => null);
-    const isAdmin = await import("./library.js")
-      .then((library) => library.adminState())
-      .then((state) => state.isAdmin)
-      .catch(() => false);
     body.innerHTML = `
-      <div class="profile-row">
-        ${avatarHtml(profile)}
-        <div class="msg ok" style="margin:0">Signed in${
-          profile ? ` as <b>${isAdmin ? "👑 " : ""}@${escapeHtml(profile.name)}</b>` : ""
-        }.</div>
-      </div>
-      ${
-        profile
-          ? `
-      <label for="prof-name">Username</label>
-      <input type="text" id="prof-name" value="${escapeAttr(profile.name)}" maxlength="20"
-        autocapitalize="none" autocorrect="off" spellcheck="false" />
-      <div class="msg">
-        Shown to others instead of your real name.
-      </div>
-      <div class="row-actions">
-        <button id="prof-save" class="secondary">Change username</button>
-        <button id="prof-photo-pick" class="secondary">Profile picture…</button>
-        <input type="file" id="prof-photo" accept="image/*" style="display:none" />
-      </div>`
-          : `<div class="msg">Could not load your profile. Reopen Settings to retry.</div>`
-      }
+      ${identity || `<div class="msg">Could not load your profile. Reopen Settings to retry.</div>`}
+      <div class="msg ok">Signed in.</div>
       <div class="row-actions">
         <button id="cloud-sync">Sync now</button>
         <button id="cloud-out" class="secondary">Sign out</button>
       </div>
       <div class="msg" id="cloud-msg"></div>
     `;
+    wireIdentity();
 
     const msg = body.querySelector<HTMLDivElement>("#cloud-msg")!;
-
-    body.querySelector<HTMLButtonElement>("#prof-save")?.addEventListener("click", async () => {
-      try {
-        await changeUsername(body.querySelector<HTMLInputElement>("#prof-name")!.value);
-        toast("Username changed");
-        void renderSettings(main);
-      } catch (err) {
-        msg.textContent = err instanceof Error ? err.message : String(err);
-        msg.className = "msg error";
-      }
-    });
-
-    const photoInput = body.querySelector<HTMLInputElement>("#prof-photo");
-    body.querySelector<HTMLButtonElement>("#prof-photo-pick")?.addEventListener("click", () => photoInput?.click());
-    photoInput?.addEventListener("change", async () => {
-      const file = photoInput.files?.[0];
-      photoInput.value = "";
-      if (!file) return;
-      try {
-        await setProfilePhoto(file);
-        toast("Profile picture updated");
-        void renderSettings(main);
-      } catch (err) {
-        msg.textContent = err instanceof Error ? err.message : String(err);
-        msg.className = "msg error";
-      }
-    });
     body.querySelector<HTMLButtonElement>("#cloud-sync")!.addEventListener("click", async () => {
       msg.textContent = "Syncing…";
       msg.className = "msg";

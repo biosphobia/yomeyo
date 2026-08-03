@@ -1,5 +1,7 @@
 import { getMeta, setMeta } from "./db.js";
 import { KANA_GROUPS, type KanaGroup } from "./kana-data.js";
+import { XP_DAY_BONUS, XP_PER_QUEST, addXp } from "./levels.js";
+import { toast } from "./toast.js";
 
 /**
  * Daily quests, on a schedule.
@@ -261,6 +263,49 @@ export async function recordQuestEvents(events: string[], amount = 1): Promise<v
   const day = (all[today] ??= {});
   for (const event of events) day[event] = (day[event] ?? 0) + amount;
   await setMeta(LOG_KEY, all);
+  await grantQuestXp(today).catch(() => {
+    /* a missed award is re-attempted on the next event */
+  });
+}
+
+// ---------------- XP for completed quests ----------------
+
+/** dateKey → ids already paid out ("day!" marks the whole-day bonus). */
+const AWARD_KEY = "questXpAwarded";
+
+/**
+ * Pay out XP for any of today's quests that just crossed their goal, and the
+ * day bonus when the whole day is done. Each is paid exactly once, however
+ * often the counts move afterwards.
+ */
+async function grantQuestXp(key: string): Promise<void> {
+  const plan = await planForDay(key);
+  if (plan.quests.length === 0) return;
+  const events = await eventsOf(key);
+  const awarded = (await getMeta<Record<string, string[]>>(AWARD_KEY)) ?? {};
+  const paid = new Set(awarded[key] ?? []);
+  let gained = 0;
+  const titles: string[] = [];
+  for (const quest of plan.quests) {
+    if (paid.has(quest.id) || questProgress(quest, events) < quest.goal) continue;
+    paid.add(quest.id);
+    titles.push(quest.title);
+    gained += XP_PER_QUEST;
+  }
+  const allDone = plan.quests.every((quest) => questProgress(quest, events) >= quest.goal);
+  if (allDone && !paid.has("day!")) {
+    paid.add("day!");
+    gained += XP_DAY_BONUS;
+  }
+  if (gained === 0) return;
+  awarded[key] = [...paid];
+  await setMeta(AWARD_KEY, awarded);
+  const { before, after } = await addXp(gained);
+  toast(
+    after.level > before.level
+      ? `+${gained} XP · Level up! Level ${after.level}`
+      : `+${gained} XP${titles.length > 0 ? ` · ${titles.join(", ")}` : " · Day complete"}`,
+  );
 }
 
 export async function eventsOf(key: string): Promise<Record<string, number>> {

@@ -17,11 +17,13 @@ import { kanaSegments } from "./kana-data.js";
  *    mid-way keeps its counts with the outcome left as "playing".
  *
  * On top of the counts sits a mastery rank per kana, a 0–5 star scale held
- * internally as a float. Right answers raise it, wrong answers cut it about
- * twice as fast, and it decays as real days pass: a rank held loosely fades
- * in days, a five-star kana takes a month of neglect to slip. Decay is
- * applied lazily — whole days since the last application — whenever the
- * stats are read or written, so nothing needs to run in the background.
+ * internally as a float. Right answers raise it — by less and less as the
+ * rank climbs, so the last star is earned over dozens of answers, not a
+ * handful — wrong answers cut it hard, and it decays as real days pass: a
+ * rank held loosely fades in days, a five-star kana takes a month of
+ * neglect to slip. Decay is applied lazily — whole days since the last
+ * application — whenever the stats are read or written, so nothing needs
+ * to run in the background.
  *
  * Answers inside word levels count for every kana in the word, at half
  * weight: the word confirms each kana a little, but a miss does not say
@@ -70,8 +72,14 @@ export interface AnswerOutcome {
 const STATS_KEY = "kanaStats";
 const GAMES_KEY = "kanaGameLog";
 
-/** Mastery gained per correct answer; a wrong answer costs double. */
-const GAIN = 0.25;
+/**
+ * Mastery gained per correct answer, by current whole-star rank. The climb
+ * steepens: the first star takes four right answers, the fifth twenty — with
+ * daily decay pushing back, five stars means a kana that is truly known.
+ */
+const GAIN_BY_STAR = [0.25, 0.2, 0.14, 0.09, 0.05];
+/** Mastery lost on a wrong answer, at any rank. */
+const LOSS = 0.5;
 /** Word answers speak for several kana at once, each only half as loudly. */
 const WORD_WEIGHT = 0.5;
 
@@ -152,14 +160,15 @@ function applyAnswer(stat: KanaStat, outcome: AnswerOutcome, word: boolean, now:
   const weight = word ? WORD_WEIGHT : 1;
   if (outcome.correct) {
     stat.correct++;
-    stat.mastery = Math.min(5, stat.mastery + GAIN * weight);
+    const gain = GAIN_BY_STAR[Math.min(GAIN_BY_STAR.length - 1, masteryStars(stat.mastery))];
+    stat.mastery = Math.min(5, stat.mastery + gain * weight);
   } else {
     stat.wrong++;
     if (outcome.timeout) stat.timeouts++;
     const mistake = outcome.mistake?.trim().toLowerCase();
     // A word miss does not say which kana was misread, so no confusion there.
     if (mistake && !word) stat.confusedWith[mistake] = (stat.confusedWith[mistake] ?? 0) + 1;
-    stat.mastery = Math.max(0, stat.mastery - GAIN * 2 * weight);
+    stat.mastery = Math.max(0, stat.mastery - LOSS * weight);
   }
 }
 

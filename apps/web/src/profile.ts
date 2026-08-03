@@ -1,8 +1,8 @@
 import { getMeta, setMeta } from "./db.js";
-import { currentAccount, firestoreApi } from "./cloud.js";
+import { currentAccount, firestoreApi, getFirebaseConfig } from "./cloud.js";
 
 /**
- * Public profiles: the username other people see, and an optional picture.
+ * Profiles: the username other people see, and an optional picture.
  *
  * Google sign-in hands over a real name; it is never shown to anyone.
  * Instead every account is given a unique username the moment it first
@@ -10,6 +10,13 @@ import { currentAccount, firestoreApi } from "./cloud.js";
  * can then be changed to anything not already taken. Uniqueness is a
  * one-document-per-name claim enforced by the security rules, so two
  * accounts can never display the same name whatever a client does.
+ *
+ * Someone not signed in gets the same treatment, minus the register:
+ * a default `learner-` name from a random stamp, changeable, with a
+ * picture, all stored in the local database. There is no server to
+ * guarantee such a name against every other install, but nobody else
+ * ever sees it — the moment a name becomes public is the moment they
+ * sign in, and signing in runs the claimed flow.
  *
  * The picture is downscaled on the device and stored inside the profile
  * document as a data URL — small enough that no file storage service is
@@ -37,6 +44,20 @@ function uidStamp(uid: string, salt: number): string {
     h = Math.imul(h, 16777619);
   }
   return (h >>> 0).toString(36).padStart(6, "0").slice(0, 6);
+}
+
+/**
+ * The signed-in account, or null — including when sign-in is not even
+ * configured. Profile features must not depend on the cloud being there.
+ */
+async function signedInUid(): Promise<string | null> {
+  try {
+    if (!(await getFirebaseConfig())) return null;
+    const me = await currentAccount();
+    return me?.uid ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function asProfile(data: unknown): Profile | null {
@@ -91,27 +112,31 @@ async function releaseUsername(uid: string, name: string): Promise<void> {
 }
 
 /**
- * The signed-in account's profile, created on first need.
+ * This person's profile, created on first need — signed in or not.
  *
  * A brand-new account gets `learner-<stamp>` — unique by construction, and
  * claimed like any other name so it stays that way — before the person has
- * chosen anything. There is therefore never a moment where an account has
- * no name to show.
+ * chosen anything. Without an account the stamp is random and the profile
+ * purely local. There is therefore never a moment with no name to show.
  */
 export async function ensureProfile(): Promise<Profile> {
   const cached = await getMeta<Profile>(CACHE_KEY);
   if (cached?.name) return cached;
 
-  const me = await currentAccount();
-  if (!me) throw new Error("Sign in first.");
+  const uid = await signedInUid();
+  if (!uid) {
+    const profile: Profile = { name: `learner-${Math.random().toString(36).slice(2, 8).padEnd(6, "0")}` };
+    await setMeta(CACHE_KEY, profile);
+    return profile;
+  }
 
-  let profile = await fetchProfile(me.uid);
+  let profile = await fetchProfile(uid);
   if (!profile) {
     let name = "";
     for (let attempt = 0; attempt < 5 && !name; attempt++) {
-      const candidate = `learner-${uidStamp(me.uid, attempt)}`;
+      const candidate = `learner-${uidStamp(uid, attempt)}`;
       try {
-        await claimUsername(me.uid, candidate);
+        await claimUsername(uid, candidate);
         name = candidate;
       } catch {
         // Astronomically unlikely collision; the next stamp differs.
@@ -119,7 +144,7 @@ export async function ensureProfile(): Promise<Profile> {
     }
     if (!name) throw new Error("Could not assign a username. Try again.");
     profile = { name };
-    await writeProfile(me.uid, profile);
+    await writeProfile(uid, profile);
   } else {
     await setMeta(CACHE_KEY, profile);
   }
@@ -132,20 +157,25 @@ export async function changeUsername(rawName: string): Promise<Profile> {
   if (!isValidUsername(name)) {
     throw new Error("3–20 characters: lowercase letters, numbers, - and _ (starting with a letter or number).");
   }
-  const me = await currentAccount();
-  if (!me) throw new Error("Sign in first.");
   const current = await ensureProfile();
   if (current.name === name) return current;
 
-  await claimUsername(me.uid, name);
+  const uid = await signedInUid();
+  if (!uid) {
+    const next: Profile = { ...current, name };
+    await setMeta(CACHE_KEY, next);
+    return next;
+  }
+
+  await claimUsername(uid, name);
   const next: Profile = { ...current, name };
   try {
-    await writeProfile(me.uid, next);
+    await writeProfile(uid, next);
   } catch (err) {
-    await releaseUsername(me.uid, name);
+    await releaseUsername(uid, name);
     throw err;
   }
-  await releaseUsername(me.uid, current.name);
+  await releaseUsername(uid, current.name);
   return next;
 }
 
@@ -156,14 +186,17 @@ export async function changeUsername(rawName: string): Promise<Profile> {
  * nothing more — so what is stored is a few kilobytes, not the original.
  */
 export async function setProfilePhoto(file: File): Promise<Profile> {
-  const me = await currentAccount();
-  if (!me) throw new Error("Sign in first.");
   const current = await ensureProfile();
-
   const photo = await squareThumbnail(file, 128);
   if (photo.length > 100000) throw new Error("Could not shrink that image. Try another.");
   const next: Profile = { ...current, photo };
-  await writeProfile(me.uid, next);
+
+  const uid = await signedInUid();
+  if (!uid) {
+    await setMeta(CACHE_KEY, next);
+    return next;
+  }
+  await writeProfile(uid, next);
   return next;
 }
 

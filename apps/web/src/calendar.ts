@@ -1,4 +1,5 @@
 import { dateKey, dayStreak, eventsOf, planForDay, questProgress } from "./quests.js";
+import { levelState } from "./levels.js";
 
 /**
  * The Calendar: a month of days, each carrying its quests.
@@ -28,6 +29,7 @@ export async function renderCalendar(main: HTMLElement, isCurrent: () => boolean
   selectedKey ??= dateKey(now);
 
   const streak = await dayStreak(now);
+  const level = await levelState();
   if (!isCurrent()) return;
 
   main.innerHTML = `
@@ -36,7 +38,10 @@ export async function renderCalendar(main: HTMLElement, isCurrent: () => boolean
       <button id="cal-prev" class="ghost" aria-label="Previous month">‹</button>
       <div class="cal-month">${MONTHS[viewMonth]} ${viewYear}</div>
       <button id="cal-next" class="ghost" aria-label="Next month">›</button>
-      <div class="cal-streak">${streak > 0 ? `🔥 ${streak}-day streak` : "no streak yet"}</div>
+      <div class="cal-streak">
+        <span class="level-chip">Lv ${level.level}</span> · ${level.into}/${level.need} XP ·
+        ${streak > 0 ? `🔥 ${streak}-day streak` : "no streak yet"}
+      </div>
     </div>
     <div class="cal-grid" id="cal-grid">
       ${WEEKDAYS.map((day) => `<div class="cal-weekday">${day}</div>`).join("")}
