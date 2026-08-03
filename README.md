@@ -217,6 +217,20 @@ memory over days, while a 20-second step is about getting a new word in at
 all. Once a card graduates, FSRS picks the interval from the memory state
 built up during those steps.
 
+## Kana
+
+The **Kana** tab teaches both syllabaries in levels of increasing difficulty
+— vowels, each consonant row, voiced rows, combination sounds — hiragana
+first, then katakana. Type the romaji (every spelling is accepted), and the
+kana is spoken after each answer. Levels mix in kana from earlier rows so
+nothing fades; each level's best score is kept on the device.
+
+Right and wrong answers pop a reaction — an image and a line of text. Both
+are yours to change without touching code: they live in
+`apps/web/public/feedback/` — edit `feedback.json` for the texts, or
+replace `correct.gif` / `wrong.gif` with any image (a GitHub web edit is
+enough). The next push deploys them.
+
 ## Kanji
 
 The **Kanji** tab has two lists:

@@ -1,0 +1,5 @@
+{
+  "_comment": "Kana quiz reactions. Edit the text here, or replace correct.gif / wrong.gif in this folder (any image works) — changes deploy with the next push.",
+  "correct": { "image": "correct.gif", "text": "good job" },
+  "wrong": { "image": "wrong.gif", "text": "nice try!" }
+}

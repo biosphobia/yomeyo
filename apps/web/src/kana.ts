@@ -1,5 +1,6 @@
 import { getMeta, setMeta } from "./db.js";
 import { speak } from "./audio.js";
+import { assetUrl } from "./store.js";
 import { KANA_LEVELS, isCorrect, levelById, type KanaEntry, type KanaLevel } from "./kana-data.js";
 
 /**
@@ -19,6 +20,55 @@ import { KANA_LEVELS, isCorrect, levelById, type KanaEntry, type KanaLevel } fro
 const PROGRESS_KEY = "kanaProgress";
 
 type Progress = Record<string, number>;
+
+// ---------------- answer reactions ----------------
+
+interface Reaction {
+  image: string;
+  text: string;
+}
+
+interface Reactions {
+  correct: Reaction;
+  wrong: Reaction;
+}
+
+const DEFAULT_REACTIONS: Reactions = {
+  correct: { image: "correct.gif", text: "good job" },
+  wrong: { image: "wrong.gif", text: "nice try!" },
+};
+
+let reactionsLoaded: Promise<Reactions> | null = null;
+
+/**
+ * The reactions live in `apps/web/public/feedback/` — a JSON file for the
+ * texts and two images — precisely so they can be edited on GitHub without
+ * touching any code: change the file, push, and the next deploy shows it.
+ */
+function reactions(): Promise<Reactions> {
+  reactionsLoaded ??= fetch(assetUrl("feedback/feedback.json"))
+    .then((res) => (res.ok ? res.json() : {}))
+    .then((parsed: Partial<Reactions>) => ({
+      correct: { ...DEFAULT_REACTIONS.correct, ...(parsed?.correct ?? {}) },
+      wrong: { ...DEFAULT_REACTIONS.wrong, ...(parsed?.wrong ?? {}) },
+    }))
+    .catch(() => DEFAULT_REACTIONS);
+  return reactionsLoaded;
+}
+
+function reactionUrl(image: string): string {
+  return /^(https?:|data:)/i.test(image) ? image : assetUrl(`feedback/${image}`);
+}
+
+function showReaction(body: HTMLElement, reaction: Reaction): void {
+  const box = body.querySelector<HTMLDivElement>("#kana-cheer");
+  if (!box) return;
+  box.innerHTML = `
+    <img src="${reactionUrl(reaction.image).replace(/"/g, "&quot;")}" alt="" />
+    <div class="kana-cheer-text">${escapeHtml(reaction.text)}</div>
+  `;
+  box.classList.add("show");
+}
 
 async function getProgress(): Promise<Progress> {
   return (await getMeta<Progress>(PROGRESS_KEY)) ?? {};
@@ -97,6 +147,11 @@ async function runQuiz(
   isCurrent: () => boolean,
 ): Promise<void> {
   const questions = await questionsFor(level);
+  const cheer = await reactions();
+  // Warm the images so the first reaction pops instead of trickling in.
+  for (const reaction of [cheer.correct, cheer.wrong]) {
+    new Image().src = reactionUrl(reaction.image);
+  }
   let at = 0;
   let firstTryCorrect = 0;
 
@@ -113,6 +168,7 @@ async function runQuiz(
           <button id="kana-quit" class="ghost">Back to levels</button>
         </div>
       </div>
+      <div class="kana-cheer" id="kana-cheer"></div>
     `;
     const input = body.querySelector<HTMLInputElement>("#kana-answer")!;
     const feedback = body.querySelector<HTMLDivElement>("#kana-feedback")!;
@@ -139,15 +195,17 @@ async function runQuiz(
         feedback.innerHTML = `<span class="ok-text">✓ ${entry.romaji[0]}</span>`;
         input.disabled = true;
         settled = true;
+        showReaction(body, cheer.correct);
         // The sound lands right on the answer, tying it to the shape.
         void speak(entry.kana, { rate: 0.8 }).catch(() => undefined);
-        setTimeout(advance, 700);
+        setTimeout(advance, 1100);
       } else {
         missed = true;
         settled = true;
         input.disabled = true;
         feedback.innerHTML = `<span class="err-text">✗ ${entry.kana} = <b>${entry.romaji[0]}</b></span>
           <div class="glosses">Enter (or tap) to continue</div>`;
+        showReaction(body, cheer.wrong);
         void speak(entry.kana, { rate: 0.8 }).catch(() => undefined);
         // Keyboard focus must survive the disabled input — and the listeners
         // must attach only after this very keystroke has finished bubbling,
@@ -200,6 +258,10 @@ async function runQuiz(
   };
 
   draw();
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 function shuffle<T>(items: T[]): T[] {

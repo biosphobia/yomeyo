@@ -36,6 +36,7 @@ function isExcluded(relPath) {
     relPath === "audio.php" ||
     relPath === "audio-key.php" ||
     relPath.startsWith("dict/") || // megabytes; cached on first use instead
+    relPath.startsWith("feedback/") || // quiz reaction gifs; cached on first sight
     relPath.endsWith(".zip") || // the packaged extension
     // The Firebase SDK is loaded only when cloud sync is configured; a user
     // who never signs in should never download it, let alone at install time.
