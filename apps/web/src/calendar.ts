@@ -32,7 +32,6 @@ export async function renderCalendar(main: HTMLElement, isCurrent: () => boolean
 
   main.innerHTML = `
     <h1>Calendar</h1>
-    <p class="subtitle">A little Japanese every day. Quests turn over at local midnight.</p>
     <div class="cal-head">
       <button id="cal-prev" class="ghost" aria-label="Previous month">‹</button>
       <div class="cal-month">${MONTHS[viewMonth]} ${viewYear}</div>
@@ -137,7 +136,7 @@ async function renderDay(
     box.innerHTML = `
       <div class="card-panel">
         <b>${key}</b><span class="glosses"> · cleared ✓</span>
-        <div class="glosses" style="margin-top:6px">Before your journey began — nothing was asked of you.</div>
+        <div class="glosses" style="margin-top:6px">Before your journey began.</div>
       </div>
     `;
     return;
@@ -151,7 +150,7 @@ async function renderDay(
       <b>${isToday ? "Today" : key}</b>
       ${plan.milestone ? `<span class="cal-milestone-tag">🏁 Milestone: ${plan.milestone}</span>` : ""}
       ${complete ? `<span class="glosses"> · all quests done ⭐</span>` : ""}
-      ${future ? `<div class="glosses" style="margin-top:4px">A look ahead — these unlock on the day.</div>` : ""}
+      ${future ? `<div class="glosses" style="margin-top:4px">Unlocks on the day.</div>` : ""}
       <div class="cal-quests">
         ${plan.quests
           .map((quest) => {

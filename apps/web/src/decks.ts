@@ -36,7 +36,6 @@ export async function renderDecks(main: HTMLElement, isCurrent: () => boolean = 
 
   main.innerHTML = `
     <h1>Decks</h1>
-    <p class="subtitle">Ready-made word lists, and the decks on this device.</p>
     <div class="segmented" id="deck-tabs">
       <button data-tab="premade" class="${tab === "premade" ? "on" : ""}">Premade</button>
       <button data-tab="mine" class="${tab === "mine" ? "on" : ""}">Mine (${mine.length})</button>

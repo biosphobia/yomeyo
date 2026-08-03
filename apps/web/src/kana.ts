@@ -176,7 +176,6 @@ export async function renderKana(main: HTMLElement, isCurrent: () => boolean = (
 
   main.innerHTML = `
     <h1>Kana</h1>
-    <p class="subtitle">Pick the groups to practice — the game climbs the levels by itself.</p>
     <div id="kana-body"></div>
   `;
   renderSelection(main.querySelector<HTMLDivElement>("#kana-body")!, game, main, isCurrent);
@@ -417,7 +416,6 @@ async function runLevel(
         <div class="card-panel kana-quiz">
           <div class="big">🏆</div>
           <div class="kana-score">All seven levels clear</div>
-          <div class="glosses">These kana are yours. Widen the selection for a taller climb.</div>
           <div class="row-actions" style="justify-content:center;margin-top:12px">
             <button id="kana-again">Play again</button>
             <button id="kana-back" class="secondary">Change groups</button>

@@ -233,6 +233,17 @@ const POPUP_CSS = `
   @media (min-width: 700px) {
     .sheet { left: auto; right: 16px; bottom: 16px; border-radius: 14px; border-bottom: 1px solid rgba(255,255,255,0.14); width: 420px; }
   }
+  /* Desktop: pinned beside the looked-up word rather than a corner sheet.
+     left/top arrive as inline styles once the size is known. */
+  .sheet.anchored {
+    left: auto; right: auto; bottom: auto;
+    width: 400px;
+    max-height: 340px;
+    border-radius: 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.14);
+    animation: pop 120ms ease-out;
+  }
+  @keyframes pop { from { transform: scale(0.96); opacity: 0 } to { transform: none; opacity: 1 } }
   .grip {
     flex: none;
     display: flex; align-items: center; gap: 10px;
@@ -486,12 +497,43 @@ function showMessageSheet(text: string): void {
   setTimeout(() => document.addEventListener("pointerdown", dismiss, true), 0);
 }
 
-async function showPopup(matches: LookupMatch[], sentence: string): Promise<void> {
+/** Where the looked-up word sits on screen, for anchoring on desktop. */
+interface Anchor {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+/**
+ * Pin the popup next to the word: below it when there is room, above it
+ * when there is not, always inside the viewport.
+ */
+function placeAnchored(sheet: HTMLElement, anchor: Anchor): void {
+  const margin = 8;
+  const rect = sheet.getBoundingClientRect();
+  const left = Math.round(
+    Math.min(Math.max(margin, anchor.left), Math.max(margin, window.innerWidth - rect.width - margin)),
+  );
+  let top = anchor.bottom + margin;
+  if (top + rect.height > window.innerHeight - margin) {
+    top = anchor.top - rect.height - margin;
+    if (top < margin) top = Math.max(margin, window.innerHeight - rect.height - margin);
+  }
+  sheet.style.left = `${left}px`;
+  sheet.style.top = `${Math.round(top)}px`;
+}
+
+async function showPopup(matches: LookupMatch[], sentence: string, anchor?: Anchor): Promise<void> {
   closePopup();
   const root = ensureHost();
 
   const sheet = document.createElement("div");
   sheet.className = "sheet";
+  // On a computer the definition belongs at the word itself; the bottom
+  // sheet stays for touch, where a popup would sit under the finger.
+  const anchored = anchor !== undefined && !IS_TOUCH;
+  if (anchored) sheet.classList.add("anchored");
 
   const grip = document.createElement("div");
   grip.className = "grip";
@@ -537,7 +579,12 @@ async function showPopup(matches: LookupMatch[], sentence: string): Promise<void
     list.appendChild(empty);
   }
 
-  liftToggleAbove(sheet.getBoundingClientRect().height);
+  if (anchored && anchor) {
+    placeAnchored(sheet, anchor);
+    liftToggleAbove(0); // nothing at the bottom edge to keep clear of
+  } else {
+    liftToggleAbove(sheet.getBoundingClientRect().height);
+  }
 
   // Test against the host, not the sheet. This listener sits outside a
   // *closed* shadow root, and composedPath() stops at the host for those — it
@@ -719,6 +766,9 @@ async function handleLookupAt(x: number, y: number): Promise<boolean> {
 
   // Highlight the matched run, Yomitan-style. It can begin before the tapped
   // character: on a phone a tap lands inside a word as often as at its start.
+  // The highlight's rectangle doubles as the popup's anchor on desktop; the
+  // click point stands in when the range cannot be built.
+  let anchor = { left: x, top: y, right: x, bottom: y };
   try {
     const range = document.createRange();
     const from = Math.max(0, Math.min(matches[0].start, tap.node.data.length));
@@ -727,11 +777,15 @@ async function handleLookupAt(x: number, y: number): Promise<boolean> {
     const selection = window.getSelection();
     selection?.removeAllRanges();
     selection?.addRange(range);
+    const rect = range.getBoundingClientRect();
+    if (rect.width > 0 || rect.height > 0) {
+      anchor = { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+    }
   } catch {
     /* the highlight is cosmetic */
   }
 
-  await showPopup(matches, sentenceAround(tap.text, tap.offset));
+  await showPopup(matches, sentenceAround(tap.text, tap.offset), anchor);
   return true;
 }
 
@@ -845,10 +899,21 @@ ext.runtime.onMessage?.addListener((message: any, _sender: any, sendResponse: (r
     return true;
   }
   if (message?.type === "lookupSelection") {
-    const text = window.getSelection()?.toString() ?? "";
+    const selection = window.getSelection();
+    const text = selection?.toString() ?? "";
     if (text.trim()) {
+      // Anchor at the selection itself on desktop, like a tapped word.
+      let anchor;
+      try {
+        const rect = selection!.getRangeAt(0).getBoundingClientRect();
+        if (rect.width > 0 || rect.height > 0) {
+          anchor = { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+        }
+      } catch {
+        /* no live range; the sheet falls back to its corner */
+      }
       void sendMessage<LookupMatch[]>({ type: "lookup", text, offset: 0 }).then((matches) => {
-        if (matches?.length) void showPopup(matches, text);
+        if (matches?.length) void showPopup(matches, text, anchor);
       });
     }
     sendResponse({ ok: true });

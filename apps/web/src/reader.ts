@@ -15,7 +15,6 @@ const DEMO_TEXT =
 export function renderReader(main: HTMLElement, sharedText?: string): void {
   main.innerHTML = `
     <h1>Reader</h1>
-    <p class="subtitle">Paste Japanese text, then tap any word to look it up and save it.</p>
     <div class="card-panel">
       <textarea id="reader-input" placeholder="ここに日本語のテキストを貼り付けてください…" lang="ja"></textarea>
       <div class="row-actions">
