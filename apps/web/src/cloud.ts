@@ -32,6 +32,33 @@ export interface AccountInfo {
 const CONFIG_KEY = "firebaseConfig";
 
 /**
+ * Read a config however people actually paste it.
+ *
+ * The Firebase console shows a JavaScript object — unquoted keys, single
+ * quotes, maybe a `const firebaseConfig =` prefix and a trailing semicolon
+ * — and that is exactly what lands in the repository secret and in the
+ * Settings box. Strict JSON is accepted first; failing that, the console's
+ * shape is converted and tried again. Throws when neither reads.
+ */
+export function parseFirebaseConfig(raw: string): FirebaseConfig {
+  const text = raw
+    .trim()
+    .replace(/^(?:export\s+)?(?:const|var|let)\s+\w+\s*=\s*/, "")
+    .replace(/;\s*$/, "");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    const jsonish = text
+      .replace(/'/g, '"')
+      .replace(/([{,]\s*)([A-Za-z_$][\w$]*)\s*:/g, '$1"$2":')
+      .replace(/,\s*([}\]])/g, "$1");
+    parsed = JSON.parse(jsonish);
+  }
+  return validateConfig(parsed);
+}
+
+/**
  * Build-time config, if the deployment baked one in. Falls back to whatever
  * the user pasted into Settings, so the hosted app works without a rebuild.
  */
@@ -39,10 +66,25 @@ function envConfig(): FirebaseConfig | undefined {
   const raw = import.meta.env.VITE_FIREBASE_CONFIG;
   if (!raw) return undefined;
   try {
-    const parsed = JSON.parse(raw) as FirebaseConfig;
-    return parsed.apiKey && parsed.projectId ? parsed : undefined;
+    return parseFirebaseConfig(raw);
   } catch {
     return undefined;
+  }
+}
+
+/**
+ * Why the baked-in config is unusable — null when it is fine, or absent.
+ * A bad FIREBASE_CONFIG secret must say so on screen; ignored silently, it
+ * looks exactly like the secret was never set at all.
+ */
+export function envConfigProblem(): string | null {
+  const raw = import.meta.env.VITE_FIREBASE_CONFIG;
+  if (!raw) return null;
+  try {
+    parseFirebaseConfig(raw);
+    return null;
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err);
   }
 }
 

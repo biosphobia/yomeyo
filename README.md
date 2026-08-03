@@ -398,13 +398,16 @@ extension's handover secret, imported dictionaries, and downloaded audio.
 
 ### Turning it on
 
-Best done once, for every device at once: put the `firebaseConfig` JSON in a
-repository secret named **`FIREBASE_CONFIG`** (*Settings → Secrets and
-variables → Actions*). Every build then ships with the project already
-configured, and **Settings → Account** offers **Sign in with Google**
-immediately — nothing to paste on each phone or laptop.
+Best done once, for every device at once: put the `firebaseConfig` object in
+a repository secret named **`FIREBASE_CONFIG`** (*Settings → Secrets and
+variables → Actions*) — copied straight out of the Firebase console is fine,
+`const firebaseConfig =` prefix and all. Every build then ships with the
+project already configured, and **Settings → Account** offers **Sign in with
+Google** immediately — nothing to paste on each phone or laptop. If a build's
+secret cannot be read, the Account panel says so rather than pretending no
+secret exists.
 
-Failing that, open **Settings → Account** and paste the JSON there; it is
+Failing that, open **Settings → Account** and paste the config there; it is
 stored on that device only. Either way you can also sign in with an email
 address — an address that isn't registered yet creates the account, so
 there's one button rather than a separate sign-up flow.

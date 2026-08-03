@@ -1,12 +1,13 @@
 import {
   configIsFromEnv,
   currentAccount,
+  envConfigProblem,
   getFirebaseConfig,
+  parseFirebaseConfig,
   setFirebaseConfig,
   signInWithEmail,
   signInWithGoogle,
   signOut,
-  validateConfig,
   type AccountInfo,
 } from "./cloud.js";
 import { signedOutDeckAdoptable } from "./accounts.js";
@@ -137,10 +138,22 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
     const body = main.querySelector<HTMLDivElement>("#account-body")!;
 
     if (!config) {
+      // A deployment that *tried* to bake a config in deserves to hear what
+      // went wrong — swallowed, a broken secret is indistinguishable from a
+      // missing one, in the one place its owner would look.
+      const bakedProblem = envConfigProblem();
+      const bakedNote = bakedProblem
+        ? `<div class="msg error">
+             This build carries a <code>FIREBASE_CONFIG</code> repository secret, but it
+             could not be used: ${escapeHtml(bakedProblem)} Fix the secret's value
+             (what the Firebase console shows is accepted as-is) and redeploy.
+           </div>`
+        : "";
       // Setting up a Firebase project is real work; without Advanced mode
       // the panel only says the feature exists and where the door is.
       if (!advanced) {
         body.innerHTML = `
+          ${bakedNote}
           <div class="msg">
             Yomeyo works fully on this device without an account. Signing in —
             which backs your deck up and syncs it between devices — needs a
@@ -150,6 +163,7 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
         return;
       }
       body.innerHTML = `
+        ${bakedNote}
         <div class="msg">
           Sync needs a free Firebase project of your own — Yomeyo has no
           server, so your data can only live in a project you control.
@@ -167,7 +181,7 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
                copy the <code>firebaseConfig</code> object below.
           </div>
         </details>
-        <label for="fb-config">Firebase config (JSON)</label>
+        <label for="fb-config">Firebase config (pasted straight from the console is fine)</label>
         <textarea id="fb-config" style="min-height:120px;font-family:ui-monospace,monospace;font-size:0.8rem"
           placeholder='{ "apiKey": "…", "authDomain": "…", "projectId": "…", "appId": "…" }'></textarea>
         <div class="row-actions"><button id="fb-save">Enable cloud sync</button></div>
@@ -177,10 +191,11 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
         const msg = body.querySelector<HTMLDivElement>("#fb-msg")!;
         const raw = body.querySelector<HTMLTextAreaElement>("#fb-config")!.value.trim();
         try {
-          await setFirebaseConfig(validateConfig(JSON.parse(raw)));
+          // Accepts what the Firebase console shows, pasted as-is.
+          await setFirebaseConfig(parseFirebaseConfig(raw));
           void renderSettings(main);
         } catch (err) {
-          msg.textContent = err instanceof Error ? err.message : "That isn't valid JSON.";
+          msg.textContent = err instanceof Error ? err.message : "That doesn't look like a Firebase config.";
           msg.className = "msg error";
         }
       });
