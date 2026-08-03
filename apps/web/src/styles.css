@@ -493,8 +493,7 @@ label {
 }
 
 .cal-cell.future {
-  opacity: 0.35;
-  cursor: default;
+  opacity: 0.55;
 }
 
 .cal-cell.today {
@@ -528,6 +527,24 @@ label {
   justify-content: space-between;
   align-items: baseline;
   gap: 10px;
+}
+
+.cal-cell.milestone {
+  border-color: #ffb54d88;
+}
+
+.cal-cell.future {
+  cursor: pointer;
+}
+
+.cal-preview {
+  opacity: 0.8;
+}
+
+.cal-milestone-tag {
+  color: #ffb54d;
+  font-size: 0.85rem;
+  margin-left: 8px;
 }
 
 .kana-skip-row {

@@ -1,16 +1,20 @@
 import { getMeta, setMeta } from "./db.js";
+import { KANA_GROUPS, type KanaGroup } from "./kana-data.js";
 
 /**
- * Daily quests.
+ * Daily quests, on a schedule.
  *
- * Each local calendar day gets a small set of quests, picked
- * deterministically from the pool below — every device agrees on the day's
- * quests without anything to sync. Screens report plain events ("a kana was
- * answered right", "a level was cleared") and the log stores per-day event
- * counts; quests are just goals laid over those counts, which means the
- * pool can be changed later without corrupting any history.
+ * The journey starts the first day quests are ever looked at (or earned
+ * towards), and counts local days from there. The first week is a fixed
+ * curriculum: two hiragana groups a day, in textbook order, practised
+ * together with everything learned before. Day 8 is a milestone — the
+ * final group, and the hiragana exam. After the schedule runs out, days
+ * draw from the pool below.
  *
- * To add or change quests, edit QUEST_POOL — nothing else has to move.
+ * Screens report plain events ("a kana was answered right", "a level was
+ * cleared with these groups in play") and the log stores per-day counts;
+ * quests are goals laid over those counts, so both the schedule and the
+ * pool can be reshaped later without corrupting any history.
  */
 
 export interface QuestDef {
@@ -22,7 +26,14 @@ export interface QuestDef {
   event: string;
 }
 
-/** The pool a day's quests are drawn from. */
+/** A day's worth of quests, and whether the day is a milestone. */
+export interface DayPlan {
+  quests: QuestDef[];
+  /** Set on landmark days — shown as 🏁 on the calendar. */
+  milestone?: string;
+}
+
+/** The pool for days beyond the scheduled curriculum. */
 export const QUEST_POOL: QuestDef[] = [
   {
     id: "kana-warmup",
@@ -54,7 +65,6 @@ export const QUEST_POOL: QuestDef[] = [
   },
 ];
 
-/** How many quests a day gets. */
 const PER_DAY = 2;
 
 /** A local-time day key, YYYY-MM-DD — quests turn over at local midnight. */
@@ -63,6 +73,83 @@ export function dateKey(date: Date = new Date()): string {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+// ---------------- the schedule ----------------
+
+const START_KEY = "questStart";
+let startCached: string | null = null;
+
+/** The journey's day 1, fixed the first time anything asks. */
+export async function questStart(): Promise<string> {
+  if (startCached) return startCached;
+  const stored = await getMeta<string>(START_KEY);
+  if (stored) return (startCached = stored);
+  const today = dateKey();
+  await setMeta(START_KEY, today);
+  return (startCached = today);
+}
+
+function localTime(key: string): number {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(y, m - 1, d).getTime();
+}
+
+/** 1-based day number of `key` in the journey. */
+function dayNumber(key: string, start: string): number {
+  return Math.round((localTime(key) - localTime(start)) / 86400000) + 1;
+}
+
+function groupQuest(group: KanaGroup, day: number): QuestDef {
+  return {
+    id: `learn-${group.id}`,
+    title: `New kana: ${group.title}`,
+    detail: `${group.entries.map((entry) => entry.kana).join(" ")} — clear a kana level with this group in the mix${
+      day > 1 ? ", together with everything learned so far" : ""
+    }.`,
+    goal: 1,
+    event: `group-cleared:${group.id}`,
+  };
+}
+
+/**
+ * What a given day asks for. Future days answer too — their quests are
+ * viewable ahead of time; they just cannot be attempted until they arrive.
+ */
+export async function planForDay(key: string): Promise<DayPlan> {
+  const start = await questStart();
+  const day = dayNumber(key, start);
+  const hiragana = KANA_GROUPS.filter((group) => group.script === "hiragana");
+
+  // Week one: two groups a day, in order, on top of the ones before.
+  if (day >= 1 && day <= 7) {
+    const first = hiragana[(day - 1) * 2];
+    const second = hiragana[(day - 1) * 2 + 1];
+    return { quests: [groupQuest(first, day), groupQuest(second, day)] };
+  }
+
+  // Day 8: the last group, and the exam over everything.
+  if (day === 8) {
+    return {
+      milestone: "Hiragana complete",
+      quests: [
+        groupQuest(hiragana[hiragana.length - 1], day),
+        {
+          id: "hiragana-exam",
+          title: "Hiragana exam",
+          detail: "The final test over all of hiragana — arriving in an update.",
+          goal: 1,
+          event: "hiragana-exam",
+        },
+      ],
+    };
+  }
+
+  return { quests: seededShuffle(QUEST_POOL, hashKey(key)).slice(0, PER_DAY) };
+}
+
+export async function questsForDay(key: string): Promise<QuestDef[]> {
+  return (await planForDay(key)).quests;
 }
 
 function seededShuffle<T>(items: T[], seed: number): T[] {
@@ -92,11 +179,6 @@ function hashKey(key: string): number {
   return h >>> 0;
 }
 
-/** The quests of one day, the same on every device. */
-export function questsForDay(key: string): QuestDef[] {
-  return seededShuffle(QUEST_POOL, hashKey(key)).slice(0, PER_DAY);
-}
-
 // ---------------- the event log ----------------
 
 const LOG_KEY = "questLog";
@@ -116,10 +198,16 @@ async function log(): Promise<QuestLog> {
  * that produce events; nothing about quests needs to be known there.
  */
 export async function recordQuestEvent(event: string, amount = 1): Promise<void> {
+  await recordQuestEvents([event], amount);
+}
+
+/** Several events at once, one write — a level clear reports a bundle. */
+export async function recordQuestEvents(events: string[], amount = 1): Promise<void> {
+  await questStart(); // earning anything fixes day 1
   const all = await log();
   const today = dateKey();
   const day = (all[today] ??= {});
-  day[event] = (day[event] ?? 0) + amount;
+  for (const event of events) day[event] = (day[event] ?? 0) + amount;
   await setMeta(LOG_KEY, all);
 }
 
@@ -133,7 +221,7 @@ export function questProgress(quest: QuestDef, events: Record<string, number>): 
 
 export async function dayComplete(key: string): Promise<boolean> {
   const events = await eventsOf(key);
-  return questsForDay(key).every((quest) => questProgress(quest, events) >= quest.goal);
+  return (await questsForDay(key)).every((quest) => questProgress(quest, events) >= quest.goal);
 }
 
 /**

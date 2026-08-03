@@ -1,12 +1,13 @@
-import { dateKey, dayComplete, dayStreak, eventsOf, questProgress, questsForDay } from "./quests.js";
+import { dateKey, dayStreak, eventsOf, planForDay, questProgress } from "./quests.js";
 
 /**
  * The Calendar: a month of days, each carrying its quests.
  *
  * Days run on local time. Today shows its quests with live progress; past
- * days show how they went; future days keep their quests to themselves
- * until they arrive. A run of fully-completed days is the day streak,
- * counted next to the month.
+ * days show how they went; future days show what is coming — readable any
+ * time, attemptable only when the day arrives. Landmark days carry a 🏁.
+ * A run of fully-completed days is the day streak, counted next to the
+ * month.
  */
 
 const MONTHS = [
@@ -75,28 +76,34 @@ export async function renderCalendar(main: HTMLElement, isCurrent: () => boolean
     const key = dateKey(new Date(viewYear, viewMonth, day));
     const future = key > todayKey;
     const isToday = key === todayKey;
+    const plan = await planForDay(key);
     let status = "";
     if (!future) {
       const events = await eventsOf(key);
-      const quests = questsForDay(key);
-      const done = quests.filter((quest) => questProgress(quest, events) >= quest.goal).length;
-      status = done === quests.length ? "done" : done > 0 || Object.keys(events).length > 0 ? "partial" : "idle";
+      const done = plan.quests.filter((quest) => questProgress(quest, events) >= quest.goal).length;
+      status = done === plan.quests.length ? "done" : done > 0 || Object.keys(events).length > 0 ? "partial" : "idle";
     }
     if (!isCurrent()) return;
 
     const cell = document.createElement("button");
-    cell.className = `cal-cell${isToday ? " today" : ""}${future ? " future" : ""} ${status}`;
+    cell.className = `cal-cell${isToday ? " today" : ""}${future ? " future" : ""}${
+      plan.milestone ? " milestone" : ""
+    } ${status}`;
     cell.innerHTML = `<span>${day}</span>${
-      status === "done" ? `<span class="cal-mark">★</span>` : status === "partial" ? `<span class="cal-mark">·</span>` : ""
+      plan.milestone
+        ? `<span class="cal-mark">🏁</span>`
+        : status === "done"
+          ? `<span class="cal-mark">★</span>`
+          : status === "partial"
+            ? `<span class="cal-mark">·</span>`
+            : ""
     }`;
-    if (!future) {
-      cell.addEventListener("click", () => {
-        selectedKey = key;
-        void renderDay(main, key, todayKey, isCurrent);
-      });
-    } else {
-      cell.disabled = true;
-    }
+    // Every day is readable, future ones included — the quests are known
+    // ahead of time; only the attempting waits for the day itself.
+    cell.addEventListener("click", () => {
+      selectedKey = key;
+      void renderDay(main, key, todayKey, isCurrent);
+    });
     grid.appendChild(cell);
   }
 
@@ -115,27 +122,31 @@ async function renderDay(
 ): Promise<void> {
   const box = main.querySelector<HTMLDivElement>("#cal-day");
   if (!box) return;
-  const quests = questsForDay(key);
+  const plan = await planForDay(key);
   const events = await eventsOf(key);
   if (!isCurrent()) return;
 
   const isToday = key === todayKey;
-  const complete = quests.every((quest) => questProgress(quest, events) >= quest.goal);
+  const future = key > todayKey;
+  const complete =
+    !future && plan.quests.every((quest) => questProgress(quest, events) >= quest.goal);
 
   box.innerHTML = `
-    <div class="card-panel">
+    <div class="card-panel${future ? " cal-preview" : ""}">
       <b>${isToday ? "Today" : key}</b>
+      ${plan.milestone ? `<span class="cal-milestone-tag">🏁 Milestone: ${plan.milestone}</span>` : ""}
       ${complete ? `<span class="glosses"> · all quests done ⭐</span>` : ""}
+      ${future ? `<div class="glosses" style="margin-top:4px">A look ahead — these unlock on the day.</div>` : ""}
       <div class="cal-quests">
-        ${quests
+        ${plan.quests
           .map((quest) => {
-            const progress = questProgress(quest, events);
+            const progress = future ? 0 : questProgress(quest, events);
             const done = progress >= quest.goal;
             const percent = Math.round((progress / quest.goal) * 100);
             return `
               <div class="cal-quest${done ? " done" : ""}">
                 <div class="cal-quest-row">
-                  <span>${done ? "✅" : "⬜"} <b>${quest.title}</b></span>
+                  <span>${future ? "🔒" : done ? "✅" : "⬜"} <b>${quest.title}</b></span>
                   <span class="glosses">${progress} / ${quest.goal}</span>
                 </div>
                 <div class="glosses">${quest.detail}</div>

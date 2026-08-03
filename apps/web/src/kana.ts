@@ -1,6 +1,6 @@
 import { getMeta, setMeta } from "./db.js";
 import { speak } from "./audio.js";
-import { recordQuestEvent } from "./quests.js";
+import { recordQuestEvent, recordQuestEvents } from "./quests.js";
 import { assetUrl, loadDictionary } from "./store.js";
 import { KANA_GROUPS, isCorrect, type KanaEntry, type KanaGroup } from "./kana-data.js";
 
@@ -398,10 +398,14 @@ async function runLevel(
     game.unlocked = Math.max(game.unlocked, level + 1);
     if (useLives) game.health = Math.min(MAX_HEALTH, health + 1);
     // Levels count towards the day's quests; the learn level is a stroll,
-    // not a clear.
+    // not a clear. The groups in play are reported too, so a quest can ask
+    // for particular kana to have been practised.
     if (!learning) {
-      void recordQuestEvent("kana-level");
-      if (!missedAny) void recordQuestEvent("kana-level-perfect");
+      void recordQuestEvents([
+        "kana-level",
+        ...(missedAny ? [] : ["kana-level-perfect"]),
+        ...game.groups.map((id) => `group-cleared:${id}`),
+      ]);
     }
     await saveGame(game);
     if (!isCurrent()) return;
