@@ -246,6 +246,17 @@ are yours to change without touching code: they live in
 replace `correct.gif` / `wrong.gif` with any image (a GitHub web edit is
 enough). The next push deploys them.
 
+## Calendar
+
+The **Calendar** tab gives every local day a couple of quests — kana-focused
+for now — picked deterministically per date, so every device agrees without
+syncing anything. Screens report plain events (a correct kana answer, a
+cleared level) and quests are goals laid over the counts, which means the
+quest pool in `apps/web/src/quests.ts` (`QUEST_POOL`) can be changed freely
+without corrupting history. Completed days earn a star and feed a day
+streak; quests turn over at local midnight. The kana game also keeps a
+correct-answer streak (🔥), with the best run remembered on the device.
+
 ## Kanji
 
 The **Kanji** tab has two lists:

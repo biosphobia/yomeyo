@@ -3,6 +3,7 @@ import { renderReader } from "./reader.js";
 import { renderReview } from "./review.js";
 import { renderWords } from "./words.js";
 import { renderDecks } from "./decks.js";
+import { renderCalendar } from "./calendar.js";
 import { renderKana } from "./kana.js";
 import { renderKanji } from "./kanji.js";
 import { renderSettings } from "./settings.js";
@@ -31,6 +32,7 @@ app.innerHTML = `
     <a href="#decks" data-route="decks"><span class="icon">📦</span>Decks</a>
     <a href="#kana" data-route="kana"><span class="icon">あ</span>Kana</a>
     <a href="#kanji" data-route="kanji"><span class="icon">漢</span>Kanji</a>
+    <a href="#calendar" data-route="calendar"><span class="icon">📅</span>Calendar</a>
     <a href="#settings" data-route="settings"><span class="icon">⚙️</span>Settings</a>
   </nav>
 `;
@@ -87,6 +89,9 @@ function route(): void {
       break;
     case "kanji":
       void renderKanji(main, isCurrent);
+      break;
+    case "calendar":
+      void renderCalendar(main, isCurrent);
       break;
     case "settings":
       void renderSettings(main, isCurrent);

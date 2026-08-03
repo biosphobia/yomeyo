@@ -430,6 +430,106 @@ label {
   font-size: 0.95rem;
 }
 
+.kana-streak {
+  color: #ffb54d;
+  font-size: 0.9rem;
+  margin-left: 8px;
+}
+
+/* ---------------- the Calendar ---------------- */
+
+.cal-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.cal-month {
+  font-weight: 700;
+  min-width: 150px;
+  text-align: center;
+}
+
+.cal-streak {
+  margin-left: auto;
+  color: #ffb54d;
+  font-size: 0.9rem;
+}
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.cal-weekday {
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-align: center;
+  padding-bottom: 2px;
+}
+
+.cal-cell {
+  position: relative;
+  font: inherit;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid #ffffff18;
+  border-radius: 10px;
+  aspect-ratio: 1.15;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+}
+
+.cal-cell.blank {
+  background: none;
+  border: none;
+  cursor: default;
+}
+
+.cal-cell.future {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.cal-cell.today {
+  border-color: var(--accent);
+  border-width: 2px;
+}
+
+.cal-cell.done {
+  border-color: #3ddc8466;
+}
+
+.cal-mark {
+  color: #ffb54d;
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
+.cal-quests {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cal-quest.done {
+  opacity: 0.75;
+}
+
+.cal-quest-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
 .kana-skip-row {
   display: flex;
   align-items: center;

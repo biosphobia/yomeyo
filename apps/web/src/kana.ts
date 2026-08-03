@@ -1,5 +1,6 @@
 import { getMeta, setMeta } from "./db.js";
 import { speak } from "./audio.js";
+import { recordQuestEvent } from "./quests.js";
 import { assetUrl, loadDictionary } from "./store.js";
 import { KANA_GROUPS, isCorrect, type KanaEntry, type KanaGroup } from "./kana-data.js";
 
@@ -46,6 +47,20 @@ const LEVELS = [
   { name: "Real words", detail: "Short dictionary words from your kana. No clock." },
   { name: "Words, timed", detail: "The words again, ten seconds each." },
 ] as const;
+
+/**
+ * The correct-answer streak: consecutive right answers, across levels,
+ * reset by any miss. The running count lives for the session; the best
+ * ever is kept on the device.
+ */
+const BEST_STREAK_KEY = "kanaBestStreak";
+let streak = 0;
+let bestStreak = 0;
+
+function streakHtml(): string {
+  if (streak === 0 && bestStreak === 0) return "";
+  return `<span class="kana-streak">🔥 ${streak}${bestStreak > 0 ? ` · best ${bestStreak}` : ""}</span>`;
+}
 
 async function getGame(): Promise<GameState | null> {
   const stored = await getMeta<GameState>(GAME_KEY);
@@ -349,8 +364,10 @@ async function runLevel(
   const queue = learning ? [...items] : shuffle([...items]);
   let done = 0;
   let health = game.health;
+  let missedAny = false;
   let active = true; // cleared on quit, so a pending auto-advance dies quietly
   let timer: ReturnType<typeof setInterval> | null = null;
+  bestStreak = (await getMeta<number>(BEST_STREAK_KEY)) ?? bestStreak;
 
   const stopTimer = (): void => {
     if (timer !== null) clearInterval(timer);
@@ -380,6 +397,12 @@ async function runLevel(
     stopTimer();
     game.unlocked = Math.max(game.unlocked, level + 1);
     if (useLives) game.health = Math.min(MAX_HEALTH, health + 1);
+    // Levels count towards the day's quests; the learn level is a stroll,
+    // not a clear.
+    if (!learning) {
+      void recordQuestEvent("kana-level");
+      if (!missedAny) void recordQuestEvent("kana-level-perfect");
+    }
     await saveGame(game);
     if (!isCurrent()) return;
     const next = level + 1 < LEVELS.length ? LEVELS[level + 1] : null;
@@ -446,7 +469,7 @@ async function runLevel(
       <div class="card-panel kana-quiz">
         <div class="kana-quiz-top">
           <span class="glosses">Level ${level}: ${LEVELS[level].name}</span>
-          ${useLives ? heartsHtml(health) : ""}
+          <span>${streakHtml()} ${useLives ? heartsHtml(health) : ""}</span>
         </div>
         <div class="kana-bar"><div class="kana-bar-fill" style="width:${percent}%"></div></div>
         ${timerSec > 0 ? `<div class="kana-timer"><div class="kana-timer-fill" id="kana-timer-fill"></div></div>` : ""}
@@ -493,7 +516,14 @@ async function runLevel(
     const succeed = (): void => {
       settled = true;
       stopTimer();
-      feedback.innerHTML = `<span class="ok-text">✓ ${escapeHtml(itemAnswer(item))}</span>`;
+      streak++;
+      if (streak > bestStreak) {
+        bestStreak = streak;
+        void setMeta(BEST_STREAK_KEY, bestStreak);
+      }
+      void recordQuestEvent("kana-correct");
+      feedback.innerHTML = `<span class="ok-text">✓ ${escapeHtml(itemAnswer(item))}</span>
+        <span class="kana-streak">🔥 ${streak}</span>`;
       showReaction(body, cheer.correct);
       void speak(item.kana, { rate: 0.8 }).catch(() => undefined);
       setTimeout(advance, 1100);
@@ -502,6 +532,8 @@ async function runLevel(
     const miss = (label: string): void => {
       settled = true;
       stopTimer();
+      streak = 0;
+      missedAny = true;
       // Back into the deck: the level ends only when everything is right.
       queue.push(queue[0]);
       if (useLives) {
