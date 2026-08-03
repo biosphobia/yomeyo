@@ -59,6 +59,28 @@ redirected, and HSTS tells browsers to skip http entirely from then on.
 That assumes your domain has a certificate — on cPanel, check that
 **SSL/TLS Status** shows AutoSSL active for the domain (it usually is).
 
+### If the deploy is green but the site is empty
+
+FTP cannot say *where* an account's root folder is on the disk, so a
+successful upload can land in a folder the site never serves. Two fixes:
+
+- The FTP account's **Directory** is fixed at creation and cannot be edited
+  later — delete the account in **cPanel → FTP Accounts** and recreate it
+  with the Directory set exactly to the site folder (the FTP Accounts list
+  shows each account's path, which is also where the stray files went;
+  clean those up in File Manager).
+- Or keep the account and set the `CPANEL_FTP_DIR` secret to the site
+  folder's path as seen from the account's root.
+
+Set the `CPANEL_SITE_URL` secret (e.g. `https://duugu.moe/yomeyo/`) and
+every deploy checks itself: the run fails with a clear message whenever
+the URL is not serving the build it just uploaded.
+
+A browser certificate error (`ERR_CERT_AUTHORITY_INVALID`) is the host,
+not the deploy: the domain has no real certificate yet. In cPanel, open
+**SSL/TLS Status** and **Run AutoSSL** for the domain; the error — and the
+padlock — resolve a few minutes after it issues.
+
 GitHub Pages keeps working alongside this; if you want the move to be
 complete, switch Pages off under **Settings → Pages**.
 

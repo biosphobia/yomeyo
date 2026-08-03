@@ -173,6 +173,32 @@ jobs:
           # "public_html/yomeyo/" if the account is rooted elsewhere.
           server-dir: ${{ secrets.CPANEL_FTP_DIR || './' }}
 
+      # The FTP protocol cannot say *where* on the disk the account's root
+      # is, so an upload can succeed into a folder the site never serves —
+      # and the run looks green while the site stays empty. With the
+      # CPANEL_SITE_URL secret set (e.g. https://duugu.moe/yomeyo/), this
+      # fetches the just-uploaded service worker and fails loudly when the
+      # URL does not serve this exact build. -k because a host mid-AutoSSL
+      # setup has no valid certificate yet; the check is about placement.
+      - name: Check the site actually serves the upload
+        if: env.CPANEL_FTP_HOST != ''
+        env:
+          SITE_URL: ${{ secrets.CPANEL_SITE_URL }}
+        run: |
+          if [ -z "$SITE_URL" ]; then
+            echo "No CPANEL_SITE_URL secret - skipping the after-deploy check."
+            exit 0
+          fi
+          url="${SITE_URL%/}/sw.js"
+          expected=$(grep -o 'const BUILD_ID = "[^"]*"' apps/web/dist/sw.js)
+          served=$(curl -skL --max-time 30 "$url" | grep -o 'const BUILD_ID = "[^"]*"' || true)
+          if [ "$served" = "$expected" ]; then
+            echo "OK: $url serves this build (${expected})."
+          else
+            echo "::error::$url is not serving this build (wanted ${expected}, saw '${served:-nothing}'). The FTP account is rooted in a folder that URL does not serve - recreate the FTP account with its Directory set to the site folder, or set the CPANEL_FTP_DIR secret to the right path."
+            exit 1
+          fi
+
       # The key must exist nowhere but on that host. gh-pages and the Pages
       # artifact are public, so it comes back out of dist before they publish.
       - name: Remove the audio key from the public builds
