@@ -379,6 +379,103 @@ label {
   color: var(--muted);
 }
 
+/* ---------------- the Kana screen ---------------- */
+
+.kana-script {
+  font-size: 1.05rem;
+  margin: 22px 0 10px;
+}
+
+/* Levels flow into columns on a wide screen, a single column on a phone. */
+.kana-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 10px;
+}
+
+.kana-level {
+  font: inherit;
+  text-align: left;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid #ffffff18;
+  border-radius: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+}
+
+.kana-level:hover {
+  border-color: var(--accent);
+}
+
+.kana-level.done {
+  border-color: #3ddc8466;
+}
+
+.kana-level-no {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.kana-level-kana {
+  font-size: 1.4rem;
+  margin: 4px 0;
+}
+
+.kana-level-title {
+  font-size: 0.85rem;
+}
+
+.kana-level-best {
+  color: var(--muted);
+  font-size: 0.75rem;
+  margin-top: 4px;
+}
+
+.kana-quiz {
+  max-width: 480px;
+  margin: 0 auto;
+  text-align: center;
+  outline: none;
+}
+
+.kana-big {
+  font-size: 5.5rem;
+  line-height: 1.2;
+  margin: 18px 0;
+}
+
+.kana-quiz input {
+  max-width: 260px;
+  text-align: center;
+  font-size: 1.2rem;
+  margin: 0 auto;
+}
+
+.kana-feedback {
+  min-height: 48px;
+  margin-top: 12px;
+  font-size: 1.1rem;
+}
+
+.kana-feedback .ok-text {
+  color: #3ddc84;
+}
+
+.kana-feedback .err-text {
+  color: #ff6b6b;
+}
+
+.kana-quiz .big {
+  font-size: 3rem;
+}
+
+.kana-score {
+  font-size: 2.4rem;
+  font-weight: 700;
+  margin: 8px 0;
+}
+
 .grade-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

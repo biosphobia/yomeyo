@@ -612,6 +612,12 @@ function renderAnkiImport(main: HTMLElement, account: AccountInfo | null, advanc
             } came across`,
           );
         }
+        if (result.withoutMeaning > 0) {
+          parts.push(
+            `⚠ ${result.withoutMeaning.toLocaleString()} came across without an English meaning — ` +
+              `check which field is mapped as Meaning and import again`,
+          );
+        }
         if (result.mediaMissing > 0) {
           parts.push(
             `${result.mediaMissing.toLocaleString()} media file${

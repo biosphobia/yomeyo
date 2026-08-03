@@ -835,16 +835,20 @@ export interface ImportSummary {
   suspended: number;
   /** Cards whose due date lands implausibly far ahead — a sign of a bad crt. */
   implausible: number;
+  /** Cards that arrived with no meaning at all — a mapping worth checking. */
+  withoutMeaning: number;
 }
 
 export function summarise(cards: Card[], now: number = Date.now()): ImportSummary {
   let withScheduling = 0;
   let suspended = 0;
   let implausible = 0;
+  let withoutMeaning = 0;
   for (const card of cards) {
     if (card.state !== "new" || card.reps > 0) withScheduling++;
     if (card.leech) suspended++;
     if (card.due > now + FAR_FUTURE_DAYS * DAY) implausible++;
+    if (card.glosses.length === 0) withoutMeaning++;
   }
-  return { total: cards.length, withScheduling, suspended, implausible };
+  return { total: cards.length, withScheduling, suspended, implausible, withoutMeaning };
 }
