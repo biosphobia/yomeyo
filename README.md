@@ -444,8 +444,7 @@ then **Import JSON** on the other device.
 
 ## How the deployment works
 
-`.github/workflows/deploy.yml` runs on every push to `main` or the
-`claude/japanese-vocab-extension-7t4oai` branch:
+`.github/workflows/deploy.yml` runs on every push to `main`:
 
 1. runs the test suite,
 2. downloads the latest [jmdict-simplified][jmdict] release and converts it to
