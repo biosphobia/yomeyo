@@ -55,7 +55,8 @@ h1 {
   margin-bottom: 20px;
 }
 
-/* bottom nav */
+/* Navigation: a bottom tab bar on phones, a grouped sidebar on wide screens.
+   Same markup for both; the groups flatten away on the phone bar. */
 nav {
   position: fixed;
   bottom: 0;
@@ -67,6 +68,14 @@ nav {
   border-top: 1px solid #ffffff14;
   padding-bottom: env(safe-area-inset-bottom);
   z-index: 50;
+}
+
+nav .nav-group {
+  display: contents;
+}
+
+nav .brand {
+  display: none;
 }
 
 nav a {
@@ -88,6 +97,100 @@ nav a .icon {
 
 nav a.active {
   color: var(--accent);
+}
+
+@media (min-width: 860px) {
+  #app {
+    flex-direction: row;
+  }
+
+  nav {
+    position: sticky;
+    top: 0;
+    bottom: auto;
+    left: auto;
+    right: auto;
+    align-self: flex-start;
+    flex-direction: column;
+    width: 216px;
+    flex-shrink: 0;
+    height: 100dvh;
+    padding: 20px 14px 20px;
+    border-top: none;
+    border-right: 1px solid #ffffff14;
+    background: color-mix(in srgb, var(--panel) 55%, var(--bg));
+    backdrop-filter: none;
+  }
+
+  nav .brand {
+    display: block;
+    font-size: 1.3rem;
+    font-weight: 700;
+    padding: 4px 12px 22px;
+  }
+
+  nav .brand span {
+    display: block;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+  }
+
+  nav .nav-group {
+    display: block;
+    margin-bottom: 18px;
+  }
+
+  nav .nav-group[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    padding: 0 12px 6px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--muted);
+    opacity: 0.8;
+  }
+
+  nav .nav-tail {
+    margin-top: auto;
+    margin-bottom: 0;
+  }
+
+  nav a {
+    flex: none;
+    flex-direction: row;
+    align-items: center;
+    gap: 11px;
+    text-align: left;
+    padding: 9px 12px;
+    margin-bottom: 2px;
+    border-radius: 10px;
+    font-size: 0.92rem;
+    font-weight: 500;
+  }
+
+  nav a:hover {
+    color: var(--text);
+    background: #ffffff0a;
+  }
+
+  nav a .icon {
+    font-size: 1.15rem;
+    width: 24px;
+    text-align: center;
+  }
+
+  nav a.active {
+    color: var(--accent);
+    background: var(--accent-soft);
+  }
+
+  main {
+    padding: 28px 24px 48px;
+  }
 }
 
 .card-panel {
@@ -1251,7 +1354,7 @@ label {
   color: var(--accent);
 }
 
-/* Six tabs on a narrow phone: let the labels shrink rather than wrap. */
+/* Seven tabs on a narrow phone: let the labels shrink rather than wrap. */
 @media (max-width: 400px) {
   nav a {
     font-size: 0.68rem;

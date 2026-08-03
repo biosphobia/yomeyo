@@ -15,7 +15,10 @@ import { restoreAccount } from "./accounts.js";
 import { activeAccount, onAccountChange } from "./db.js";
 import { toast } from "./toast.js";
 
-/** Hash-routed SPA shell with a bottom tab bar. */
+/**
+ * Hash-routed SPA shell. The nav is a bottom tab bar on phones and a grouped
+ * sidebar on wide screens; the same markup serves both, CSS does the rest.
+ */
 
 // Before anything reads storage: point it at whoever was signed in last time,
 // so the first screen is already the right person's deck rather than the
@@ -24,17 +27,25 @@ await restoreAccount();
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 app.innerHTML = `
-  <main id="main"></main>
   <nav>
-    <a href="#review" data-route="review"><span class="icon">🗂️</span>Review</a>
-    <a href="#reader" data-route="reader"><span class="icon">📖</span>Reader</a>
-    <a href="#words" data-route="words"><span class="icon">📚</span>Words</a>
-    <a href="#decks" data-route="decks"><span class="icon">📦</span>Decks</a>
-    <a href="#kana" data-route="kana"><span class="icon">あ</span>Kana</a>
-    <a href="#kanji" data-route="kanji"><span class="icon">漢</span>Kanji</a>
-    <a href="#calendar" data-route="calendar"><span class="icon">📅</span>Calendar</a>
-    <a href="#settings" data-route="settings"><span class="icon">⚙️</span>Settings</a>
+    <div class="brand" aria-hidden="true">読めよ<span>Yomeyo</span></div>
+    <div class="nav-group" data-label="Study">
+      <a href="#review" data-route="review"><span class="icon">🗂️</span>Review</a>
+      <a href="#words" data-route="words"><span class="icon">📚</span>Words</a>
+      <a href="#decks" data-route="decks"><span class="icon">📦</span>Decks</a>
+    </div>
+    <div class="nav-group" data-label="Learn">
+      <a href="#kana" data-route="kana"><span class="icon">あ</span>Kana</a>
+      <a href="#kanji" data-route="kanji"><span class="icon">漢</span>Kanji</a>
+    </div>
+    <div class="nav-group" data-label="Plan">
+      <a href="#calendar" data-route="calendar"><span class="icon">📅</span>Calendar</a>
+    </div>
+    <div class="nav-group nav-tail">
+      <a href="#settings" data-route="settings"><span class="icon">⚙️</span>Settings</a>
+    </div>
   </nav>
+  <main id="main"></main>
 `;
 
 const main = document.querySelector<HTMLElement>("#main")!;
@@ -74,6 +85,8 @@ function route(): void {
     a.classList.toggle("active", (a as HTMLAnchorElement).dataset.route === hash);
   });
   switch (hash) {
+    // No tab leads here any more: the Reader exists only for text shared to
+    // the app from Android, which still lands on this route.
     case "reader":
       renderReader(main, sharedText && !readerShown ? sharedText : undefined);
       readerShown = true;
