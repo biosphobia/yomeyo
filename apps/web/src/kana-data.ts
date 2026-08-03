@@ -1,7 +1,6 @@
 /**
- * The kana curriculum: hiragana and katakana in levels of increasing
- * difficulty — the vowels first, then each consonant row, then the voiced
- * rows, then the combination sounds, the order every textbook uses.
+ * The kana groups: the rows a learner picks from — vowels, each consonant
+ * row, the voiced rows, the combination sounds — for hiragana and katakana.
  *
  * Hiragana is written out once; katakana is the same syllabary at a fixed
  * Unicode offset, so it is derived rather than repeated.
@@ -13,7 +12,7 @@ export interface KanaEntry {
   romaji: string[];
 }
 
-export interface KanaLevel {
+export interface KanaGroup {
   id: string;
   script: "hiragana" | "katakana";
   /** The romaji label, e.g. "ka ki ku ke ko". */
@@ -53,7 +52,7 @@ function toKatakana(hiragana: string): string {
     .join("");
 }
 
-function levelsFor(script: "hiragana" | "katakana"): KanaLevel[] {
+function groupsFor(script: "hiragana" | "katakana"): KanaGroup[] {
   return BASIC_ROWS.map(([detail, entries], index) => {
     const converted: KanaEntry[] = entries.map(([kana, ...romaji]) => ({
       kana: script === "katakana" ? toKatakana(kana) : kana,
@@ -69,10 +68,10 @@ function levelsFor(script: "hiragana" | "katakana"): KanaLevel[] {
   });
 }
 
-export const KANA_LEVELS: KanaLevel[] = [...levelsFor("hiragana"), ...levelsFor("katakana")];
+export const KANA_GROUPS: KanaGroup[] = [...groupsFor("hiragana"), ...groupsFor("katakana")];
 
-export function levelById(id: string): KanaLevel | undefined {
-  return KANA_LEVELS.find((level) => level.id === id);
+export function groupById(id: string): KanaGroup | undefined {
+  return KANA_GROUPS.find((group) => group.id === id);
 }
 
 /** Is this romaji an accepted reading of the entry? */

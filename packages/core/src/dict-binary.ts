@@ -252,9 +252,7 @@ export class BinaryDictionary implements Dictionary {
     return -1;
   }
 
-  private entryAt(id: number): DictEntry {
-    const cached = this.cache.get(id);
-    if (cached) return cached;
+  private decodeAt(id: number): DictEntry {
     const json = this.decoder.decode(
       this.bytes.subarray(this.offEntryBlob + this.entOffsets[id], this.offEntryBlob + this.entOffsets[id + 1]),
     );
@@ -273,8 +271,24 @@ export class BinaryDictionary implements Dictionary {
     };
     if (freq !== undefined) entry.freq = freq;
     if (this.source) entry.source = this.source;
+    return entry;
+  }
+
+  private entryAt(id: number): DictEntry {
+    const cached = this.cache.get(id);
+    if (cached) return cached;
+    const entry = this.decodeAt(id);
     this.cache.set(id, entry);
     return entry;
+  }
+
+  /**
+   * Every entry once, decoded on the fly and deliberately not cached — for
+   * one-off scans (finding words made of certain kana, say) that must not
+   * leave the whole dictionary sitting decoded in memory afterwards.
+   */
+  *entries(): Generator<DictEntry> {
+    for (let id = 0; id < this.size; id++) yield this.decodeAt(id);
   }
 
   lookupExact(text: string): DictEntry[] {

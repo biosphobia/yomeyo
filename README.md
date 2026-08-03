@@ -219,11 +219,23 @@ built up during those steps.
 
 ## Kana
 
-The **Kana** tab teaches both syllabaries in levels of increasing difficulty
-— vowels, each consonant row, voiced rows, combination sounds — hiragana
-first, then katakana. Type the romaji (every spelling is accepted), and the
-kana is spoken after each answer. Levels mix in kana from earlier rows so
-nothing fades; each level's best score is kept on the device.
+The **Kana** tab is a game. Pick the groups to practice — any mix of rows
+from either syllabary — then climb seven levels over exactly that pool:
+
+0. **Learn** — meet each kana once, with its sound
+1. **Multiple choice** — three options, every kana at least twice
+2. **Type it** — type the romaji (every spelling is accepted)
+3. **Lives** — typing, five hearts; a miss costs one
+4. **Timed** — hearts, and six seconds a question
+5. **Real words** — short dictionary words spelt only with your kana, with
+   their meanings; no clock
+6. **Words, timed** — the same, ten seconds each
+
+A missed item goes back into the queue, so a level is only cleared once
+everything has been answered right — a progress bar shows how far that is.
+Completing a level unlocks the next and restores one heart; running out of
+hearts means retrying the level fresh. Every answer is spoken, and changing
+the group selection starts a new climb.
 
 Right and wrong answers pop a reaction — an image and a line of text. Both
 are yours to change without touching code: they live in
