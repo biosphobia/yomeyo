@@ -30,6 +30,11 @@ function isExcluded(relPath) {
   return (
     relPath === "sw.js" ||
     relPath === ".nojekyll" ||
+    relPath === ".htaccess" || // server configuration, not a page resource
+    // The audio endpoint is server-side code, not shell; fetching it at
+    // install time would execute it (or cache its source on a static host).
+    relPath === "audio.php" ||
+    relPath === "audio-key.php" ||
     relPath.startsWith("dict/") || // megabytes; cached on first use instead
     relPath.endsWith(".zip") || // the packaged extension
     // The Firebase SDK is loaded only when cloud sync is configured; a user

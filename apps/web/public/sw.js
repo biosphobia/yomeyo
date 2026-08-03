@@ -69,6 +69,12 @@ self.addEventListener("fetch", (event) => {
   // directly. See apps/web/src/dict-bytes.ts.
   if (url.pathname.includes("/dict/")) return;
 
+  // The audio endpoint is live server code: its availability probe must see
+  // the server's answer of the moment (the key can be deployed between app
+  // updates), and the app caches the clips itself in IndexedDB. A cached
+  // copy here would freeze both.
+  if (url.pathname.endsWith("/audio.php")) return;
+
   // Navigations: network-first so a new deploy is picked up promptly, with
   // the cached shell as the offline fallback.
   if (event.request.mode === "navigate") {

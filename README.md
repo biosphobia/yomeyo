@@ -40,9 +40,11 @@ works from any folder with no code change. One-time setup:
    | `CPANEL_FTP_USER` | the FTP account, e.g. `deploy@duugu.moe` |
    | `CPANEL_FTP_PASSWORD` | its password |
 
-   Optional extras: `CPANEL_FTP_DIR` if the account is *not* rooted in the
-   target folder (e.g. `public_html/yomeyo/`), and `CPANEL_FTP_PROTOCOL`
-   set to `ftp` only if your host offers no FTPS.
+   Optional extras: `AUDIO_API_KEY` to turn on online pronunciation audio
+   (the key stays on the server — see *Pronunciation audio* below),
+   `CPANEL_FTP_DIR` if the account is *not* rooted in the target folder
+   (e.g. `public_html/yomeyo/`), and `CPANEL_FTP_PROTOCOL` set to `ftp`
+   only if your host offers no FTPS.
 
 4. **Push** (or re-run the workflow). The site appears at your domain and
    every later push updates it — only changed files are uploaded.
@@ -159,14 +161,11 @@ exists and never silence when it doesn't:
 Clips are cached on the device after the first play, so replaying a card
 during review is instant and keeps working with no signal.
 
-Online audio needs an API key, entered under **Settings → Audio**. **The key
-is stored only in your browser** — it is never committed to this repository,
-never bundled into the published app, and never synced. The endpoints are
-editable there too if you use a different service; they take `{term}`,
-`{reading}`, `{language}` and `{apiKey}` placeholders. A **Test** button
-reports exactly what each source returns without ever printing your key.
-
-With no key configured, audio falls straight through to the device voice.
+There is nothing to configure in the app. Online audio is served by a tiny
+endpoint (`audio.php`) deployed with the site, and the API key lives on the
+server — set as the `AUDIO_API_KEY` repository secret, written to the host
+at deploy time, never reaching any browser. A deployment without it (GitHub
+Pages, or no secret set) falls straight through to the device voice.
 
 Scheduling is **FSRS-6**, the same algorithm Anki uses with FSRS enabled, and
 it ships configured to match a real mining deck:
@@ -244,23 +243,17 @@ where it does not, and the device's own Japanese voice when neither is
 reachable. Clips are cached on the device after the first play.
 
 Recordings come from a list endpoint of the kind Yomitan calls a "custom
-audio source" — configured, with your key, in **Settings → Audio**. The key
-is kept in that browser only: it is never committed here, never bundled, and
-never synced.
+audio source". The page itself never talks to it, for two reasons: those
+services were built for Yomitan and Anki and usually refuse web pages
+outright (no CORS header), and any key held by a web page is readable by
+whoever opens the developer tools. Both problems end on the server — the
+site ships `audio.php`, which holds the key, asks the service, and streams
+the clip back same-origin.
 
-**These services usually refuse web pages.** They were built for Yomitan and
-Anki — an extension and a desktop program, neither bound by the browser's
-cross-origin rules — so most never send the `Access-Control-Allow-Origin`
-header a web page needs, and the request fails before it is even sent. The
-app now says so plainly instead of reporting a bare "Failed to fetch", and
-tells the two cases apart: a service that refuses pages, and one that is not
-answering at all.
-
-The extension is not bound by those rules either. With it installed, open its
-toolbar menu and press **Allow audio downloads**, and the app fetches through
-it. That permission is optional and asked for there rather than required up
-front, because a required one would make browsers hold the extension for
-re-approval on every update.
+To turn it on, add one repository secret: `AUDIO_API_KEY`. The deploy
+workflow writes it to the cPanel host next to `audio.php` (and scrubs it
+from the public GitHub Pages build, which cannot run PHP anyway). No key,
+no cPanel host — the app quietly uses the device voice instead.
 
 ## Decks
 

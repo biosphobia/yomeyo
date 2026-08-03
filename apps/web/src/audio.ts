@@ -1,45 +1,23 @@
-import {
-  DEFAULT_AUDIO_SOURCES,
-  audioSourcesReady,
-  buildAudioUrl,
-  onTap,
-  parseAudioList,
-  redactKey,
-  type AudioSourceConfig,
-} from "@yomeyo/core";
+import { onTap } from "@yomeyo/core";
 import { getMeta, setMeta } from "./db.js";
 import { getMedia } from "./media.js";
-import { fetchThroughExtension } from "./extension-bridge.js";
+import { assetUrl } from "./store.js";
 
 /**
  * Word audio, in order of preference:
  *
- *   1. Forvo — a real person saying the word
- *   2. synthesised audio from the same endpoint (OpenAI / ElevenLabs / Polly)
- *   3. the Japanese voice built into the device
+ *   1. a clip an imported deck brought with it (the deck author's choice)
+ *   2. the clip cached from an earlier play, which also works offline
+ *   3. the site's own audio endpoint — real recordings first, synthesis second
+ *   4. the Japanese voice built into the device
  *
- * The API key is entered in Settings and lives only in this browser's local
- * database. It is never written to the repository and never leaves the
- * device except in the request to the audio endpoint itself.
+ * The endpoint (`audio.php`, deployed next to the app) holds the API key on
+ * the server, so there is nothing to configure here and no key ever reaches
+ * the browser. A deployment without the endpoint — GitHub Pages, a local
+ * build — simply falls through to the device voice.
  */
 
-const CONFIG_KEY = "audioSources";
 const clipKey = (term: string, reading: string) => `audioClip:${term}\u0000${reading}`;
-
-export async function getAudioConfig(): Promise<AudioSourceConfig> {
-  const stored = await getMeta<Partial<AudioSourceConfig>>(CONFIG_KEY);
-  return {
-    forvoUrl: DEFAULT_AUDIO_SOURCES.forvoUrl,
-    ttsUrl: DEFAULT_AUDIO_SOURCES.ttsUrl,
-    apiKey: "",
-    enabled: false,
-    ...(stored ?? {}),
-  };
-}
-
-export async function saveAudioConfig(config: AudioSourceConfig): Promise<void> {
-  await setMeta(CONFIG_KEY, config);
-}
 
 // ---------------- device speech (final fallback) ----------------
 
@@ -101,7 +79,7 @@ async function speakWithDevice(text: string, rate: number): Promise<void> {
   });
 }
 
-// ---------------- remote audio ----------------
+// ---------------- playback ----------------
 
 let currentAudio: HTMLAudioElement | null = null;
 
@@ -135,122 +113,45 @@ async function playBlob(blob: Blob): Promise<void> {
   }
 }
 
-/**
- * Is the service there but refusing browsers, or not there at all?
- *
- * `fetch` reports both as the same bare "Failed to fetch", which tells a user
- * nothing about what to do. A `no-cors` request is sent regardless of the
- * missing header — its response is unreadable, but the fact that it completes
- * at all separates "the server said no to this page" from "nothing answered".
- */
-async function refusedByCors(url: string): Promise<boolean> {
-  try {
-    // Bounded: this only decides the wording of an error, and the caller is
-    // on its way to the device voice regardless.
-    const stop = new AbortController();
-    const timer = setTimeout(() => stop.abort(), 2500);
-    try {
-      await fetch(url, { mode: "no-cors", cache: "no-store", signal: stop.signal });
-      return true;
-    } finally {
-      clearTimeout(timer);
-    }
-  } catch {
-    return false;
-  }
-}
+// ---------------- the site's own audio endpoint ----------------
 
-/** Fetch, falling back to the extension when this page is not allowed to. */
-async function fetchMaybeViaExtension(url: string): Promise<Response> {
-  try {
-    return await fetch(url);
-  } catch (err) {
-    const relayed = await fetchThroughExtension(url);
-    if (relayed.ok) {
-      return new Response(relayed.body, { headers: { "content-type": relayed.contentType } });
-    }
-
-    // The extension is here, one press away from working — say exactly that,
-    // not the generic advice to install what is already installed.
-    if (relayed.reason === "no-permission") {
-      throw new Error(
-        "The Yomeyo extension is installed but has not been allowed to download audio yet. " +
-          "Open its toolbar popup, press “Allow audio downloads”, and try again.",
-      );
-    }
-    if (relayed.reason === "failed" && relayed.detail) {
-      throw new Error(`The extension tried to fetch it but could not: ${relayed.detail}.`);
-    }
-
-    if (await refusedByCors(url)) {
-      throw new Error(
-        "The audio service answers, but does not let web pages read its replies (no CORS header), " +
-          "and no Yomeyo extension answered on this page. In a browser with the extension, open its " +
-          "toolbar popup and press “Allow audio downloads”. In a browser without extensions — like " +
-          "Chrome for Android — this service cannot be reached from a page, and the device voice is " +
-          "used instead.",
-      );
-    }
-    throw new Error(
-      `Could not reach the audio service (${redactKey(url)}). ${
-        err instanceof Error ? err.message : ""
-      }`.trim(),
-    );
-  }
-}
+let endpointReady: Promise<boolean> | null = null;
 
 /**
- * What one source offered: the clip's bytes when they could be read, or
- * failing that the clip URLs themselves.
+ * Is the endpoint deployed and configured? Asked once per page load.
  *
- * The distinction exists because CORS forbids *reading* a cross-origin reply,
- * not *playing* one — an <audio> element will happily play a URL whose bytes
- * this page may never see. So when the list is readable but the clip host
- * refuses pages, the recording can still be heard; it just cannot be cached
- * for offline replay.
+ * Only a 204 counts: a static host (GitHub Pages) answers this URL with the
+ * PHP source as a 200, which is a file, not an endpoint.
  */
-interface ClipResult {
-  blob: Blob | null;
-  playableUrls: string[];
-}
-
-/** Ask one source for a clip and download the first playable result. */
-async function fetchClip(
-  template: string,
-  config: AudioSourceConfig,
-  term: string,
-  reading: string,
-): Promise<ClipResult> {
-  const url = buildAudioUrl(template, { term, reading }, config.apiKey);
-
-  const response = await fetchMaybeViaExtension(url);
-  if (!response.ok) {
-    throw new Error(
-      response.status === 401 || response.status === 403
-        ? "The audio service rejected the API key."
-        : `The audio service returned ${response.status}.`,
-    );
-  }
-
-  const candidates = parseAudioList(await response.json());
-  for (const candidate of candidates) {
+function audioEndpointReady(): Promise<boolean> {
+  endpointReady ??= (async () => {
     try {
-      // The clip itself often lives on another host again, with its own view
-      // on who may fetch it, so it gets the same treatment.
-      const clip = await fetchMaybeViaExtension(candidate.url);
-      if (!clip.ok) continue;
-      const blob = await clip.blob();
-      if (blob.size > 0) return { blob, playableUrls: [] };
+      const res = await fetch(assetUrl("audio.php?probe=1"), { cache: "no-store" });
+      return res.status === 204;
     } catch {
-      // Try the next candidate rather than giving up on the whole source.
+      return false;
     }
-  }
-  return { blob: null, playableUrls: candidates.map((candidate) => candidate.url) };
+  })();
+  return endpointReady;
 }
+
+/** Ask the endpoint for a clip; null when it has none for this word. */
+async function fetchEndpointClip(term: string, reading: string): Promise<Blob | null> {
+  const res = await fetch(
+    assetUrl(`audio.php?term=${encodeURIComponent(term)}&reading=${encodeURIComponent(reading)}`),
+  );
+  if (!res.ok) return null;
+  // The same static-host caution as the probe: only audio is audio.
+  if (!/^audio\//i.test(res.headers.get("content-type") ?? "")) return null;
+  const blob = await res.blob();
+  return blob.size > 0 ? blob : null;
+}
+
+// ---------------- playing a word ----------------
 
 export interface PlayResult {
   /** Which source actually produced the sound. */
-  source: "deck" | "cache" | "forvo" | "tts" | "device";
+  source: "deck" | "cache" | "online" | "device";
 }
 
 /**
@@ -258,7 +159,7 @@ export interface PlayResult {
  *
  * False when the key resolves to nothing — the card came from another
  * device, or its deck's media was removed — so the caller can fall back to
- * the synthesised chain rather than staying silent.
+ * the online chain rather than staying silent.
  */
 export async function playStoredAudio(key: string): Promise<boolean> {
   const blob = await getMedia(key);
@@ -288,78 +189,21 @@ export async function playWord(
     return { source: "cache" };
   }
 
-  const config = await getAudioConfig();
-  if (audioSourcesReady(config)) {
-    // Recording first, synthesis second — that ordering is the whole point.
-    for (const [source, template] of [
-      ["forvo", config.forvoUrl],
-      ["tts", config.ttsUrl],
-    ] as const) {
-      if (!template?.trim()) continue;
-      try {
-        const { blob, playableUrls } = await fetchClip(template, config, term, reading);
-        if (blob) {
-          await setMeta(clipKey(term, reading), blob);
-          await playBlob(blob);
-          return { source };
-        }
-        // The bytes were refused, but playing is not reading: hand the URL
-        // straight to an <audio> element. No caching — there is nothing this
-        // page is allowed to keep — but the recording is heard.
-        for (const clipUrl of playableUrls) {
-          try {
-            await playFromUrl(clipUrl);
-            return { source };
-          } catch {
-            // A dead or undecodable clip; the next candidate may play.
-          }
-        }
-      } catch {
-        // Fall through to the next source; the device voice is always there.
+  if (await audioEndpointReady()) {
+    try {
+      const blob = await fetchEndpointClip(term, reading);
+      if (blob) {
+        await setMeta(clipKey(term, reading), blob);
+        await playBlob(blob);
+        return { source: "online" };
       }
+    } catch {
+      // The device voice is always there.
     }
   }
 
   await speakWithDevice(spoken, options.rate ?? 0.9);
   return { source: "device" };
-}
-
-/**
- * Check the configuration and report what happened, for the Settings test
- * button. Never includes the API key in its message.
- */
-export async function testAudioConfig(
-  config: AudioSourceConfig,
-  term = "日本語",
-  reading = "にほんご",
-): Promise<string> {
-  if (!config.apiKey.trim()) throw new Error("Enter your API key first.");
-  const results: string[] = [];
-  for (const [label, template] of [
-    ["Forvo", config.forvoUrl],
-    ["TTS", config.ttsUrl],
-  ] as const) {
-    try {
-      const { blob, playableUrls } = await fetchClip(template, config, term, reading);
-      results.push(
-        blob
-          ? `${label}: ok (${Math.round(blob.size / 1024)} KB)`
-          : playableUrls.length > 0
-            ? `${label}: found a clip this page may play but not save — it will play online, without offline caching`
-            : `${label}: no audio found`,
-      );
-    } catch (err) {
-      results.push(`${label}: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-  // Failures above never mean silence — say what actually happens instead.
-  const voice = await japaneseVoice();
-  results.push(
-    voice
-      ? `Device voice: ready (${voice.name || "Japanese"}) — used whenever the sources above fail`
-      : "Device voice: no Japanese voice installed on this device",
-  );
-  return results.join(" · ");
 }
 
 /** Kept for callers that only want the device voice (e.g. reading a sentence). */
@@ -370,6 +214,8 @@ export async function speak(text: string, options: { rate?: number } = {}): Prom
 export async function audioAvailable(): Promise<boolean> {
   return (await japaneseVoice()) !== null;
 }
+
+// ---------------- buttons ----------------
 
 /**
  * A reusable speaker button. Reading is preferred over the written form so
@@ -401,13 +247,11 @@ export function speakerButton(term: string, reading?: string, deckAudio?: string
       const result = await playWord(term, reading ?? "");
       button.classList.remove("error");
       button.title =
-        result.source === "forvo"
-          ? "Played a Forvo recording"
-          : result.source === "tts"
-            ? "Played synthesised audio"
-            : result.source === "cache"
-              ? "Played the saved recording"
-              : "Played with the device voice";
+        result.source === "online"
+          ? "Played a recording"
+          : result.source === "cache"
+            ? "Played the saved recording"
+            : "Played with the device voice";
     } catch (err) {
       button.classList.add("error");
       button.title = err instanceof Error ? err.message : "Could not play audio";

@@ -4,6 +4,13 @@
 
 Options -Indexes
 
+# The audio API key lives in this file, read only by audio.php. Executed
+# directly it outputs nothing, but if PHP were ever switched off Apache
+# would serve the source — so the web never gets to ask for it at all.
+<Files "audio-key.php">
+  Require all denied
+</Files>
+
 <IfModule mod_headers.c>
   # Built assets carry a content hash in their name, so they never change in
   # place and can be cached forever.

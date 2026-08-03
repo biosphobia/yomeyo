@@ -132,6 +132,24 @@ jobs:
           path: yomeyo-extension-*.zip
           if-no-files-found: error
 
+      # Word audio: the app never holds the API key — a static site cannot
+      # keep a secret. Instead the site ships audio.php, and the key is
+      # written next to it here, from the AUDIO_API_KEY repository secret,
+      # for the cPanel upload alone. Base64 sidesteps every quoting hazard a
+      # key could pose. Without the secret, audio.php answers "unconfigured"
+      # and the app uses the device voice.
+      - name: Give the cPanel host its audio key
+        if: env.CPANEL_FTP_HOST != ''
+        env:
+          AUDIO_API_KEY: ${{ secrets.AUDIO_API_KEY }}
+        run: |
+          if [ -n "$AUDIO_API_KEY" ]; then
+            printf '<?php return base64_decode("%s");\n' "$(printf %s "$AUDIO_API_KEY" | base64 -w0)" > apps/web/dist/audio-key.php
+            echo "Audio key packaged for the host."
+          else
+            echo "No AUDIO_API_KEY secret set - word audio will use the device voice."
+          fi
+
       # Publishing path 1: your own web host, over FTP(S) — how a cPanel host
       # gets updated on every push. Runs only when the CPANEL_FTP_* secrets
       # exist. Placed before the gh-pages publish, which git-inits inside
@@ -154,6 +172,12 @@ jobs:
           # folder (the recommended setup). Set CPANEL_FTP_DIR to a path like
           # "public_html/yomeyo/" if the account is rooted elsewhere.
           server-dir: ${{ secrets.CPANEL_FTP_DIR || './' }}
+
+      # The key must exist nowhere but on that host. gh-pages and the Pages
+      # artifact are public, so it comes back out of dist before they publish.
+      - name: Remove the audio key from the public builds
+        if: always() && env.CPANEL_FTP_HOST != ''
+        run: rm -f apps/web/dist/audio-key.php
 
       # Publishing path 2: a plain gh-pages branch. Always works with the
       # default token, and covers the "Deploy from a branch" Pages setting.
