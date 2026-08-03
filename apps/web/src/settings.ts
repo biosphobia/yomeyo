@@ -425,6 +425,8 @@ function renderAnkiImport(main: HTMLElement, account: AccountInfo | null, advanc
       ["reading", "Reading"],
       ["meaning", "Meaning"],
       ["sentence", "Sentence"],
+      ["sentenceMeaning", "Sentence meaning"],
+      ["notes", "Notes"],
     ];
 
     const total = source.groups.reduce((sum, g) => sum + (g.include ? g.notes.length : 0), 0);
@@ -494,7 +496,8 @@ function renderAnkiImport(main: HTMLElement, account: AccountInfo | null, advanc
                         <select id="anki-${group.key}-${role}" data-role="${role}">${options(group.mapping[role])}</select>`,
                    )
                    .join("")}
-               </div>`
+               </div>
+               <div class="msg">Audio and pictures need no mapping — they are found in whichever fields they live.</div>`
             : ""
         }
         <div class="msg">Preview</div>
@@ -517,6 +520,8 @@ function renderAnkiImport(main: HTMLElement, account: AccountInfo | null, advanc
                         }${card.image ? ` <span title="Has a picture">🖼️</span>` : ""}</div>
                         <div class="glosses">${escapeHtml(card.glosses.join("; ")) || "(no meaning)"}</div>
                         ${card.sentence ? `<div class="glosses">${escapeHtml(card.sentence)}</div>` : ""}
+                        ${card.sentenceMeaning ? `<div class="glosses">${escapeHtml(card.sentenceMeaning)}</div>` : ""}
+                        ${card.notes ? `<div class="glosses">📝 ${escapeHtml(card.notes.split("\n")[0])}</div>` : ""}
                       </div>
                       <div class="due">${escapeHtml(card.state)}${card.state === "review" ? ` ${card.intervalDays}d` : ""}</div>
                     </div>`,

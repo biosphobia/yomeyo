@@ -171,16 +171,42 @@ export function noteMedia(fields: string[], mapping: FieldMapping, fieldNames: s
 
 // ---------------- which field is which ----------------
 
-export type FieldRole = "term" | "reading" | "meaning" | "sentence" | "ignore";
+export type FieldRole =
+  | "term"
+  | "reading"
+  | "meaning"
+  | "sentence"
+  | "sentenceMeaning"
+  | "notes"
+  | "ignore";
 
 /** Which field of a note type holds what, by index into its field list. */
 export type FieldMapping = Record<Exclude<FieldRole, "ignore">, number>;
 
+/** The roles, in the order they are guessed and offered. */
+export const FIELD_ROLES = ["term", "reading", "meaning", "sentence", "sentenceMeaning", "notes"] as const;
+
 const HINTS: Record<Exclude<FieldRole, "ignore">, RegExp[]> = {
-  term: [/^(word|expression|vocab\w*|term|front|kanji|target)/i, /単語|表現|語彙/],
-  reading: [/^(reading|kana|furigana|pronunciation|yomi)/i, /読み|ふりがな|かな/],
-  meaning: [/^(meaning|definition|glossar\w*|gloss|english|translation|back|sense)/i, /意味|訳|定義/],
-  sentence: [/^(sentence|example|context|expression sentence|cloze|snippet)/i, /例文|文/],
+  term: [
+    /^(word|expression|vocab\w*|term|front|kanji|target)$/i,
+    // Prefixed variants ("Word 1") — but never a sibling like "Word Reading".
+    /^(word|expression|vocab\w*|term|front|kanji|target)(?![-_ ]?(sentence|reading|furigana|kana|yomi|meaning|definition|translation|english|audio|sound|picture|image))/i,
+    /単語|表現|語彙/,
+  ],
+  reading: [
+    /^(reading|kana|furigana|pronunciation|yomi)/i,
+    // "Word Reading", "Vocab-Furigana" — the word's own name in front.
+    /^(word|expression|vocab\w*|term)[-_ ]?(reading|furigana|kana|yomi)/i,
+    /読み|ふりがな|かな/,
+  ],
+  meaning: [
+    /^(meaning|definition|glossar\w*|gloss|english|translation|back|sense)/i,
+    /^(word|expression|vocab\w*|term)[-_ ]?(meaning|definition|translation|english|gloss)/i,
+    /意味|訳|定義/,
+  ],
+  sentence: [/^(sentence|example|context|expression sentence|cloze|snippet)$/i, /^(sentence|example|context)(?![-_ ]?(meaning|translation|english|audio|furigana|reading|kana))/i, /例文|文/],
+  sentenceMeaning: [/^(sentence|example|context)[-_ ]?(meaning|translation|english)/i, /例文.*(意味|訳)/],
+  notes: [/^notes?\b/i, /備考|メモ|ノート/],
 };
 
 /**
@@ -192,10 +218,17 @@ const HINTS: Record<Exclude<FieldRole, "ignore">, RegExp[]> = {
  * and everything else starts from a sensible position rather than blank.
  */
 export function guessFieldMapping(fieldNames: string[]): FieldMapping {
-  const mapping: FieldMapping = { term: -1, reading: -1, meaning: -1, sentence: -1 };
+  const mapping: FieldMapping = {
+    term: -1,
+    reading: -1,
+    meaning: -1,
+    sentence: -1,
+    sentenceMeaning: -1,
+    notes: -1,
+  };
   const taken = new Set<number>();
 
-  for (const role of ["term", "reading", "meaning", "sentence"] as const) {
+  for (const role of FIELD_ROLES) {
     for (const hint of HINTS[role]) {
       const index = fieldNames.findIndex((name, i) => !taken.has(i) && hint.test(name.trim()));
       if (index >= 0) {
@@ -690,10 +723,13 @@ export function notesToCards(
   const cards: Card[] = [];
 
   for (const note of notes) {
-    const rawTerm = mapping.term >= 0 ? (note.fields[mapping.term] ?? "") : "";
-    const rawReading = mapping.reading >= 0 ? (note.fields[mapping.reading] ?? "") : "";
-    const rawMeaning = mapping.meaning >= 0 ? (note.fields[mapping.meaning] ?? "") : "";
-    const rawSentence = mapping.sentence >= 0 ? (note.fields[mapping.sentence] ?? "") : "";
+    const field = (index: number) => (index >= 0 ? (note.fields[index] ?? "") : "");
+    const rawTerm = field(mapping.term);
+    const rawReading = field(mapping.reading);
+    const rawMeaning = field(mapping.meaning);
+    const rawSentence = field(mapping.sentence);
+    const sentenceMeaning = stripHtml(field(mapping.sentenceMeaning));
+    const noteText = stripHtml(field(mapping.notes));
 
     // The reading is often not in a field of its own but written into the
     // term as furigana, so take it from there when the field is empty.
@@ -714,6 +750,8 @@ export function notesToCards(
       reading,
       glosses: splitGlosses(rawMeaning),
       sentence: splitFurigana(stripHtml(rawSentence)).text || undefined,
+      ...(sentenceMeaning ? { sentenceMeaning } : {}),
+      ...(noteText ? { notes: noteText } : {}),
       source: "Anki",
       createdAt: note.id !== undefined && note.id > 1_000_000_000_000 ? note.id : now,
       updatedAt: now,

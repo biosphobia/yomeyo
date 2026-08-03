@@ -1,14 +1,18 @@
 import { buildQueue, deckStats, gradeCard, gradePreview, type Card, type DeckConfig, type Grade } from "@yomeyo/core";
 import { liveCards, saveCard } from "./store.js";
 import { clipSpeakerButton, playStoredAudio, playWord, speakerButton } from "./audio.js";
+import { cardInDeck, deckPicker, getDeckChoice } from "./deck-picker.js";
 import { getMedia } from "./media.js";
 import { getAdvancedMode } from "./prefs.js";
 import { getDailyCounts, getDeckConfig, recordReview } from "./deck.js";
 
 /** Review page: daily flashcards, scheduled by FSRS (or SM-2 if switched off). */
 
+const DECK_CHOICE_KEY = "reviewDeck";
+
 export async function renderReview(main: HTMLElement, isCurrent: () => boolean = () => true): Promise<void> {
-  const cards = await liveCards();
+  const deckChoice = await getDeckChoice(DECK_CHOICE_KEY);
+  const cards = (await liveCards()).filter((card) => cardInDeck(card, deckChoice));
   const advanced = await getAdvancedMode();
   if (!isCurrent()) return; // a newer render has taken over
   const now = Date.now();
@@ -32,6 +36,7 @@ export async function renderReview(main: HTMLElement, isCurrent: () => boolean =
           ? `FSRS · ${Math.round(config.desiredRetention * 100)}% target retention`
           : "SM-2 scheduling"
     }</p>
+    <div id="deck-choice-row" style="margin-bottom:12px"></div>
     <div class="stats-row">
       <div class="stat"><div class="num">${queue.length}</div><div class="lbl">to study</div></div>
       <div class="stat"><div class="num">${newLeft}</div><div class="lbl">new left</div></div>
@@ -41,6 +46,10 @@ export async function renderReview(main: HTMLElement, isCurrent: () => boolean =
     <div id="review-area"></div>
   `;
 
+  main
+    .querySelector<HTMLDivElement>("#deck-choice-row")!
+    .appendChild(await deckPicker(DECK_CHOICE_KEY, deckChoice, () => void renderReview(main, isCurrent)));
+
   const area = main.querySelector<HTMLDivElement>("#review-area")!;
   const numbers = main.querySelectorAll<HTMLElement>(".stat .num");
 
@@ -48,7 +57,7 @@ export async function renderReview(main: HTMLElement, isCurrent: () => boolean =
   const refreshStats = async (remaining: number): Promise<void> => {
     const at = Date.now();
     const live = await getDailyCounts(at);
-    const fresh = deckStats(await liveCards(), at);
+    const fresh = deckStats((await liveCards()).filter((card) => cardInDeck(card, deckChoice)), at);
     numbers[0].textContent = String(remaining);
     numbers[1].textContent = String(Math.max(0, config.newPerDay - live.introduced));
     numbers[2].textContent = String(fresh.learning);
@@ -90,6 +99,8 @@ function showNext(
       <div id="answer" style="display:none">
         <div id="reading-row" class="review-reading" lang="ja">${escapeHtml(card.reading)}</div>
         <div class="review-glosses">${escapeHtml(card.glosses.join(" · "))}</div>
+        ${card.sentenceMeaning ? `<div class="review-sentence">${escapeHtml(card.sentenceMeaning)}</div>` : ""}
+        ${card.notes ? `<div class="review-notes">${escapeHtml(card.notes)}</div>` : ""}
         ${card.image ? `<div class="review-image"><img id="card-image" alt="" /></div>` : ""}
       </div>
       <div class="row-actions" style="justify-content:center">

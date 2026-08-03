@@ -329,6 +329,24 @@ label {
   font-size: 1.3rem;
 }
 
+.deck-pick {
+  font: inherit;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid #ffffff18;
+  border-radius: 10px;
+  padding: 8px 12px;
+  max-width: 100%;
+}
+
+.review-notes {
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.6;
+  margin-top: 10px;
+  white-space: pre-line;
+}
+
 .grade-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

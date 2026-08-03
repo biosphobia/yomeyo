@@ -83,7 +83,7 @@ describe("media in the fields", () => {
   });
 
   it("tells the sentence being read out from the word being pronounced", () => {
-    const mapping = { term: 0, reading: -1, meaning: 1, sentence: 2 };
+    const mapping = { term: 0, reading: -1, meaning: 1, sentence: 2, sentenceMeaning: -1, notes: -1 };
     const media = noteMedia(
       ["水", "water", "水を飲む[sound:sentence_1.mp3]", "[sound:word_1.mp3]", '<img src="mizu.jpg">'],
       mapping,
@@ -93,7 +93,7 @@ describe("media in the fields", () => {
   });
 
   it("treats a 'Sentence-Audio' field as sentence audio even though it maps to no role", () => {
-    const mapping = { term: 0, reading: -1, meaning: 1, sentence: -1 };
+    const mapping = { term: 0, reading: -1, meaning: 1, sentence: -1, sentenceMeaning: -1, notes: -1 };
     const media = noteMedia(["水", "water", "[sound:s.mp3]"], mapping, ["Word", "Meaning", "Sentence-Audio"]);
     expect(media.sentenceAudio).toBe("s.mp3");
     expect(media.audio).toBeUndefined();
@@ -144,13 +144,15 @@ describe("the media manifest", () => {
 
 describe("guessing which field is which", () => {
   it("reads the common Japanese note types without being told", () => {
-    expect(guessFieldMapping(["Word", "Reading", "Meaning", "Sentence"])).toEqual({
+    expect(guessFieldMapping(["Word", "Reading", "Meaning", "Sentence"])).toMatchObject({
       term: 0,
       reading: 1,
       meaning: 2,
       sentence: 3,
     });
-    expect(guessFieldMapping(["Expression", "Kana", "English Definition", "Example Sentence"])).toEqual({
+    expect(
+      guessFieldMapping(["Expression", "Kana", "English Definition", "Example Sentence"]),
+    ).toMatchObject({
       term: 0,
       reading: 1,
       meaning: 2,
@@ -158,9 +160,45 @@ describe("guessing which field is which", () => {
     });
   });
 
+  it("reads a rich mining note type, sentence meaning and notes included", () => {
+    // A real note type: every field name prefixed, and more than the four
+    // basic roles on offer.
+    const mapping = guessFieldMapping([
+      "Word",
+      "Word Reading",
+      "Word Meaning",
+      "Word Furigana",
+      "Word Audio",
+      "Sentence",
+      "Sentence Meaning",
+      "Sentence Furigana",
+      "Sentence Audio",
+      "Notes",
+      "Pitch Accent",
+      "Pitch Accent Notes",
+      "Frequency",
+      "Picture",
+    ]);
+    expect(mapping).toMatchObject({
+      term: 0,
+      reading: 1,
+      meaning: 2,
+      sentence: 5,
+      sentenceMeaning: 6,
+      notes: 9,
+    });
+  });
+
+  it("finds the word's reading and meaning even without a bare 'Word' field", () => {
+    const mapping = guessFieldMapping(["Word Reading", "Word Meaning", "Sentence"]);
+    expect(mapping.reading).toBe(0);
+    expect(mapping.meaning).toBe(1);
+    expect(mapping.term).not.toBe(0); // "Word Reading" is not the word
+  });
+
   it("handles Japanese field names", () => {
     const mapping = guessFieldMapping(["単語", "読み", "意味", "例文"]);
-    expect(mapping).toEqual({ term: 0, reading: 1, meaning: 2, sentence: 3 });
+    expect(mapping).toMatchObject({ term: 0, reading: 1, meaning: 2, sentence: 3 });
   });
 
   it("falls back to position when the names say nothing", () => {
@@ -171,7 +209,14 @@ describe("guessing which field is which", () => {
 
   it("never gives two roles the same field", () => {
     const mapping = guessFieldMapping(["Front", "Back"]);
-    const used = [mapping.term, mapping.reading, mapping.meaning, mapping.sentence].filter((i) => i >= 0);
+    const used = [
+      mapping.term,
+      mapping.reading,
+      mapping.meaning,
+      mapping.sentence,
+      mapping.sentenceMeaning,
+      mapping.notes,
+    ].filter((i) => i >= 0);
     expect(new Set(used).size).toBe(used.length);
   });
 });
@@ -377,8 +422,21 @@ describe("Anki scheduling in Yomeyo's terms", () => {
 });
 
 describe("turning notes into cards", () => {
-  const mapping = { term: 0, reading: 1, meaning: 2, sentence: 3 };
+  const mapping = { term: 0, reading: 1, meaning: 2, sentence: 3, sentenceMeaning: -1, notes: -1 };
   const now = Date.UTC(2024, 0, 1);
+
+  it("carries the sentence meaning and notes across when mapped", () => {
+    const cards = notesToCards(
+      [{ id: 1, fields: ["水", "みず", "water", "水を飲む", "Drink water.", "<div>Common word.</div>"] }],
+      { ...mapping, sentenceMeaning: 4, notes: 5 },
+      { now },
+    );
+    expect(cards[0]).toMatchObject({
+      sentence: "水を飲む",
+      sentenceMeaning: "Drink water.",
+      notes: "Common word.",
+    });
+  });
 
   it("makes one card per note", () => {
     const cards = notesToCards(

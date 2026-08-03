@@ -3,6 +3,7 @@ import {
   Card,
   findDuplicate,
   mergeCards,
+  newCardSchedule,
   runSync,
   type CompactDictFile,
   type Dictionary,
@@ -122,6 +123,26 @@ export async function deleteCards(toDelete: Card[]): Promise<number> {
     updatedAt: now,
     dirty: true,
   }));
+  for (const card of stored) cards.set(card.id, card);
+  await putCards(stored);
+  return stored.length;
+}
+
+/**
+ * Start these cards over as brand new, review history and all.
+ *
+ * Everything scheduling is rebuilt and the FSRS memory state is removed by
+ * omission — spreading `undefined` instead would follow the cards into
+ * Firestore, which refuses it.
+ */
+export async function resetCards(toReset: Card[]): Promise<number> {
+  if (toReset.length === 0) return 0;
+  const cards = await loadCards();
+  const now = Date.now();
+  const stored: StoredCard[] = toReset.map((card) => {
+    const { stability: _s, difficulty: _d, lastReview: _r, leech: _l, ...rest } = card;
+    return { ...rest, ...newCardSchedule(now), updatedAt: now, dirty: true };
+  });
   for (const card of stored) cards.set(card.id, card);
   await putCards(stored);
   return stored.length;

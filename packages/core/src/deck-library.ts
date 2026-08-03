@@ -53,6 +53,8 @@ export interface SharedCard {
   reading: string;
   glosses: string[];
   sentence?: string;
+  sentenceMeaning?: string;
+  notes?: string;
 }
 
 /** Which deck a card belongs to; cards from before decks existed are mined. */
@@ -68,6 +70,8 @@ export function toSharedCards(cards: Card[]): SharedCard[] {
       reading: card.reading,
       glosses: card.glosses,
       ...(card.sentence ? { sentence: card.sentence } : {}),
+      ...(card.sentenceMeaning ? { sentenceMeaning: card.sentenceMeaning } : {}),
+      ...(card.notes ? { notes: card.notes } : {}),
     }));
 }
 
@@ -81,6 +85,10 @@ export function fromSharedCards(shared: SharedCard[], deckId: string, now: numbe
       reading: typeof card.reading === "string" ? card.reading : "",
       glosses: Array.isArray(card.glosses) ? card.glosses.filter((g) => typeof g === "string") : [],
       sentence: typeof card.sentence === "string" ? card.sentence : undefined,
+      ...(typeof card.sentenceMeaning === "string" && card.sentenceMeaning
+        ? { sentenceMeaning: card.sentenceMeaning }
+        : {}),
+      ...(typeof card.notes === "string" && card.notes ? { notes: card.notes } : {}),
       deckId,
       createdAt: now,
       updatedAt: now,

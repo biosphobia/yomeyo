@@ -69,6 +69,10 @@ export interface Card {
   glosses: string[];
   /** The sentence the word was mined from, if any. */
   sentence?: string;
+  /** What the sentence means, when the deck carried a translation. */
+  sentenceMeaning?: string;
+  /** Free-form notes from the deck's author: usage, nuance, mnemonics. */
+  notes?: string;
   /** Source URL / page title, if mined from a page. */
   source?: string;
   /**

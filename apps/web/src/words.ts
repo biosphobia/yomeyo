@@ -1,18 +1,35 @@
-import { liveCards, saveCard } from "./store.js";
+import type { Card } from "@yomeyo/core";
+import { liveCards, resetCards, saveCard } from "./store.js";
 import { speakerButton } from "./audio.js";
 import { extensionStatus } from "./extension-bridge.js";
 import { getAdvancedMode } from "./prefs.js";
+import { ALL_DECKS, cardInDeck, deckPicker, getDeckChoice } from "./deck-picker.js";
+import { toast } from "./toast.js";
 
-/** Words page: browse and delete the deck; JSON export/import in Advanced mode. */
+/**
+ * Words page: browse, edit and delete cards, one deck at a time or all
+ * together; JSON export/import in Advanced mode. With one deck chosen its
+ * progress can be reset — every card back to new, for starting a premade
+ * deck over (or unwinding an import that brought scheduling you did not
+ * want after all).
+ */
+
+const DECK_CHOICE_KEY = "wordsDeck";
 
 export async function renderWords(main: HTMLElement, isCurrent: () => boolean = () => true): Promise<void> {
-  const cards = (await liveCards()).sort((a, b) => b.createdAt - a.createdAt);
+  const deckChoice = await getDeckChoice(DECK_CHOICE_KEY);
+  const cards = (await liveCards())
+    .filter((card) => cardInDeck(card, deckChoice))
+    .sort((a, b) => b.createdAt - a.createdAt);
   const advanced = await getAdvancedMode();
   if (!isCurrent()) return; // a newer render has taken over
 
   main.innerHTML = `
     <h1>Words</h1>
-    <p class="subtitle">${cards.length} saved word${cards.length === 1 ? "" : "s"}</p>
+    <p class="subtitle">${cards.length} word${cards.length === 1 ? "" : "s"}</p>
+    <div class="row-actions" style="margin-bottom:14px" id="deck-bar">
+      ${deckChoice !== ALL_DECKS ? `<button id="reset-deck" class="ghost">Reset progress…</button>` : ""}
+    </div>
     ${
       advanced
         ? `<div class="row-actions" style="margin-bottom:14px">
@@ -25,6 +42,23 @@ export async function renderWords(main: HTMLElement, isCurrent: () => boolean = 
     <div id="word-list" class="card-panel" style="padding:6px 14px"></div>
   `;
 
+  const deckBar = main.querySelector<HTMLDivElement>("#deck-bar")!;
+  deckBar.prepend(await deckPicker(DECK_CHOICE_KEY, deckChoice, () => void renderWords(main, isCurrent)));
+
+  main.querySelector<HTMLButtonElement>("#reset-deck")?.addEventListener("click", async () => {
+    if (
+      !confirm(
+        `Reset this deck's progress?\n\nAll ${cards.length.toLocaleString()} cards start over as new. ` +
+          `The words stay; the review history does not come back.`,
+      )
+    ) {
+      return;
+    }
+    const count = await resetCards(cards);
+    toast(`Reset ${count.toLocaleString()} cards to new`);
+    void renderWords(main, isCurrent);
+  });
+
   const list = main.querySelector<HTMLDivElement>("#word-list")!;
   if (cards.length === 0) {
     // An empty deck is ambiguous when the extension is the thing being used:
@@ -34,29 +68,13 @@ export async function renderWords(main: HTMLElement, isCurrent: () => boolean = 
     const aboutExtension = ext.connected
       ? `The browser extension is connected${ext.version ? ` (${escapeHtml(ext.version)})` : ""}. Anything you save with it appears here by itself.`
       : `Using the browser extension? Its words appear here by themselves. If none arrive, reinstall it or press <b>Send them now</b> in its popup.`;
-    list.innerHTML = `<div class="empty-state"><div class="big">📖</div>No words yet.<br/>
-      Tap words in the Reader to start mining.<br/><br/>
+    list.innerHTML = `<div class="empty-state"><div class="big">📖</div>No words here.<br/>
+      Tap words in the Reader to start mining, or pick another deck above.<br/><br/>
       <span style="font-size:0.85rem;opacity:0.85">${aboutExtension}</span></div>`;
   }
 
   for (const card of cards) {
-    const row = document.createElement("div");
-    row.className = "word-row";
-    row.innerHTML = `
-      <div class="word">
-        <div><span class="term" lang="ja"><b>${escapeHtml(card.term)}</b></span>
-          <span class="reading" style="color:var(--accent);font-size:0.85rem">${escapeHtml(card.reading)}</span></div>
-        <div class="glosses">${escapeHtml(card.glosses.join(" · "))}</div>
-      </div>
-      <div class="due">${dueLabel(card.due, card.state)}</div>
-      <button class="ghost delete-btn" title="Delete">✕</button>
-    `;
-    row.querySelector<HTMLButtonElement>(".delete-btn")!.addEventListener("click", async () => {
-      await saveCard({ ...card, deleted: true, updatedAt: Date.now() });
-      row.remove();
-    });
-    row.querySelector(".word")!.after(speakerButton(card.term, card.reading, card.audio));
-    list.appendChild(row);
+    list.appendChild(wordRow(card, main, isCurrent));
   }
 
   if (!advanced) return; // no export/import buttons to wire up
@@ -94,6 +112,89 @@ export async function renderWords(main: HTMLElement, isCurrent: () => boolean = 
   });
 }
 
+function wordRow(card: Card, main: HTMLElement, isCurrent: () => boolean): HTMLDivElement {
+  const row = document.createElement("div");
+  row.className = "word-row";
+  row.innerHTML = `
+    <div class="word">
+      <div><span class="term" lang="ja"><b>${escapeHtml(card.term)}</b></span>
+        <span class="reading" style="color:var(--accent);font-size:0.85rem">${escapeHtml(card.reading)}</span></div>
+      <div class="glosses">${escapeHtml(card.glosses.join(" · "))}</div>
+    </div>
+    <div class="due">${dueLabel(card.due, card.state)}</div>
+    <button class="ghost edit-btn" title="Edit">✎</button>
+    <button class="ghost delete-btn" title="Delete">✕</button>
+  `;
+  row.querySelector<HTMLButtonElement>(".delete-btn")!.addEventListener("click", async () => {
+    await saveCard({ ...card, deleted: true, updatedAt: Date.now() });
+    row.remove();
+  });
+  row.querySelector<HTMLButtonElement>(".edit-btn")!.addEventListener("click", () => {
+    editRow(row, card, main, isCurrent);
+  });
+  row.querySelector(".word")!.after(speakerButton(card.term, card.reading, card.audio));
+  return row;
+}
+
+/**
+ * Swap one row for an editor of the card's text — what shows on the front
+ * and the back. Scheduling is not editable here; that is what grading and
+ * the deck reset are for.
+ */
+function editRow(row: HTMLDivElement, card: Card, main: HTMLElement, isCurrent: () => boolean): void {
+  row.innerHTML = `
+    <div class="word" style="flex:1">
+      <label>Word</label>
+      <input type="text" class="edit-term" lang="ja" value="${escapeAttr(card.term)}" />
+      <label>Reading</label>
+      <input type="text" class="edit-reading" lang="ja" value="${escapeAttr(card.reading)}" />
+      <label>Meanings (separate with ;)</label>
+      <input type="text" class="edit-glosses" value="${escapeAttr(card.glosses.join("; "))}" />
+      <label>Sentence</label>
+      <input type="text" class="edit-sentence" lang="ja" value="${escapeAttr(card.sentence ?? "")}" />
+      <label>Sentence meaning</label>
+      <input type="text" class="edit-sentence-meaning" value="${escapeAttr(card.sentenceMeaning ?? "")}" />
+      <label>Notes</label>
+      <textarea class="edit-notes">${escapeHtml(card.notes ?? "")}</textarea>
+      <div class="row-actions" style="margin-top:8px">
+        <button class="save-edit">Save</button>
+        <button class="ghost cancel-edit">Cancel</button>
+      </div>
+    </div>
+  `;
+
+  const value = (selector: string) => row.querySelector<HTMLInputElement>(selector)!.value.trim();
+
+  row.querySelector<HTMLButtonElement>(".save-edit")!.addEventListener("click", async () => {
+    const term = value(".edit-term");
+    if (!term) {
+      toast("A card needs a word on its front.", "error");
+      return;
+    }
+    const sentence = value(".edit-sentence");
+    const sentenceMeaning = value(".edit-sentence-meaning");
+    const notes = row.querySelector<HTMLTextAreaElement>(".edit-notes")!.value.trim();
+    const { sentence: _s, sentenceMeaning: _m, notes: _n, ...rest } = card;
+    await saveCard({
+      ...rest,
+      term,
+      reading: value(".edit-reading"),
+      glosses: value(".edit-glosses")
+        .split(/\s*;\s*/)
+        .filter(Boolean),
+      // Cleared fields disappear rather than lingering as empty strings.
+      ...(sentence ? { sentence } : {}),
+      ...(sentenceMeaning ? { sentenceMeaning } : {}),
+      ...(notes ? { notes } : {}),
+      updatedAt: Date.now(),
+    });
+    void renderWords(main, isCurrent);
+  });
+  row.querySelector<HTMLButtonElement>(".cancel-edit")!.addEventListener("click", () => {
+    row.replaceWith(wordRow(card, main, isCurrent));
+  });
+}
+
 function dueLabel(due: number, state: string): string {
   if (state === "new") return "new";
   const diff = due - Date.now();
@@ -105,4 +206,8 @@ function dueLabel(due: number, state: string): string {
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function escapeAttr(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 }
