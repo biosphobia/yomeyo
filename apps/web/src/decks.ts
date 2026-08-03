@@ -148,22 +148,32 @@ async function renderPremade(
         ${deck.description ? `<div class="glosses">${escapeHtml(deck.description)}</div>` : ""}
       </div>
       <button class="add-btn${held.has(deck.id) ? " secondary" : ""}">${held.has(deck.id) ? "Added" : "Add"}</button>
-      ${admin.isAdmin && !isMine ? `<button class="ghost admin-remove-btn" title="Withdraw from the library (admin)">✕</button>` : ""}
+      ${
+        // Everyone who may delete this deck gets the button right here: its
+        // publisher, and the admin for everything.
+        admin.isAdmin || isMine
+          ? `<button class="ghost admin-remove-btn" title="Delete from the library">✕</button>`
+          : ""
+      }
     `;
 
     row.querySelector<HTMLButtonElement>(".admin-remove-btn")?.addEventListener("click", async (ev) => {
-      if (!confirm(`Withdraw “${deck.name}” from the shared library?\n\nIt disappears for everyone; copies already added stay on their devices.`)) {
-        return;
-      }
+      const warning = isMine
+        ? `Delete your deck “${deck.name}” from the shared library?\n\nIt disappears for everyone; your own copy stays on your devices.`
+        : `Delete “${deck.name}” from the shared library?\n\nIt disappears for everyone; copies already added stay on their devices.`;
+      if (!confirm(warning)) return;
       const button = ev.currentTarget as HTMLButtonElement;
       button.disabled = true;
       try {
         await (await loadLibrary()).unpublishDeck(deck.id);
-        toast(`Withdrew ${deck.name} from the library`);
+        // The local copy, if any, is no longer a shared deck.
+        const local = mine.find((owned) => owned.id === deck.id);
+        if (local?.shared) await rememberDeck({ ...local, shared: false });
+        toast(`Deleted ${deck.name} from the library`);
         void renderDecks(main, isCurrent);
       } catch (err) {
         button.disabled = false;
-        toast(err instanceof Error ? err.message : "Could not withdraw that deck.", "error");
+        toast(err instanceof Error ? err.message : "Could not delete that deck.", "error");
       }
     });
 
