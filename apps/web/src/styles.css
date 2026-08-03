@@ -469,6 +469,16 @@ label {
   border-radius: 3px;
 }
 
+.unseen-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 0.88rem;
+  cursor: pointer;
+  user-select: none;
+}
+
 .profile-edit {
   margin-bottom: 12px;
 }

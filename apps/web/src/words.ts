@@ -1,4 +1,5 @@
 import type { Card } from "@yomeyo/core";
+import { getMeta, setMeta } from "./db.js";
 import { liveCards, resetCards, saveCard } from "./store.js";
 import { speakerButton } from "./audio.js";
 import { extensionStatus } from "./extension-bridge.js";
@@ -12,22 +13,34 @@ import { toast } from "./toast.js";
  * progress can be reset — every card back to new, for starting a premade
  * deck over (or unwinding an import that brought scheduling you did not
  * want after all).
+ *
+ * Only words already seen in review show by default: a premade deck's
+ * thousands of unmet cards would bury the ones being learned. A toggle
+ * brings the unseen rest into view.
  */
 
 const DECK_CHOICE_KEY = "wordsDeck";
+const SHOW_UNSEEN_KEY = "wordsShowUnseen";
 
 export async function renderWords(main: HTMLElement, isCurrent: () => boolean = () => true): Promise<void> {
   const deckChoice = await getDeckChoice(DECK_CHOICE_KEY);
-  const cards = (await liveCards())
+  const showUnseen = (await getMeta<boolean>(SHOW_UNSEEN_KEY)) ?? false;
+  const all = (await liveCards())
     .filter((card) => cardInDeck(card, deckChoice))
     .sort((a, b) => b.createdAt - a.createdAt);
+  const seen = all.filter((card) => card.state !== "new");
+  const cards = showUnseen ? all : seen;
   const advanced = await getAdvancedMode();
   if (!isCurrent()) return; // a newer render has taken over
 
   main.innerHTML = `
     <h1>Words</h1>
-    <p class="subtitle">${cards.length} word${cards.length === 1 ? "" : "s"}</p>
+    <p class="subtitle">${seen.length} seen · ${all.length} word${all.length === 1 ? "" : "s"}</p>
     <div class="row-actions" style="margin-bottom:14px" id="deck-bar">
+      <label class="unseen-toggle">
+        <input type="checkbox" id="show-unseen" ${showUnseen ? "checked" : ""} />
+        Show unseen
+      </label>
       ${deckChoice !== ALL_DECKS ? `<button id="reset-deck" class="ghost">Reset progress…</button>` : ""}
     </div>
     ${
@@ -45,22 +58,27 @@ export async function renderWords(main: HTMLElement, isCurrent: () => boolean = 
   const deckBar = main.querySelector<HTMLDivElement>("#deck-bar")!;
   deckBar.prepend(await deckPicker(DECK_CHOICE_KEY, deckChoice, () => void renderWords(main, isCurrent)));
 
+  main.querySelector<HTMLInputElement>("#show-unseen")!.addEventListener("change", async (ev) => {
+    await setMeta(SHOW_UNSEEN_KEY, (ev.target as HTMLInputElement).checked);
+    void renderWords(main, isCurrent);
+  });
+
   main.querySelector<HTMLButtonElement>("#reset-deck")?.addEventListener("click", async () => {
     if (
       !confirm(
-        `Reset this deck's progress?\n\nAll ${cards.length.toLocaleString()} cards start over as new. ` +
+        `Reset this deck's progress?\n\nAll ${all.length.toLocaleString()} cards start over as new. ` +
           `The words stay; the review history does not come back.`,
       )
     ) {
       return;
     }
-    const count = await resetCards(cards);
+    const count = await resetCards(all);
     toast(`Reset ${count.toLocaleString()} cards to new`);
     void renderWords(main, isCurrent);
   });
 
   const list = main.querySelector<HTMLDivElement>("#word-list")!;
-  if (cards.length === 0) {
+  if (all.length === 0) {
     // An empty deck is ambiguous when the extension is the thing being used:
     // it can mean nothing was saved, or that words are sitting in an
     // extension that cannot hand them over. Say which.
@@ -69,8 +87,12 @@ export async function renderWords(main: HTMLElement, isCurrent: () => boolean = 
       ? `The browser extension is connected${ext.version ? ` (${escapeHtml(ext.version)})` : ""}. Anything you save with it appears here by itself.`
       : `Using the browser extension? Its words appear here by themselves. If none arrive, reinstall it or press <b>Send them now</b> in its popup.`;
     list.innerHTML = `<div class="empty-state"><div class="big">📖</div>No words here.<br/>
-      Tap words in the Reader to start mining, or pick another deck above.<br/><br/>
+      Save words with the extension, or pick another deck above.<br/><br/>
       <span style="font-size:0.85rem;opacity:0.85">${aboutExtension}</span></div>`;
+  } else if (cards.length === 0) {
+    // The deck has words; none have come up in review yet.
+    list.innerHTML = `<div class="empty-state"><div class="big">📖</div>No words seen here yet.<br/>
+      They appear as you study in Review. Switch on <b>Show unseen</b> to browse the whole deck.</div>`;
   }
 
   for (const card of cards) {
