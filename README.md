@@ -54,6 +54,11 @@ so it takes a few minutes; later deploys are quick. And if you use cloud
 sync, add your domain under **Firebase → Authentication → Settings →
 Authorized domains**, or Google sign-in will refuse the new address.
 
+The shipped `.htaccess` makes the site HTTPS-only: plain-http visits are
+redirected, and HSTS tells browsers to skip http entirely from then on.
+That assumes your domain has a certificate — on cPanel, check that
+**SSL/TLS Status** shows AutoSSL active for the domain (it usually is).
+
 GitHub Pages keeps working alongside this; if you want the move to be
 complete, switch Pages off under **Settings → Pages**.
 

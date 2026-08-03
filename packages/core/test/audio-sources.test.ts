@@ -97,6 +97,13 @@ describe("parsing audio list responses", () => {
     expect(parsed).toEqual([{ url: "https://cdn.test/ok.mp3" }]);
   });
 
+  it("refuses plain-http URLs — clips travel encrypted or not at all", () => {
+    const parsed = parseAudioList({
+      audioSources: [{ url: "http://cdn.test/insecure.mp3" }, { url: "https://cdn.test/ok.mp3" }],
+    });
+    expect(parsed).toEqual([{ url: "https://cdn.test/ok.mp3" }]);
+  });
+
   it("de-duplicates repeated URLs", () => {
     const parsed = parseAudioList({
       audioSources: [{ url: "https://cdn.test/a.mp3" }, { url: "https://cdn.test/a.mp3" }],

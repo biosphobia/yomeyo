@@ -801,7 +801,15 @@ function wireServerSync(main: HTMLElement): void {
   const urlInput = main.querySelector<HTMLInputElement>("#sync-url")!;
   const tokenInput = main.querySelector<HTMLInputElement>("#sync-token")!;
   main.querySelector<HTMLButtonElement>("#sync-save")!.addEventListener("click", async () => {
-    await setSyncSettings({ url: urlInput.value.trim(), token: tokenInput.value });
+    const url = urlInput.value.trim();
+    // Your whole deck and the token travel to this URL. Plain http would
+    // send them readable to anyone on the path; only a server on this very
+    // machine is exempt, because that traffic never crosses a wire.
+    if (/^http:\/\//i.test(url) && !/^http:\/\/(localhost|127\.0\.0\.1)([:/]|$)/i.test(url)) {
+      toast("Use an https:// address — plain http would send your words and token unencrypted.", "error");
+      return;
+    }
+    await setSyncSettings({ url, token: tokenInput.value });
     toast("Sync server settings saved");
   });
 }

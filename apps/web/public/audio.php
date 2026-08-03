@@ -122,6 +122,9 @@ foreach ($sourceSets as $sources) {
   }
   $payload = json_decode($list[0], true);
   foreach (clip_urls($payload) as $url) {
+    // Clips travel encrypted or not at all: a service that lists an http://
+    // URL almost always serves the same file over TLS, so ask for that.
+    $url = preg_replace('#^http://#i', 'https://', $url);
     $clip = fetch_bytes($url, 10000000);
     if ($clip === null) {
       continue;

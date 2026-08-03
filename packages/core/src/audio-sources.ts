@@ -64,8 +64,10 @@ export interface AudioCandidate {
   name?: string;
 }
 
+// https only: a clip fetched in the clear could be read or replaced on the
+// way, and every service worth using serves TLS anyway.
 function isHttpUrl(value: unknown): value is string {
-  return typeof value === "string" && /^https?:\/\//i.test(value);
+  return typeof value === "string" && /^https:\/\//i.test(value);
 }
 
 function candidateFrom(entry: unknown): AudioCandidate | null {
