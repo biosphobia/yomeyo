@@ -20,7 +20,7 @@ import {
   type FieldMapping,
 } from "@yomeyo/core";
 import { getAdvancedMode, setAdvancedMode } from "./prefs.js";
-import { getNickname, setNickname } from "./nickname.js";
+import { changeUsername, ensureProfile, setProfilePhoto } from "./profile.js";
 import { toast } from "./toast.js";
 import { getDeckConfig, resetDeckConfig, saveDeckConfig } from "./deck.js";
 import {
@@ -264,37 +264,69 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
       return;
     }
 
-    // The nickname, not the account's real name: what Google knows the
-    // person as is theirs, and nothing here ever displays it.
-    const nickname = await getNickname();
+    // The profile, not the account's real name: what Google knows the
+    // person as is theirs, and nothing here ever displays it. A brand-new
+    // account is given a unique username right here, before choosing one.
+    const profile = await ensureProfile().catch(() => null);
     body.innerHTML = `
-      <div class="msg ok">Signed in${nickname ? ` as <b>${escapeHtml(nickname)}</b>` : ""}.</div>
-      <label for="nick-name">Nickname</label>
-      <input type="text" id="nick-name" value="${escapeAttr(nickname)}" placeholder="e.g. tanuki" maxlength="40" />
-      <div class="msg">${
-        nickname
-          ? "Shown wherever other people can see you. Your real name never is."
-          : "<b>Pick one before sharing a deck</b> — it is shown instead of your real name."
-      }</div>
+      <div class="profile-row">
+        ${avatarHtml(profile)}
+        <div class="msg ok" style="margin:0">Signed in${
+          profile ? ` as <b>@${escapeHtml(profile.name)}</b>` : ""
+        }.</div>
+      </div>
+      ${
+        profile
+          ? `
+      <label for="prof-name">Username</label>
+      <input type="text" id="prof-name" value="${escapeAttr(profile.name)}" maxlength="20"
+        autocapitalize="none" autocorrect="off" spellcheck="false" />
+      <div class="msg">
+        Yours alone — no two accounts can share one. It is what everyone sees;
+        your real name never is.
+      </div>
       <div class="row-actions">
-        <button id="nick-save" class="secondary">Save nickname</button>
+        <button id="prof-save" class="secondary">Change username</button>
+        <button id="prof-photo-pick" class="secondary">Profile picture…</button>
+        <input type="file" id="prof-photo" accept="image/*" style="display:none" />
+      </div>`
+          : `<div class="msg">Your profile could not be loaded — check the connection and reopen Settings.</div>`
+      }
+      <div class="row-actions">
         <button id="cloud-sync">Sync now</button>
         <button id="cloud-out" class="secondary">Sign out</button>
       </div>
       <div class="msg" id="cloud-msg"></div>
-      <div id="admin-box"></div>
     `;
 
-    body.querySelector<HTMLButtonElement>("#nick-save")!.addEventListener("click", async () => {
-      await setNickname(body.querySelector<HTMLInputElement>("#nick-name")!.value);
-      toast("Nickname saved");
-      void renderSettings(main);
+    const msg = body.querySelector<HTMLDivElement>("#cloud-msg")!;
+
+    body.querySelector<HTMLButtonElement>("#prof-save")?.addEventListener("click", async () => {
+      try {
+        await changeUsername(body.querySelector<HTMLInputElement>("#prof-name")!.value);
+        toast("Username changed");
+        void renderSettings(main);
+      } catch (err) {
+        msg.textContent = err instanceof Error ? err.message : String(err);
+        msg.className = "msg error";
+      }
     });
 
-    // The admin seat is an Advanced concern; most people never hold it.
-    if (advanced) void renderAdminSeat(body.querySelector<HTMLDivElement>("#admin-box")!);
-
-    const msg = body.querySelector<HTMLDivElement>("#cloud-msg")!;
+    const photoInput = body.querySelector<HTMLInputElement>("#prof-photo");
+    body.querySelector<HTMLButtonElement>("#prof-photo-pick")?.addEventListener("click", () => photoInput?.click());
+    photoInput?.addEventListener("change", async () => {
+      const file = photoInput.files?.[0];
+      photoInput.value = "";
+      if (!file) return;
+      try {
+        await setProfilePhoto(file);
+        toast("Profile picture updated");
+        void renderSettings(main);
+      } catch (err) {
+        msg.textContent = err instanceof Error ? err.message : String(err);
+        msg.className = "msg error";
+      }
+    });
     body.querySelector<HTMLButtonElement>("#cloud-sync")!.addEventListener("click", async () => {
       msg.textContent = "Syncing…";
       msg.className = "msg";
@@ -314,53 +346,13 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
   }
 }
 
-/**
- * The admin seat, shown in Advanced mode to whoever is signed in.
- *
- * One account can hold it — the rules make a second claim impossible — and
- * what it grants is moderation: withdrawing anyone's deck from the shared
- * library. The seat can be stepped down from, which leaves it claimable.
- */
-async function renderAdminSeat(box: HTMLDivElement): Promise<void> {
-  box.innerHTML = `<div class="msg">Checking the admin seat…</div>`;
-  try {
-    const { adminState, claimAdmin, releaseAdmin } = await import("./library.js");
-    const state = await adminState();
-
-    if (state.isAdmin) {
-      box.innerHTML = `
-        <div class="msg ok">You are this site's admin — you can withdraw anyone's deck from the shared library on the Decks screen.</div>
-        <div class="row-actions"><button id="admin-release" class="ghost">Step down as admin</button></div>
-      `;
-      box.querySelector<HTMLButtonElement>("#admin-release")!.addEventListener("click", async () => {
-        if (!confirm("Step down as admin?\n\nThe seat becomes claimable by any signed-in account.")) return;
-        await releaseAdmin();
-        void renderAdminSeat(box);
-      });
-      return;
-    }
-
-    if (!state.adminUid) {
-      box.innerHTML = `
-        <div class="msg">This site has no admin yet. The admin — there is only ever one — can remove any deck from the shared library.</div>
-        <div class="row-actions"><button id="admin-claim" class="secondary">Become the admin</button></div>
-      `;
-      box.querySelector<HTMLButtonElement>("#admin-claim")!.addEventListener("click", async () => {
-        try {
-          await claimAdmin();
-          toast("You are now the admin");
-        } catch (err) {
-          toast(err instanceof Error ? err.message : "Could not claim the seat.", "error");
-        }
-        void renderAdminSeat(box);
-      });
-      return;
-    }
-
-    box.innerHTML = `<div class="msg">This site's admin seat is held.</div>`;
-  } catch {
-    box.innerHTML = ""; // the library is unreachable; the seat can wait
+/** The avatar, or a lettered placeholder when no picture is set. */
+function avatarHtml(profile: { name: string; photo?: string } | null): string {
+  if (profile?.photo && /^data:image\//.test(profile.photo)) {
+    return `<img class="avatar" src="${escapeAttr(profile.photo)}" alt="" />`;
   }
+  const letter = (profile?.name ?? "?").slice(0, 1).toUpperCase();
+  return `<div class="avatar avatar-letter">${escapeHtml(letter)}</div>`;
 }
 
 /**

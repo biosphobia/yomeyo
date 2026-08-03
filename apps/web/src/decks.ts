@@ -108,6 +108,12 @@ async function renderPremade(
   const admin = await (await loadLibrary())
     .adminState()
     .catch(() => ({ adminUid: null, isAdmin: false }));
+
+  // Publisher avatars, fetched together; a missing one is just no picture.
+  const { profilesFor } = await import("./profile.js");
+  const profiles = await profilesFor(decks.map((deck) => deck.ownerUid ?? "")).catch(
+    () => new Map<string, { name: string; photo?: string }>(),
+  );
   if (!isCurrent()) return;
 
   if (decks.length === 0) {
@@ -129,7 +135,9 @@ async function renderPremade(
     const row = document.createElement("div");
     row.className = "word-row";
     const isMine = deck.ownerUid === account.uid;
+    const profile = deck.ownerUid ? profiles.get(deck.ownerUid) : undefined;
     row.innerHTML = `
+      ${avatarHtml(profile, deck.ownerName)}
       <div class="word">
         <div><b>${escapeHtml(deck.name)}</b></div>
         <div class="glosses">${deck.cardCount.toLocaleString()} words${
@@ -290,6 +298,15 @@ async function renderMine(
     list.innerHTML = `<div class="empty-state"><div class="big">📚</div>
       Nothing here yet.<br/>Tap words while reading, or add a premade deck.</div>`;
   }
+}
+
+/** The publisher's avatar, or a lettered placeholder without a picture. */
+function avatarHtml(profile: { name: string; photo?: string } | undefined, fallbackName?: string): string {
+  if (profile?.photo && /^data:image\//.test(profile.photo)) {
+    return `<img class="avatar" src="${profile.photo.replace(/"/g, "&quot;")}" alt="" />`;
+  }
+  const letter = (profile?.name ?? fallbackName ?? "?").slice(0, 1).toUpperCase();
+  return `<div class="avatar avatar-letter">${escapeHtml(letter)}</div>`;
 }
 
 function escapeHtml(text: string): string {

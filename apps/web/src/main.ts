@@ -151,9 +151,14 @@ listenForExtensionCards(
 // which lands back here; completing it switches to that account's deck, and
 // the listener above redraws.
 void completeRedirectSignIn().then((account) => {
-  // No name in the toast: what shows anywhere is the chosen nickname, and
-  // right after a first sign-in there is none yet.
-  if (account) toast("Signed in.");
+  // No name in the toast: what shows anywhere is the username, and a brand
+  // new account is only just about to be given one, below.
+  if (account) {
+    toast("Signed in.");
+    // Assign the default unique username straight away, so the account is
+    // never nameless — the person can change it in Settings.
+    void import("./profile.js").then((m) => m.ensureProfile().catch(() => undefined));
+  }
 });
 
 // PWA service worker (production builds only; Vite dev serves from memory).

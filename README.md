@@ -308,21 +308,26 @@ The library needs the same Firebase project as cloud sync, and you have to be
 signed in to see it. Without a project, Anki import still works; the deck
 simply stays on your device.
 
-### Nicknames
+### Usernames and profile pictures
 
-Decks carry their publisher's name — but never a real one. What other people
-see is a **nickname**, chosen in **Settings → Account** (or asked for the
-first time you share). The name on the Google account is never displayed
-anywhere, to anyone.
+Decks carry their publisher's name — but never a real one. Every account is
+given a unique username the first time it signs in (`learner-` and a stamp),
+before its owner has chosen anything, so nobody is ever nameless and the
+Google name is never displayed anywhere, to anyone. The username can be
+changed in **Settings → Account** to anything not already taken — uniqueness
+is a one-document-per-name claim enforced by the Firestore rules, so two
+accounts can never share a name whatever a client does. A profile picture
+can be set there too; it is downscaled on the device to a small square and
+stored inside the profile, and shows beside shared decks in the library.
 
 ### The admin
 
-One account — and structurally never more than one — can hold the **admin
+One account — and structurally never more than one — holds the **admin
 seat**, which grants moderation: withdrawing anyone's deck from the shared
-library. The seat is claimed in **Settings → Account** (Advanced mode) by
-whoever gets there first, can be stepped down from, and can never be taken
-from its holder. The enforcement lives in the Firestore rules, so a modified
-client gains nothing; after changing the rules, redeploy them:
+library. The seat is a single `admin/owner` document the rules never let
+change hands; its holder simply sees withdraw buttons on the Decks screen.
+The enforcement lives in the Firestore rules, so a modified client gains
+nothing; after changing the rules, redeploy them:
 
 ```
 npx firebase-tools deploy --only firestore:rules --project <your-project-id>

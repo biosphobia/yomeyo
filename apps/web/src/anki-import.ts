@@ -283,13 +283,13 @@ export async function shareDeck(
   fileName: string,
 ): Promise<string> {
   const { publishDeck } = await import("./library.js");
-  const { requireNickname } = await import("./nickname.js");
+  const { ensureProfile } = await import("./profile.js");
   const cards = await cardsInDeck(localDeckId);
   if (cards.length === 0) throw new Error("that deck has no words in it");
 
-  // Listed under a chosen nickname, asked for here if none is set — a
-  // shared deck must never carry the account's real name.
-  const ownerName = await requireNickname();
+  // Listed under the account's username — every signed-in account has one,
+  // assigned before they ever chose it, and never their real name.
+  const ownerName = (await ensureProfile()).name;
   const published = await publishDeck(account, cards, { name, source: fileName, ownerName });
 
   // Re-file the local cards under the library's id, so adding the deck

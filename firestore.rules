@@ -59,6 +59,43 @@ service cloud.firestore {
       }
     }
 
+    // Public profiles: the username everyone sees and an optional picture.
+    // Readable by anyone signed in — that is what they are for — and only
+    // ever written by their own account.
+    match /profiles/{userId} {
+      allow read: if request.auth != null;
+      allow create, update: if isOwner(userId) && isValidProfile();
+      allow delete: if isOwner(userId);
+    }
+
+    // Username claims, one document per name, so a name can never belong to
+    // two accounts: creating the document is taking the name, and a taken
+    // name cannot be created again. Releasing your own frees it.
+    match /usernames/{name} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(['uid'])
+        && request.resource.data.uid == request.auth.uid
+        && name.size() >= 3
+        && name.size() <= 20
+        && name.matches('[a-z0-9][a-z0-9_-]*');
+      allow update: if false;
+      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
+    }
+
+    function isValidProfile() {
+      let p = request.resource.data;
+      return p.keys().hasOnly(['name', 'photo'])
+        && p.name is string
+        // The displayed name must be a claim this account holds, so what a
+        // profile shows is always a name nobody else can also show.
+        && get(/databases/$(database)/documents/usernames/$(p.name)).data.uid == request.auth.uid
+        && (!('photo' in p)
+          || (p.photo is string
+            && p.photo.size() <= 120000
+            && p.photo.matches('data:image/.*')));
+    }
+
     // The shared library of premade decks. The admin may also delete —
     // that is moderation, the reason the seat exists — but never publish
     // or edit under someone else's name.
