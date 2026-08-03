@@ -305,8 +305,28 @@ Decks can be removed again (the words go with them, the deck stays in the
 library), and a deck you published can be withdrawn from **Decks → Mine**.
 
 The library needs the same Firebase project as cloud sync, and you have to be
-signed in to see it — decks carry their publisher's name. Without a project,
-Anki import still works; the deck simply stays on your device.
+signed in to see it. Without a project, Anki import still works; the deck
+simply stays on your device.
+
+### Nicknames
+
+Decks carry their publisher's name — but never a real one. What other people
+see is a **nickname**, chosen in **Settings → Account** (or asked for the
+first time you share). The name on the Google account is never displayed
+anywhere, to anyone.
+
+### The admin
+
+One account — and structurally never more than one — can hold the **admin
+seat**, which grants moderation: withdrawing anyone's deck from the shared
+library. The seat is claimed in **Settings → Account** (Advanced mode) by
+whoever gets there first, can be stepped down from, and can never be taken
+from its holder. The enforcement lives in the Firestore rules, so a modified
+client gains nothing; after changing the rules, redeploy them:
+
+```
+npx firebase-tools deploy --only firestore:rules --project <your-project-id>
+```
 
 ## Bringing a deck over from Anki
 

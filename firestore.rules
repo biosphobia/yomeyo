@@ -15,6 +15,11 @@ rules_version = '2';
 // only — no scheduling, so nothing about anyone's review history is exposed
 // by publishing.
 //
+// One account can additionally be the **admin**, who may withdraw anyone's
+// deck from the library. The seat is a single document that the first
+// account to claim it holds — there is structurally never more than one —
+// and it can be released but never taken.
+//
 // Deploy with:  firebase deploy --only firestore:rules
 
 service cloud.firestore {
@@ -23,6 +28,24 @@ service cloud.firestore {
     // Everything is denied unless a rule below allows it.
     match /{document=**} {
       allow read, write: if false;
+    }
+
+    // The admin seat. Creating it is claiming it, and only for yourself;
+    // it can never be updated, so it can never be taken over — only
+    // released by its holder and claimed afresh.
+    match /admin/owner {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(['uid'])
+        && request.resource.data.uid == request.auth.uid;
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
+    function isAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/admin/owner)
+        && get(/databases/$(database)/documents/admin/owner).data.uid == request.auth.uid;
     }
 
     match /users/{userId} {
@@ -36,18 +59,20 @@ service cloud.firestore {
       }
     }
 
-    // The shared library of premade decks.
+    // The shared library of premade decks. The admin may also delete —
+    // that is moderation, the reason the seat exists — but never publish
+    // or edit under someone else's name.
     match /decks/{deckId} {
       allow read: if request.auth != null;
       allow create: if publishedByCaller(deckId) && isValidDeck();
       allow update: if publishedByCaller(deckId) && isValidDeck();
-      allow delete: if publishedByCaller(deckId);
+      allow delete: if publishedByCaller(deckId) || isAdmin();
 
       // The cards, in compressed blocks. Same owner, same rule.
       match /blocks/{blockId} {
         allow read: if request.auth != null;
         allow create, update: if publishedByCaller(deckId) && isValidBlock();
-        allow delete: if publishedByCaller(deckId);
+        allow delete: if publishedByCaller(deckId) || isAdmin();
       }
     }
   }

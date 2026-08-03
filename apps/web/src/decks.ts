@@ -103,6 +103,13 @@ async function renderPremade(
 
   const held = new Set(mine.map((deck) => deck.id));
 
+  // Whether this account holds the admin seat, for the withdraw buttons.
+  // Failing to find out only costs those buttons, not the screen.
+  const admin = await (await loadLibrary())
+    .adminState()
+    .catch(() => ({ adminUid: null, isAdmin: false }));
+  if (!isCurrent()) return;
+
   if (decks.length === 0) {
     body.innerHTML = `
       <div class="card-panel">
@@ -131,7 +138,24 @@ async function renderPremade(
         ${deck.description ? `<div class="glosses">${escapeHtml(deck.description)}</div>` : ""}
       </div>
       <button class="add-btn${held.has(deck.id) ? " secondary" : ""}">${held.has(deck.id) ? "Added" : "Add"}</button>
+      ${admin.isAdmin && !isMine ? `<button class="ghost admin-remove-btn" title="Withdraw from the library (admin)">✕</button>` : ""}
     `;
+
+    row.querySelector<HTMLButtonElement>(".admin-remove-btn")?.addEventListener("click", async (ev) => {
+      if (!confirm(`Withdraw “${deck.name}” from the shared library?\n\nIt disappears for everyone; copies already added stay on their devices.`)) {
+        return;
+      }
+      const button = ev.currentTarget as HTMLButtonElement;
+      button.disabled = true;
+      try {
+        await (await loadLibrary()).unpublishDeck(deck.id);
+        toast(`Withdrew ${deck.name} from the library`);
+        void renderDecks(main, isCurrent);
+      } catch (err) {
+        button.disabled = false;
+        toast(err instanceof Error ? err.message : "Could not withdraw that deck.", "error");
+      }
+    });
 
     const button = row.querySelector<HTMLButtonElement>(".add-btn")!;
     button.disabled = held.has(deck.id);

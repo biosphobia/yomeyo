@@ -19,6 +19,7 @@ import {
   type FieldMapping,
 } from "@yomeyo/core";
 import { getAdvancedMode, setAdvancedMode } from "./prefs.js";
+import { getNickname, setNickname } from "./nickname.js";
 import { toast } from "./toast.js";
 import { getDeckConfig, resetDeckConfig, saveDeckConfig } from "./deck.js";
 import {
@@ -121,7 +122,7 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
     void renderSettings(main);
   });
 
-  renderAccount();
+  void renderAccount();
   void renderDeckConfig(main, advanced);
   renderAnkiImport(main, account, advanced);
   wireDictionary(main);
@@ -132,7 +133,7 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
 
   // ---------------- account panel ----------------
 
-  function renderAccount(): void {
+  async function renderAccount(): Promise<void> {
     const body = main.querySelector<HTMLDivElement>("#account-body")!;
 
     if (!config) {
@@ -248,14 +249,35 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
       return;
     }
 
+    // The nickname, not the account's real name: what Google knows the
+    // person as is theirs, and nothing here ever displays it.
+    const nickname = await getNickname();
     body.innerHTML = `
-      <div class="msg ok">Signed in as <b>${escapeHtml(account.displayName || account.email || account.uid)}</b>.</div>
+      <div class="msg ok">Signed in${nickname ? ` as <b>${escapeHtml(nickname)}</b>` : ""}.</div>
+      <label for="nick-name">Nickname</label>
+      <input type="text" id="nick-name" value="${escapeAttr(nickname)}" placeholder="e.g. tanuki" maxlength="40" />
+      <div class="msg">${
+        nickname
+          ? "Shown wherever other people can see you. Your real name never is."
+          : "<b>Pick one before sharing a deck</b> — it is shown instead of your real name."
+      }</div>
       <div class="row-actions">
+        <button id="nick-save" class="secondary">Save nickname</button>
         <button id="cloud-sync">Sync now</button>
         <button id="cloud-out" class="secondary">Sign out</button>
       </div>
       <div class="msg" id="cloud-msg"></div>
+      <div id="admin-box"></div>
     `;
+
+    body.querySelector<HTMLButtonElement>("#nick-save")!.addEventListener("click", async () => {
+      await setNickname(body.querySelector<HTMLInputElement>("#nick-name")!.value);
+      toast("Nickname saved");
+      void renderSettings(main);
+    });
+
+    // The admin seat is an Advanced concern; most people never hold it.
+    if (advanced) void renderAdminSeat(body.querySelector<HTMLDivElement>("#admin-box")!);
 
     const msg = body.querySelector<HTMLDivElement>("#cloud-msg")!;
     body.querySelector<HTMLButtonElement>("#cloud-sync")!.addEventListener("click", async () => {
@@ -274,6 +296,55 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
       await signOut();
       void renderSettings(main);
     });
+  }
+}
+
+/**
+ * The admin seat, shown in Advanced mode to whoever is signed in.
+ *
+ * One account can hold it — the rules make a second claim impossible — and
+ * what it grants is moderation: withdrawing anyone's deck from the shared
+ * library. The seat can be stepped down from, which leaves it claimable.
+ */
+async function renderAdminSeat(box: HTMLDivElement): Promise<void> {
+  box.innerHTML = `<div class="msg">Checking the admin seat…</div>`;
+  try {
+    const { adminState, claimAdmin, releaseAdmin } = await import("./library.js");
+    const state = await adminState();
+
+    if (state.isAdmin) {
+      box.innerHTML = `
+        <div class="msg ok">You are this site's admin — you can withdraw anyone's deck from the shared library on the Decks screen.</div>
+        <div class="row-actions"><button id="admin-release" class="ghost">Step down as admin</button></div>
+      `;
+      box.querySelector<HTMLButtonElement>("#admin-release")!.addEventListener("click", async () => {
+        if (!confirm("Step down as admin?\n\nThe seat becomes claimable by any signed-in account.")) return;
+        await releaseAdmin();
+        void renderAdminSeat(box);
+      });
+      return;
+    }
+
+    if (!state.adminUid) {
+      box.innerHTML = `
+        <div class="msg">This site has no admin yet. The admin — there is only ever one — can remove any deck from the shared library.</div>
+        <div class="row-actions"><button id="admin-claim" class="secondary">Become the admin</button></div>
+      `;
+      box.querySelector<HTMLButtonElement>("#admin-claim")!.addEventListener("click", async () => {
+        try {
+          await claimAdmin();
+          toast("You are now the admin");
+        } catch (err) {
+          toast(err instanceof Error ? err.message : "Could not claim the seat.", "error");
+        }
+        void renderAdminSeat(box);
+      });
+      return;
+    }
+
+    box.innerHTML = `<div class="msg">This site's admin seat is held.</div>`;
+  } catch {
+    box.innerHTML = ""; // the library is unreachable; the seat can wait
   }
 }
 

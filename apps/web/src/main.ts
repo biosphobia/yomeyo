@@ -151,7 +151,9 @@ listenForExtensionCards(
 // which lands back here; completing it switches to that account's deck, and
 // the listener above redraws.
 void completeRedirectSignIn().then((account) => {
-  if (account) toast(`Signed in as ${account.displayName || account.email || "your account"}.`);
+  // No name in the toast: what shows anywhere is the chosen nickname, and
+  // right after a first sign-in there is none yet.
+  if (account) toast("Signed in.");
 });
 
 // PWA service worker (production builds only; Vite dev serves from memory).

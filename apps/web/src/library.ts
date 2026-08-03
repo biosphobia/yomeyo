@@ -7,7 +7,7 @@ import {
   type DeckInfo,
   type SharedCard,
 } from "@yomeyo/core";
-import { firestoreApi, type AccountInfo } from "./cloud.js";
+import { currentAccount, firestoreApi, type AccountInfo } from "./cloud.js";
 
 /**
  * The shared library of premade decks.
@@ -76,6 +76,8 @@ export interface PublishOptions {
   name: string;
   description?: string;
   source?: string;
+  /** The publisher's nickname — never their account's real name. */
+  ownerName?: string;
   /** Republish over an existing deck rather than making a new one. */
   deckId?: string;
 }
@@ -114,7 +116,9 @@ export async function publishDeck(
     cardCount: shared.length,
     blockCount: blocks.length,
     ownerUid: account.uid,
-    ownerName: account.displayName || account.email || "Someone",
+    // A chosen nickname, never the sign-in identity: the real name behind
+    // an account is nobody else's to see.
+    ownerName: options.ownerName || "Someone",
     publishedAt: storeApi.serverTimestamp(),
   };
   await storeApi.setDoc(deckRef, record);
@@ -137,7 +141,49 @@ export async function downloadDeck(deck: LibraryDeck): Promise<SharedCard[]> {
   return unpackDeck(blocks);
 }
 
-/** Take a deck back out of the library. Only its publisher can. */
+// ---------------- the admin seat ----------------
+
+/**
+ * One account can be the admin, who may withdraw anyone's deck from the
+ * library. The seat is a single document, `admin/owner`: the security rules
+ * let it be created only by the account it names and never updated, so the
+ * first to claim it holds it and there is structurally never more than one.
+ */
+export interface AdminState {
+  /** Who holds the seat, or null while it is unclaimed. */
+  adminUid: string | null;
+  /** Whether the signed-in account is that holder. */
+  isAdmin: boolean;
+}
+
+export async function adminState(): Promise<AdminState> {
+  const { db, storeApi } = await firestoreApi();
+  const snapshot = await storeApi.getDoc(storeApi.doc(db, "admin", "owner"));
+  const uid = snapshot.exists?.() ? String(snapshot.data?.()?.uid ?? "") : "";
+  const me = await currentAccount();
+  return { adminUid: uid || null, isAdmin: uid !== "" && uid === me?.uid };
+}
+
+/** Claim the empty seat for the signed-in account. */
+export async function claimAdmin(): Promise<void> {
+  const me = await currentAccount();
+  if (!me) throw new Error("Sign in first.");
+  const { db, storeApi } = await firestoreApi();
+  try {
+    await storeApi.setDoc(storeApi.doc(db, "admin", "owner"), { uid: me.uid });
+  } catch {
+    // The rules turn a second claim into a forbidden update.
+    throw new Error("Somebody already holds the admin seat.");
+  }
+}
+
+/** Give the seat up, leaving it claimable again. Only the admin can. */
+export async function releaseAdmin(): Promise<void> {
+  const { db, storeApi } = await firestoreApi();
+  await storeApi.deleteDoc(storeApi.doc(db, "admin", "owner"));
+}
+
+/** Take a deck back out of the library. Its publisher can; so can the admin. */
 export async function unpublishDeck(deckId: string): Promise<void> {
   const { db, storeApi } = await firestoreApi();
   const deckRef = storeApi.doc(db, "decks", deckId);
