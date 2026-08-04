@@ -74,6 +74,7 @@ self.addEventListener("fetch", (event) => {
   // updates), and the app caches the clips itself in IndexedDB. A cached
   // copy here would freeze both.
   if (url.pathname.endsWith("/audio.php")) return;
+  if (url.pathname.endsWith("/grammar.php")) return;
 
   // Navigations: network-first so a new deploy is picked up promptly, with
   // the cached shell as the offline fallback.

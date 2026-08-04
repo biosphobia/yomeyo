@@ -48,7 +48,54 @@ export interface Sentence {
   lit?: string;
 }
 
-export type DrillKind = "find-engine" | "find-doer" | "particle" | "build";
+export type DrillKind =
+  | "find-engine"
+  | "find-doer"
+  | "particle"
+  | "build"
+  | "meaning"
+  | "who"
+  | "swap";
+
+/**
+ * Two sentences built from the same words, where only the little connecting
+ * words differ — so the meaning changes completely. Nothing teaches what
+ * those words are FOR like seeing them move.
+ */
+export interface SwapPair {
+  a: { jp: string; r: string; en: string };
+  b: { jp: string; r: string; en: string };
+  /** What actually moved, in plain words. */
+  note: string;
+}
+
+export const SWAP_PAIRS: SwapPair[] = [
+  {
+    a: { jp: "わたしが さくらに ボールを なげる", r: "watashi ga sakura ni booru wo nageru", en: "I throw the ball to Sakura." },
+    b: { jp: "さくらが わたしに ボールを なげる", r: "sakura ga watashi ni booru wo nageru", en: "Sakura throws the ball to me." },
+    note: "が moved, so the thrower changed.",
+  },
+  {
+    a: { jp: "ねこが さかなを たべる", r: "neko ga sakana wo taberu", en: "The cat eats the fish." },
+    b: { jp: "さかなが ねこを たべる", r: "sakana ga neko wo taberu", en: "The fish eats the cat." },
+    note: "が and を swapped, so who eats whom flipped.",
+  },
+  {
+    a: { jp: "いぬが こどもを おいかける", r: "inu ga kodomo wo oikakeru", en: "The dog chases the child." },
+    b: { jp: "こどもが いぬを おいかける", r: "kodomo ga inu wo oikakeru", en: "The child chases the dog." },
+    note: "が and を swapped, so the chaser changed.",
+  },
+  {
+    a: { jp: "さくらが ともだちに てがみを かく", r: "sakura ga tomodachi ni tegami wo kaku", en: "Sakura writes a letter to a friend." },
+    b: { jp: "ともだちが さくらに てがみを かく", r: "tomodachi ga sakura ni tegami wo kaku", en: "A friend writes a letter to Sakura." },
+    note: "が moved, so the writer changed.",
+  },
+  {
+    a: { jp: "ははが ちちを よぶ", r: "haha ga chichi wo yobu", en: "Mum calls Dad." },
+    b: { jp: "ちちが ははを よぶ", r: "chichi ga haha wo yobu", en: "Dad calls Mum." },
+    note: "が and を swapped, so the caller changed.",
+  },
+];
 
 export interface GrammarUnit {
   title: string;
@@ -200,7 +247,7 @@ export const GRAMMAR_UNITS: GrammarUnit[] = [
   {
     title: "The smallest sentence",
     tagline: "Someone or something, then what they do. That is already a whole sentence.",
-    drills: ["find-engine", "find-doer", "build"],
+    drills: ["find-engine", "find-doer", "meaning", "build"],
     particles: ["が"],
     sentences: [
       { chunks: [doer("さくらが", "sakura ga", "Sakura"), doWord("あるく", "aruku", "walks")], en: "Sakura walks." },
@@ -216,7 +263,7 @@ export const GRAMMAR_UNITS: GrammarUnit[] = [
   {
     title: "When nobody says who",
     tagline: "Japanese leaves out what's obvious. You fill it in from context.",
-    drills: ["find-doer", "particle", "build"],
+    drills: ["find-doer", "who", "particle", "meaning", "build"],
     particles: ["は", "が"],
     sentences: [
       {
@@ -264,7 +311,7 @@ export const GRAMMAR_UNITS: GrammarUnit[] = [
   {
     title: "Doing something to something",
     tagline: "を shows what the action lands on.",
-    drills: ["find-engine", "find-doer", "particle", "build"],
+    drills: ["find-engine", "find-doer", "particle", "swap", "meaning", "build"],
     particles: ["を", "が", "は"],
     sentences: [
       {
@@ -307,7 +354,7 @@ export const GRAMMAR_UNITS: GrammarUnit[] = [
   {
     title: "Where and how",
     tagline: "に pins a spot. で says where or how it happens. へ points the way.",
-    drills: ["find-engine", "particle", "build"],
+    drills: ["find-engine", "particle", "swap", "meaning", "build"],
     particles: ["に", "で", "へ", "を", "が"],
     sentences: [
       {
@@ -485,7 +532,7 @@ export const GRAMMAR_UNITS: GrammarUnit[] = [
   {
     title: "Describing with a whole sentence",
     tagline: "A little sentence can sit in front of a word and describe it.",
-    drills: ["find-engine", "find-doer", "build"],
+    drills: ["find-engine", "find-doer", "meaning", "build"],
     particles: ["が", "を"],
     sentences: [
       {

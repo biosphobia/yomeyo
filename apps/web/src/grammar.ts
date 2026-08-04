@@ -4,12 +4,15 @@ import {
   GRAMMAR_POINTS,
   GRAMMAR_UNITS,
   PARTICLE_JOB,
+  SWAP_PAIRS,
+  type SwapPair,
   type Chunk,
   type DrillKind,
   type GrammarUnit,
   type JlptPoint,
   type Sentence,
 } from "./grammar-data.js";
+import { generateSentences } from "./grammar-ai.js";
 import { N5_POINTS } from "./grammar-jlpt-n5.js";
 import { N4_POINTS } from "./grammar-jlpt-n4.js";
 import { N3_POINTS } from "./grammar-jlpt-n3.js";
@@ -120,6 +123,8 @@ interface Task {
   sentence: Sentence;
   /** For particle tasks: which chunk is blanked. */
   chunkAt?: number;
+  /** For swap tasks: the pair of same-words-different-meaning sentences. */
+  pair?: SwapPair;
 }
 
 function tasksFor(unit: GrammarUnit): Task[] {
@@ -133,6 +138,7 @@ function tasksFor(unit: GrammarUnit): Task[] {
         tasks.push({ kind, sentence, chunkAt: spots[Math.floor(Math.random() * spots.length)] });
         continue;
       }
+      if (kind === "who" && !sentence.chunks.some((c) => c.role === "ghost")) continue;
       if (kind === "build") {
         // Particles count as pieces of their own, so even さくら｜が｜あるく
         // is a three-piece build.
@@ -142,6 +148,12 @@ function tasksFor(unit: GrammarUnit): Task[] {
         if (pieceCount < 3) continue;
       }
       tasks.push({ kind, sentence });
+    }
+  }
+  // Swap tasks come from their own pool, not from the unit's sentences.
+  if (unit.drills.includes("swap")) {
+    for (const pair of shuffle(SWAP_PAIRS).slice(0, 3)) {
+      tasks.push({ kind: "swap", sentence: unit.sentences[0], pair });
     }
   }
   // Drills stay in teaching order (easy first); sentences shuffle within each.
@@ -168,6 +180,12 @@ function promptFor(task: Task): string {
       return "Who or what is doing it?";
     case "particle":
       return "Which little word belongs here?";
+    case "meaning":
+      return "What does this say?";
+    case "who":
+      return "Nobody said who. Who does it mean here?";
+    case "swap":
+      return "Same words, different little words. Which one means this?";
     default:
       return "Put the sentence back together. The word that finishes it goes last.";
   }
@@ -181,7 +199,14 @@ async function runUnit(
   main: HTMLElement,
   isCurrent: () => boolean,
 ): Promise<void> {
-  const unit = GRAMMAR_UNITS[unitIndex];
+  const base = GRAMMAR_UNITS[unitIndex];
+  // Fresh sentences when the site can write them, so a unit replayed is a
+  // new set of sentences rather than the same eight learned by heart. The
+  // built-in ones stand in whenever that is not possible.
+  body.innerHTML = `<div class="card-panel kana-quiz"><div class="glosses">Getting your sentences ready…</div></div>`;
+  const fresh = await generateSentences(base, unitIndex).catch(() => null);
+  if (!isCurrent() || !body.isConnected) return;
+  const unit: GrammarUnit = fresh ? { ...base, sentences: fresh } : base;
   const queue = tasksFor(unit);
   const total = queue.length;
   let done = 0;
@@ -226,7 +251,13 @@ async function runUnit(
         </div>
         <div class="kana-bar"><div class="kana-bar-fill" style="width:${percent}%"></div></div>
         <div class="gram-prompt">${promptFor(task)}</div>
-        <div class="gram-en glosses">“${escapeHtml(task.sentence.en)}”</div>
+        ${
+          // A swap task carries its own target sentence, shown with the
+          // choices; the placeholder sentence must not appear above them.
+          task.kind === "swap" || task.kind === "meaning"
+            ? ""
+            : `<div class="gram-en glosses">“${escapeHtml(task.sentence.en)}”</div>`
+        }
         <div class="gram-train" id="gram-train"></div>
         <div id="gram-extra"></div>
         <div class="kana-feedback" id="gram-feedback"></div>
@@ -251,10 +282,21 @@ async function runUnit(
       else draw();
     };
 
-    /** Open the sentence up: every car coloured and labelled, then continue. */
-    const reveal = (missed: boolean, note: string): void => {
+    /**
+     * Open the sentence up: each piece with its meaning and job, plus a tick
+     * on the piece that was being asked for and a cross on the one tapped by
+     * mistake. Colour alone never says right or wrong — every job has its own
+     * colour, so the marks have to be explicit.
+     */
+    const reveal = (missed: boolean, note: string, marks?: { answer?: Chunk; mistake?: Chunk }): void => {
       settled = true;
-      train.innerHTML = task.sentence.chunks.map((chunk) => chunkHtml(chunk, showRomaji, true)).join("");
+      train.innerHTML = task.sentence.chunks
+        .map((chunk) => {
+          const mark =
+            marks?.mistake === chunk ? " is-wrong" : marks?.answer === chunk ? " is-answer" : "";
+          return chunkHtml(chunk, showRomaji, true, mark);
+        })
+        .join("");
       extra.innerHTML = task.sentence.lit
         ? `<div class="gram-lit">literally: ${escapeHtml(task.sentence.lit)}</div>`
         : "";
@@ -273,8 +315,10 @@ async function runUnit(
       }, 0);
     };
 
-    const right = (): void => reveal(false, `<span class="ok-text">✓</span>`);
-    const wrong = (answerNote: string): void => reveal(true, `<span class="err-text">✗ ${answerNote}</span>`);
+    const right = (marks?: { answer?: Chunk }): void =>
+      reveal(false, `<span class="ok-text">✓</span>`, marks);
+    const wrong = (answerNote: string, marks?: { answer?: Chunk; mistake?: Chunk }): void =>
+      reveal(true, `<span class="err-text">✗ ${answerNote}</span>`, marks);
     /** Name a piece the way a person would: 「ねる」(sleeps). */
     const name = (chunk: Chunk): string =>
       `<b lang="ja">${escapeHtml(chunk.t || "—")}</b>${chunk.g ? ` (${escapeHtml(chunk.g)})` : ""}`;
@@ -293,8 +337,10 @@ async function runUnit(
           extra.innerHTML = `<button class="secondary gram-ghost-btn" id="gram-ghost">It's hidden (∅)</button>`;
           body.querySelector("#gram-ghost")!.addEventListener("click", () => {
             if (settled) return;
-            if (wantGhost) right();
-            else wrong("someone <i>is</i> named here — look again");
+            const ghostChunk = task.sentence.chunks.find((c) => c.role === "ghost");
+            const namedDoer = task.sentence.chunks.find((c) => c.role === "doer");
+            if (wantGhost) right({ answer: ghostChunk });
+            else wrong("someone <i>is</i> named here — look again", { answer: namedDoer });
           });
         }
       }
@@ -304,16 +350,122 @@ async function runUnit(
           if (settled) return;
           const chunk = visible[Number(button.dataset.i)];
           const hit = task.kind === "find-doer" ? chunk.role === "doer" && !wantGhost : chunk.role === wanted;
-          if (hit) right();
-          else if (task.kind === "find-doer" && wantGhost) {
-            wrong("nobody is named in this one — it's left unsaid");
+          const answer = task.sentence.chunks.find((c) =>
+            wantGhost ? c.role === "ghost" : c.role === wanted,
+          );
+          if (hit) {
+            right({ answer: chunk });
+          } else if (task.kind === "find-doer" && wantGhost) {
+            wrong("nobody is named in this one — it's left unsaid", { answer, mistake: chunk });
           } else {
-            const answer = task.sentence.chunks.find((c) => c.role === wanted);
             wrong(
               `${name(chunk)} is ${escapeHtml(chunk.label)}.` +
                 (answer ? ` It's ${name(answer)}.` : ""),
+              { answer, mistake: chunk },
             );
           }
+        });
+      }
+      return;
+    }
+
+    // Read the whole sentence and pick what it says. Tests understanding
+    // rather than labelling — the point of taking sentences apart at all.
+    if (task.kind === "meaning") {
+      train.innerHTML = task.sentence.chunks
+        .filter((c) => c.role !== "ghost")
+        .map((chunk) => carRow(chunk, showRomaji))
+        .join("");
+      const others = unit.sentences.filter((sn) => sn !== task.sentence).map((sn) => sn.en);
+      const options = shuffle([task.sentence.en, ...shuffle(others).slice(0, 2)]);
+      extra.innerHTML = `<div class="gram-options">${options
+        .map((en) => `<button data-en="${escapeHtml(en)}">${escapeHtml(en)}</button>`)
+        .join("")}</div>`;
+      for (const button of extra.querySelectorAll<HTMLButtonElement>("button")) {
+        button.addEventListener("click", () => {
+          if (settled) return;
+          if (button.dataset.en === task.sentence.en) right();
+          else wrong(`it says “${escapeHtml(task.sentence.en)}”`);
+        });
+      }
+      return;
+    }
+
+    // Nobody said who — so work it out. This is the habit that makes
+    // Japanese readable, practised on purpose.
+    if (task.kind === "who") {
+      const hidden = task.sentence.chunks.find((c) => c.role === "ghost")!;
+      train.innerHTML = task.sentence.chunks
+        .map((chunk) => carRow(chunk, showRomaji, chunk.role, chunk.role === "ghost"))
+        .join("");
+      const pool = ["I", "you", "she", "he", "it", "they"];
+      const options = shuffle([hidden.g, ...shuffle(pool.filter((w) => w !== hidden.g)).slice(0, 2)]);
+      extra.innerHTML = `<div class="gram-options">${options
+        .map((w) => `<button data-w="${escapeHtml(w)}">${escapeHtml(w)}</button>`)
+        .join("")}</div>`;
+      for (const button of extra.querySelectorAll<HTMLButtonElement>("button")) {
+        button.addEventListener("click", () => {
+          if (settled) return;
+          if (button.dataset.w === hidden.g) right({ answer: hidden });
+          else {
+            wrong(`here it means “${escapeHtml(hidden.g)}” — ${escapeHtml(task.sentence.en)}`, {
+              answer: hidden,
+            });
+          }
+        });
+      }
+      return;
+    }
+
+    // The same words with the little words moved mean something else
+    // entirely. Seeing that is the whole argument for paying attention to
+    // them, so it gets a question of its own.
+    if (task.kind === "swap") {
+      const pair = task.pair!;
+      const askA = Math.random() < 0.5;
+      const want = askA ? pair.a : pair.b;
+      const other = askA ? pair.b : pair.a;
+      train.innerHTML = `<div class="gram-swap">${[want, other]
+        .sort(() => (Math.random() < 0.5 ? 1 : -1))
+        .map(
+          (side) =>
+            `<button class="gram-swap-line" data-en="${escapeHtml(side.en)}">
+               <span lang="ja">${escapeHtml(side.jp)}</span>
+               ${showRomaji ? `<span class="gram-romaji">${escapeHtml(side.r)}</span>` : ""}
+             </button>`,
+        )
+        .join("")}</div>`;
+      extra.innerHTML = `<div class="gram-swap-target">“${escapeHtml(want.en)}”</div>`;
+      for (const button of train.querySelectorAll<HTMLButtonElement>(".gram-swap-line")) {
+        button.addEventListener("click", () => {
+          if (settled) return;
+          settled = true;
+          const got = button.dataset.en === want.en;
+          train.innerHTML = `<div class="gram-swap">${[pair.a, pair.b]
+            .map(
+              (side) =>
+                `<div class="gram-swap-line ${side.en === want.en ? "is-answer" : ""}">
+                   <span lang="ja">${escapeHtml(side.jp)}</span>
+                   <span class="gram-mean">${escapeHtml(side.en)}</span>
+                 </div>`,
+            )
+            .join("")}</div>`;
+          extra.innerHTML = `<div class="gram-lit">${escapeHtml(pair.note)}</div>`;
+          feedback.innerHTML = got
+            ? `<span class="ok-text">✓</span><div class="glosses">Enter (or tap) to continue</div>`
+            : `<span class="err-text">✗ it's the other one</span><div class="glosses">Enter (or tap) to continue</div>`;
+          void speak(want.jp.replace(/\s/g, ""), { rate: 0.85 }).catch(() => undefined);
+          const panel = body.querySelector<HTMLDivElement>(".gram-quiz")!;
+          panel.tabIndex = -1;
+          panel.focus();
+          setTimeout(() => {
+            panel.addEventListener("keydown", (ev) => {
+              if (ev.key === "Enter") advance(!got);
+            });
+            panel.addEventListener("click", (ev) => {
+              if (!(ev.target as HTMLElement).closest("#gram-quit")) advance(!got);
+            });
+          }, 0);
         });
       }
       return;
@@ -543,8 +695,8 @@ function carRow(chunk: Chunk, showRomaji: boolean, role?: string, open = false):
 }
 
 /** A piece in the opened-up sentence: meaning under the word, job under that. */
-function chunkHtml(chunk: Chunk, romaji: boolean, labelled: boolean): string {
-  return `<span class="gram-car">
+function chunkHtml(chunk: Chunk, romaji: boolean, labelled: boolean, mark = ""): string {
+  return `<span class="gram-car${mark}">
     ${carRow(chunk, romaji, chunk.role, true)}
     ${labelled ? `<span class="gram-label">${escapeHtml(chunk.label)}</span>` : ""}
   </span>`;

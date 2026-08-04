@@ -23,6 +23,11 @@ Options -Indexes
   Require all denied
 </Files>
 
+# The Anthropic key, read only by grammar.php, protected the same way.
+<Files "grammar-key.php">
+  Require all denied
+</Files>
+
 <IfModule mod_headers.c>
   # Keep it that way: HSTS makes the browser refuse plain http for this
   # hostname for the next year, so even the first request of a later visit

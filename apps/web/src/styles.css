@@ -652,9 +652,11 @@ button.gram-chunk.wrong {
   border-color: var(--accent);
 }
 
+/* No role uses green or red: those two colours are reserved for right and
+   wrong, so a piece can never look "correct" just because of its job. */
 .gram-chunk.role-doer {
-  background: rgba(76, 195, 138, 0.14);
-  border-color: var(--good);
+  background: rgba(86, 180, 208, 0.15);
+  border-color: #56b4d0;
 }
 
 .gram-chunk.role-topic {
@@ -664,10 +666,35 @@ button.gram-chunk.wrong {
 
 /* Extra cars are "white cars": part of the sentence's logic, but not the
    two-car core (doer + engine), which keeps the strong colours. */
-.gram-chunk.role-object,
+.gram-chunk.role-object {
+  background: rgba(228, 121, 184, 0.13);
+  border-color: rgba(228, 121, 184, 0.55);
+}
+
 .gram-chunk.role-other {
-  background: rgba(90, 169, 230, 0.12);
-  border-color: rgba(90, 169, 230, 0.5);
+  background: rgba(148, 163, 184, 0.12);
+  border-color: rgba(148, 163, 184, 0.45);
+}
+
+/* The piece that was being asked for, and the one that was tapped instead. */
+.gram-car.is-answer .gram-chunk {
+  border-color: var(--good);
+  box-shadow: 0 0 0 2px rgba(76, 195, 138, 0.35);
+}
+
+.gram-car.is-wrong .gram-chunk {
+  border-color: var(--bad);
+  box-shadow: 0 0 0 2px rgba(229, 100, 75, 0.3);
+}
+
+.gram-car.is-answer .gram-label::before {
+  content: "✓ ";
+  color: var(--good);
+}
+
+.gram-car.is-wrong .gram-label::before {
+  content: "✗ ";
+  color: var(--bad);
 }
 
 .gram-chunk.role-ghost {
@@ -679,6 +706,64 @@ button.gram-chunk.wrong {
 .gram-hole {
   color: var(--accent);
   padding: 0 2px;
+}
+
+/* Whole-answer choices: English sentences, or a pair to choose between. */
+.gram-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px auto 0;
+  max-width: 420px;
+}
+
+.gram-options button {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid #ffffff18;
+  padding: 11px 14px;
+  font-size: 0.95rem;
+  text-align: left;
+}
+
+.gram-options button:hover {
+  border-color: var(--accent);
+}
+
+.gram-swap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 12px auto 0;
+  max-width: 460px;
+}
+
+.gram-swap-line {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: center;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid #ffffff18;
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 1.1rem;
+}
+
+button.gram-swap-line:hover {
+  border-color: var(--accent);
+}
+
+.gram-swap-line.is-answer {
+  border-color: var(--good);
+  box-shadow: 0 0 0 2px rgba(76, 195, 138, 0.3);
+}
+
+.gram-swap-target {
+  text-align: center;
+  font-size: 1.05rem;
+  margin-top: 14px;
 }
 
 .gram-lit {

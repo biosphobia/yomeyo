@@ -35,6 +35,8 @@ function isExcluded(relPath) {
     // install time would execute it (or cache its source on a static host).
     relPath === "audio.php" ||
     relPath === "audio-key.php" ||
+    relPath === "grammar.php" ||
+    relPath === "grammar-key.php" ||
     relPath.startsWith("dict/") || // megabytes; cached on first use instead
     relPath.startsWith("feedback/") || // quiz reaction gifs; cached on first sight
     relPath.endsWith(".zip") || // the packaged extension
