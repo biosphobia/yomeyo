@@ -2,40 +2,49 @@
  * The grammar course content: units of annotated sentences, and the plain-
  * language grammar dictionary.
  *
- * The model (after Cure Dolly's "Unlocking Japanese"): every sentence is a
- * train. Cars carry words, the engine sits at the end and says what happens
- * or what something is, and the doer-car — who or what the sentence is
- * about — is always there, even when it is invisible. Nothing here uses
- * grammar jargon: cars have plain labels written per chunk, right in the
- * data, so the words a learner sees can be tuned by editing this file.
+ * The model comes from Cure Dolly's lessons, but none of her vocabulary
+ * ("engine", "carriage", "A-car") reaches the screen, and neither does the
+ * textbook vocabulary ("subject", "predicate", "copula"). A beginner sees
+ * only what each piece MEANS and what job it is doing, in ordinary words:
  *
- * Sentences are written in kana only — this sits next to the kana course —
- * with romaji carried per chunk for people still learning them.
+ *   ねこ  が   ねる
+ *   the cat    sleeps
+ *   the one    what
+ *   doing it   happens
+ *
+ * Every chunk therefore carries `g`, its English meaning, which is shown
+ * under the Japanese. The `label` is the job, in plain words. Both are
+ * written per sentence right here, so the wording a learner reads can be
+ * changed by editing this file alone.
+ *
+ * Sentences are kana only — this sits beside the kana course — with romaji
+ * per chunk for people still learning them.
  */
 
 export type Role = "engine" | "doer" | "topic" | "ghost" | "object" | "other";
 
 export interface Chunk {
-  /** The text of this car, kana only, particle included: さくらが */
+  /** The piece, kana only, particle included: さくらが */
   t: string;
-  /** Romaji for the car. */
+  /** Romaji, particle last: "sakura ga" */
   r: string;
+  /** What this piece means in English: "Sakura" */
+  g: string;
   role: Role;
-  /** The plain-words label shown when the sentence is opened up. */
+  /** The job it does, in plain words: "the one doing it" */
   label: string;
-  /** The particle this car ends with, when it has one. */
+  /** The particle this piece ends with, when it has one. */
   p?: string;
   /** True when the particle is fair to quiz (only one right answer). */
   q?: boolean;
-  /** True for a describing word glued to the NEXT car — it must stay
-   * immediately before it, even where cars otherwise move freely. */
+  /** True for a piece bound to the NEXT one — it must stay just before it. */
   glue?: boolean;
 }
 
 export interface Sentence {
   chunks: Chunk[];
   en: string;
-  /** The literal skeleton, for sentences where it differs: "As for me, (it) is an eel." */
+  /** The word-for-word version, when it differs: "As for me, (it) is eel." */
   lit?: string;
 }
 
@@ -50,153 +59,246 @@ export interface GrammarUnit {
   sentences: Sentence[];
 }
 
-// Shorthand builders keep the data readable.
-const doer = (t: string, r: string): Chunk => ({ t, r, role: "doer", label: "who or what it's about", p: "が" });
-const doerTopic = (t: string, r: string): Chunk => ({
+/**
+ * What each little connecting word does, shown under it. Looked up by the
+ * particle itself, so it stays the same everywhere without being repeated
+ * in every sentence.
+ */
+export const PARTICLE_JOB: Record<string, string> = {
+  が: "points out who's doing it",
+  は: "as for…",
+  を: "what the action lands on",
+  に: "to / at / on",
+  で: "where or how",
+  へ: "towards",
+  から: "from",
+  まで: "until",
+};
+
+// ---- builders: every piece gets its English meaning and its job ----
+
+const doer = (t: string, r: string, g: string): Chunk => ({
   t,
   r,
+  g,
   role: "doer",
-  label: "who it's about, flying the “as for” flag",
-  p: "は",
-  q: true,
-});
-const topic = (t: string, r: string): Chunk => ({
-  t,
-  r,
-  role: "topic",
-  label: "the “as for” flag — what we're talking about",
-  p: "は",
-  q: true,
-});
-const ghost = (): Chunk => ({ t: "∅が", r: "(it)", role: "ghost", label: "the hidden doer — an invisible “it” or “I”" });
-const engine = (t: string, r: string, label: string): Chunk => ({ t, r, role: "engine", label });
-const doWord = (t: string, r: string): Chunk => engine(t, r, "the engine — a do-word");
-const isWord = (t: string, r: string): Chunk => engine(t, r, "the engine — a describing word (its “is” is built in)");
-const daWord = (t: string, r: string): Chunk => engine(t, r, "the engine — a thing + だ (“is”)");
-const obj = (t: string, r: string): Chunk => ({ t, r, role: "object", label: "the thing it happens to", p: "を", q: true });
-/** A piece of a little sentence parked in front of a car, describing it. */
-const inner = (t: string, r: string): Chunk => ({
-  t,
-  r,
-  role: "other",
-  label: "a little sentence describing the next car",
-  glue: true,
-});
-const innerDoer = (t: string, r: string): Chunk => ({
-  t,
-  r,
-  role: "other",
-  label: "who did it, inside the describing part",
+  label: "the one doing it",
   p: "が",
-  glue: true,
 });
-const innerObj = (t: string, r: string): Chunk => ({
+/** A doer wearing は instead of が — Japanese drops が when は takes over. */
+const doerTopic = (t: string, r: string, g: string): Chunk => ({
   t,
   r,
-  role: "other",
-  label: "what it happened to, inside the describing part",
+  g,
+  role: "doer",
+  label: "who it's about",
+  p: "は",
+  q: true,
+});
+const topic = (t: string, r: string, g: string): Chunk => ({
+  t,
+  r,
+  g,
+  role: "topic",
+  label: "what we're talking about",
+  p: "は",
+  q: true,
+});
+/** Nobody said who — but it is still there. `g` is who it means here. */
+const ghost = (g: string): Chunk => ({
+  t: "",
+  r: "",
+  g,
+  role: "ghost",
+  label: "nobody said this — but it's there",
+});
+const doWord = (t: string, r: string, g: string): Chunk => ({
+  t,
+  r,
+  g,
+  role: "engine",
+  label: "what happens",
+});
+const isWord = (t: string, r: string, g: string): Chunk => ({
+  t,
+  r,
+  g,
+  role: "engine",
+  label: "what it's like",
+});
+const daWord = (t: string, r: string, g: string): Chunk => ({
+  t,
+  r,
+  g,
+  role: "engine",
+  label: "what it is",
+});
+const obj = (t: string, r: string, g: string): Chunk => ({
+  t,
+  r,
+  g,
+  role: "object",
+  label: "what it happens to",
   p: "を",
-  glue: true,
+  q: true,
 });
-/** An engine wearing a hook, so another sentence can follow it. */
-const joiner = (t: string, r: string, label: string): Chunk => ({ t, r, role: "other", label });
-const car = (t: string, r: string, label: string, p?: string, q?: boolean): Chunk => ({
+const car = (t: string, r: string, g: string, label: string, p?: string, q?: boolean): Chunk => ({
   t,
   r,
+  g,
   role: "other",
   label,
   ...(p ? { p } : {}),
   ...(q ? { q } : {}),
 });
+/** A describing word stuck to the next piece: あかい はな. */
+const describes = (t: string, r: string, g: string): Chunk => ({
+  t,
+  r,
+  g,
+  role: "other",
+  label: "describes the next word",
+  glue: true,
+});
+/** Part of a little sentence parked in front of a word, describing it. */
+const inner = (t: string, r: string, g: string): Chunk => ({
+  t,
+  r,
+  g,
+  role: "other",
+  label: "part of the description",
+  glue: true,
+});
+const innerDoer = (t: string, r: string, g: string): Chunk => ({
+  t,
+  r,
+  g,
+  role: "other",
+  label: "who did it, inside the description",
+  p: "が",
+  glue: true,
+});
+const innerObj = (t: string, r: string, g: string): Chunk => ({
+  t,
+  r,
+  g,
+  role: "other",
+  label: "what it happened to, inside the description",
+  p: "を",
+  glue: true,
+});
+/** A first sentence wearing a hook so a second can follow. */
+const joiner = (t: string, r: string, g: string, label: string): Chunk => ({
+  t,
+  r,
+  g,
+  role: "other",
+  label,
+});
 
 export const GRAMMAR_UNITS: GrammarUnit[] = [
   {
     title: "The smallest sentence",
-    tagline: "Someone or something + what it does or is. That's a whole sentence.",
+    tagline: "Someone or something, then what they do. That is already a whole sentence.",
     drills: ["find-engine", "find-doer", "build"],
     particles: ["が"],
     sentences: [
-      { chunks: [doer("さくらが", "sakura ga"), doWord("あるく", "aruku")], en: "Sakura walks." },
-      { chunks: [doer("ねこが", "neko ga"), doWord("ねる", "neru")], en: "The cat sleeps." },
-      { chunks: [doer("はなが", "hana ga"), daWord("きれいだ", "kirei da")], en: "The flower is pretty." },
-      { chunks: [doer("ペンが", "pen ga"), isWord("あかい", "akai")], en: "The pen is red." },
-      { chunks: [doer("とりが", "tori ga"), doWord("とぶ", "tobu")], en: "The bird flies." },
-      { chunks: [doer("みずが", "mizu ga"), isWord("つめたい", "tsumetai")], en: "The water is cold." },
-      { chunks: [doer("さかなが", "sakana ga"), doWord("およぐ", "oyogu")], en: "The fish swims." },
-      { chunks: [doer("いぬが", "inu ga"), isWord("おおきい", "ookii")], en: "The dog is big." },
+      { chunks: [doer("さくらが", "sakura ga", "Sakura"), doWord("あるく", "aruku", "walks")], en: "Sakura walks." },
+      { chunks: [doer("ねこが", "neko ga", "the cat"), doWord("ねる", "neru", "sleeps")], en: "The cat sleeps." },
+      { chunks: [doer("はなが", "hana ga", "the flower"), daWord("きれいだ", "kirei da", "is pretty")], en: "The flower is pretty." },
+      { chunks: [doer("ペンが", "pen ga", "the pen"), isWord("あかい", "akai", "is red")], en: "The pen is red." },
+      { chunks: [doer("とりが", "tori ga", "the bird"), doWord("とぶ", "tobu", "flies")], en: "The bird flies." },
+      { chunks: [doer("みずが", "mizu ga", "the water"), isWord("つめたい", "tsumetai", "is cold")], en: "The water is cold." },
+      { chunks: [doer("さかなが", "sakana ga", "the fish"), doWord("およぐ", "oyogu", "swims")], en: "The fish swims." },
+      { chunks: [doer("いぬが", "inu ga", "the dog"), isWord("おおきい", "ookii", "is big")], en: "The dog is big." },
     ],
   },
   {
-    title: "The hidden doer",
-    tagline: "は points at the topic. The real doer can hide — but it's always there.",
+    title: "When nobody says who",
+    tagline: "Japanese leaves out what's obvious. You fill it in from context.",
     drills: ["find-doer", "particle", "build"],
     particles: ["は", "が"],
     sentences: [
       {
-        chunks: [topic("わたしは", "watashi wa"), ghost(), daWord("うなぎだ", "unagi da")],
+        chunks: [topic("わたしは", "watashi wa", "as for me"), ghost("it"), daWord("うなぎだ", "unagi da", "is eel")],
         en: "I'll have the eel.",
-        lit: "As for me, (it) is an eel.",
+        lit: "As for me, (it) is eel.",
       },
       {
-        chunks: [topic("わたしは", "watashi wa"), ghost(), daWord("がくせいだ", "gakusei da")],
+        chunks: [topic("わたしは", "watashi wa", "as for me"), ghost("I"), daWord("がくせいだ", "gakusei da", "am a student")],
         en: "I'm a student.",
         lit: "As for me, (I) am a student.",
       },
       {
-        chunks: [topic("きょうは", "kyou wa"), ghost(), isWord("あつい", "atsui")],
+        chunks: [topic("きょうは", "kyou wa", "as for today"), ghost("it"), isWord("あつい", "atsui", "is hot")],
         en: "It's hot today.",
         lit: "As for today, (it) is hot.",
       },
       {
-        chunks: [topic("ねこは", "neko wa"), ghost(), isWord("かわいい", "kawaii")],
+        chunks: [topic("ねこは", "neko wa", "as for cats"), ghost("they"), isWord("かわいい", "kawaii", "are cute")],
         en: "Cats are cute.",
         lit: "As for cats, (they) are cute.",
       },
       {
-        chunks: [topic("あしたは", "ashita wa"), ghost(), daWord("やすみだ", "yasumi da")],
+        chunks: [topic("あしたは", "ashita wa", "as for tomorrow"), ghost("it"), daWord("やすみだ", "yasumi da", "is a day off")],
         en: "Tomorrow is a day off.",
         lit: "As for tomorrow, (it) is a day off.",
       },
       {
-        chunks: [topic("にほんごは", "nihongo wa"), ghost(), isWord("たのしい", "tanoshii")],
+        chunks: [topic("にほんごは", "nihongo wa", "as for Japanese"), ghost("it"), isWord("たのしい", "tanoshii", "is fun")],
         en: "Japanese is fun.",
         lit: "As for Japanese, (it) is fun.",
       },
       {
-        chunks: [topic("さくらは", "sakura wa"), ghost(), isWord("やさしい", "yasashii")],
+        chunks: [topic("さくらは", "sakura wa", "as for Sakura"), ghost("she"), isWord("やさしい", "yasashii", "is kind")],
         en: "Sakura is kind.",
         lit: "As for Sakura, (she) is kind.",
       },
       {
-        chunks: [topic("わたしは", "watashi wa"), ghost(), daWord("げんきだ", "genki da")],
+        chunks: [topic("わたしは", "watashi wa", "as for me"), ghost("I"), daWord("げんきだ", "genki da", "am well")],
         en: "I'm doing well.",
         lit: "As for me, (I) am well.",
       },
     ],
   },
   {
-    title: "Doing things to things",
-    tagline: "を marks what the doing lands on.",
+    title: "Doing something to something",
+    tagline: "を shows what the action lands on.",
     drills: ["find-engine", "find-doer", "particle", "build"],
     particles: ["を", "が", "は"],
     sentences: [
-      { chunks: [doer("ねこが", "neko ga"), obj("さかなを", "sakana wo"), doWord("たべる", "taberu")], en: "The cat eats a fish." },
       {
-        chunks: [doerTopic("わたしは", "watashi wa"), obj("みずを", "mizu wo"), doWord("のむ", "nomu")],
+        chunks: [doer("ねこが", "neko ga", "the cat"), obj("さかなを", "sakana wo", "a fish"), doWord("たべる", "taberu", "eats")],
+        en: "The cat eats a fish.",
+      },
+      {
+        chunks: [doerTopic("わたしは", "watashi wa", "me"), obj("みずを", "mizu wo", "water"), doWord("のむ", "nomu", "drink")],
         en: "I drink water.",
         lit: "As for me, (I) drink water.",
       },
-      { chunks: [doer("さくらが", "sakura ga"), obj("ほんを", "hon wo"), doWord("よむ", "yomu")], en: "Sakura reads a book." },
-      { chunks: [doer("いぬが", "inu ga"), obj("ボールを", "booru wo"), doWord("とる", "toru")], en: "The dog takes the ball." },
       {
-        chunks: [doerTopic("わたしは", "watashi wa"), obj("うたを", "uta wo"), doWord("うたう", "utau")],
+        chunks: [doer("さくらが", "sakura ga", "Sakura"), obj("ほんを", "hon wo", "a book"), doWord("よむ", "yomu", "reads")],
+        en: "Sakura reads a book.",
+      },
+      {
+        chunks: [doer("いぬが", "inu ga", "the dog"), obj("ボールを", "booru wo", "the ball"), doWord("とる", "toru", "takes")],
+        en: "The dog takes the ball.",
+      },
+      {
+        chunks: [doerTopic("わたしは", "watashi wa", "me"), obj("うたを", "uta wo", "a song"), doWord("うたう", "utau", "sing")],
         en: "I sing a song.",
         lit: "As for me, (I) sing a song.",
       },
-      { chunks: [doer("とりが", "tori ga"), obj("むしを", "mushi wo"), doWord("たべる", "taberu")], en: "The bird eats a bug." },
-      { chunks: [doer("こどもが", "kodomo ga"), obj("えを", "e wo"), doWord("かく", "kaku")], en: "The child draws a picture." },
       {
-        chunks: [doerTopic("わたしは", "watashi wa"), obj("パンを", "pan wo"), doWord("かう", "kau")],
+        chunks: [doer("とりが", "tori ga", "the bird"), obj("むしを", "mushi wo", "a bug"), doWord("たべる", "taberu", "eats")],
+        en: "The bird eats a bug.",
+      },
+      {
+        chunks: [doer("こどもが", "kodomo ga", "the child"), obj("えを", "e wo", "a picture"), doWord("かく", "kaku", "draws")],
+        en: "The child draws a picture.",
+      },
+      {
+        chunks: [doerTopic("わたしは", "watashi wa", "me"), obj("パンを", "pan wo", "bread"), doWord("かう", "kau", "buy")],
         en: "I buy bread.",
         lit: "As for me, (I) buy bread.",
       },
@@ -204,43 +306,75 @@ export const GRAMMAR_UNITS: GrammarUnit[] = [
   },
   {
     title: "Where and how",
-    tagline: "に pins a place or target. で says where or how it happens. へ points the way.",
+    tagline: "に pins a spot. で says where or how it happens. へ points the way.",
     drills: ["find-engine", "particle", "build"],
     particles: ["に", "で", "へ", "を", "が"],
     sentences: [
       {
-        chunks: [doer("さくらが", "sakura ga"), car("がっこうに", "gakkou ni", "where it lands — the destination", "に"), doWord("いく", "iku")],
+        chunks: [
+          doer("さくらが", "sakura ga", "Sakura"),
+          car("がっこうに", "gakkou ni", "to school", "where it ends up", "に"),
+          doWord("いく", "iku", "goes"),
+        ],
         en: "Sakura goes to school.",
       },
       {
-        chunks: [doer("ねこが", "neko ga"), car("へやに", "heya ni", "where it is", "に"), doWord("いる", "iru")],
+        chunks: [
+          doer("ねこが", "neko ga", "the cat"),
+          car("へやに", "heya ni", "in the room", "where it is", "に"),
+          doWord("いる", "iru", "is"),
+        ],
         en: "The cat is in the room.",
       },
       {
-        chunks: [doerTopic("わたしは", "watashi wa"), car("でんしゃで", "densha de", "how it's done — by train", "で", true), doWord("いく", "iku")],
+        chunks: [
+          doerTopic("わたしは", "watashi wa", "me"),
+          car("でんしゃで", "densha de", "by train", "how it's done", "で", true),
+          doWord("いく", "iku", "go"),
+        ],
         en: "I go by train.",
         lit: "As for me, (I) go by train.",
       },
       {
-        chunks: [doer("こどもが", "kodomo ga"), car("こうえんで", "kouen de", "where it happens", "で", true), doWord("あそぶ", "asobu")],
+        chunks: [
+          doer("こどもが", "kodomo ga", "the child"),
+          car("こうえんで", "kouen de", "in the park", "where it happens", "で", true),
+          doWord("あそぶ", "asobu", "plays"),
+        ],
         en: "The child plays in the park.",
       },
       {
-        chunks: [doerTopic("わたしは", "watashi wa"), car("うちへ", "uchi e", "the direction — towards home", "へ"), doWord("かえる", "kaeru")],
+        chunks: [
+          doerTopic("わたしは", "watashi wa", "me"),
+          car("うちへ", "uchi e", "towards home", "which way", "へ"),
+          doWord("かえる", "kaeru", "head back"),
+        ],
         en: "I head home.",
-        lit: "As for me, (I) return home.",
+        lit: "As for me, (I) head home.",
       },
       {
-        chunks: [doer("さくらが", "sakura ga"), car("ともだちに", "tomodachi ni", "the target — the friend", "に", true), doWord("あう", "au")],
+        chunks: [
+          doer("さくらが", "sakura ga", "Sakura"),
+          car("ともだちに", "tomodachi ni", "a friend", "who it's aimed at", "に", true),
+          doWord("あう", "au", "meets"),
+        ],
         en: "Sakura meets a friend.",
       },
       {
-        chunks: [doerTopic("わたしは", "watashi wa"), car("はしで", "hashi de", "how it's done — with chopsticks", "で", true), doWord("たべる", "taberu")],
+        chunks: [
+          doerTopic("わたしは", "watashi wa", "me"),
+          car("はしで", "hashi de", "with chopsticks", "what it's done with", "で", true),
+          doWord("たべる", "taberu", "eat"),
+        ],
         en: "I eat with chopsticks.",
         lit: "As for me, (I) eat with chopsticks.",
       },
       {
-        chunks: [doer("とりが", "tori ga"), car("そらへ", "sora e", "the direction — towards the sky", "へ"), doWord("とぶ", "tobu")],
+        chunks: [
+          doer("とりが", "tori ga", "the bird"),
+          car("そらへ", "sora e", "towards the sky", "which way", "へ"),
+          doWord("とぶ", "tobu", "flies"),
+        ],
         en: "The bird flies toward the sky.",
       },
     ],
@@ -253,43 +387,64 @@ export const GRAMMAR_UNITS: GrammarUnit[] = [
     sentences: [
       {
         chunks: [
-          doerTopic("わたしは", "watashi wa"),
-          car("あさから", "asa kara", "where it starts — the morning", "から", true),
-          car("よるまで", "yoru made", "how far it goes — until night", "まで", true),
-          doWord("はたらく", "hataraku"),
+          doerTopic("わたしは", "watashi wa", "me"),
+          car("あさから", "asa kara", "from morning", "where it starts", "から", true),
+          car("よるまで", "yoru made", "until night", "how far it goes", "まで", true),
+          doWord("はたらく", "hataraku", "work"),
         ],
         en: "I work from morning until night.",
         lit: "As for me, (I) work from morning until night.",
       },
       {
-        chunks: [doer("でんしゃが", "densha ga"), car("えきから", "eki kara", "where it starts", "から", true), doWord("でる", "deru")],
+        chunks: [
+          doer("でんしゃが", "densha ga", "the train"),
+          car("えきから", "eki kara", "from the station", "where it starts", "から", true),
+          doWord("でる", "deru", "leaves"),
+        ],
         en: "The train leaves from the station.",
       },
       {
         chunks: [
-          doer("さくらが", "sakura ga"),
-          car("うちから", "uchi kara", "where it starts", "から", true),
-          car("がっこうまで", "gakkou made", "how far it goes", "まで", true),
-          doWord("はしる", "hashiru"),
+          doer("さくらが", "sakura ga", "Sakura"),
+          car("うちから", "uchi kara", "from home", "where it starts", "から", true),
+          car("がっこうまで", "gakkou made", "to school", "how far it goes", "まで", true),
+          doWord("はしる", "hashiru", "runs"),
         ],
         en: "Sakura runs from home to school.",
       },
       {
-        chunks: [topic("がっこうは", "gakkou wa"), ghost(), car("9じに", "ku-ji ni", "when it happens", "に"), doWord("はじまる", "hajimaru")],
+        chunks: [
+          topic("がっこうは", "gakkou wa", "as for school"),
+          ghost("it"),
+          car("9じに", "ku-ji ni", "at nine", "when it happens", "に"),
+          doWord("はじまる", "hajimaru", "starts"),
+        ],
         en: "School starts at nine.",
         lit: "As for school, (it) starts at nine.",
       },
       {
-        chunks: [doerTopic("わたしは", "watashi wa"), car("ばんごはんまで", "bangohan made", "how far it goes — until dinner", "まで", true), doWord("まつ", "matsu")],
+        chunks: [
+          doerTopic("わたしは", "watashi wa", "me"),
+          car("ばんごはんまで", "bangohan made", "until dinner", "how far it goes", "まで", true),
+          doWord("まつ", "matsu", "wait"),
+        ],
         en: "I wait until dinner.",
         lit: "As for me, (I) wait until dinner.",
       },
       {
-        chunks: [doer("ふゆが", "fuyu ga"), car("12がつから", "juuni-gatsu kara", "where it starts", "から", true), doWord("はじまる", "hajimaru")],
+        chunks: [
+          doer("ふゆが", "fuyu ga", "winter"),
+          car("12がつから", "juuni-gatsu kara", "from December", "where it starts", "から", true),
+          doWord("はじまる", "hajimaru", "starts"),
+        ],
         en: "Winter starts in December.",
       },
       {
-        chunks: [doerTopic("わたしは", "watashi wa"), car("えきまで", "eki made", "how far it goes — as far as the station", "まで", true), doWord("あるく", "aruku")],
+        chunks: [
+          doerTopic("わたしは", "watashi wa", "me"),
+          car("えきまで", "eki made", "as far as the station", "how far it goes", "まで", true),
+          doWord("あるく", "aruku", "walk"),
+        ],
         en: "I walk to the station.",
         lit: "As for me, (I) walk as far as the station.",
       },
@@ -297,120 +452,161 @@ export const GRAMMAR_UNITS: GrammarUnit[] = [
   },
   {
     title: "Describing words",
-    tagline: "い-words carry their own “is”. な is just だ in its glue-on shape.",
+    tagline: "Words like あかい already contain “is”. Others borrow だ, or use な to stick on.",
     drills: ["find-engine", "find-doer", "build"],
     particles: ["が", "は"],
     sentences: [
-      { chunks: [doer("そらが", "sora ga"), isWord("あおい", "aoi")], en: "The sky is blue." },
-      { chunks: [doer("うみが", "umi ga"), daWord("しずかだ", "shizuka da")], en: "The sea is quiet." },
+      { chunks: [doer("そらが", "sora ga", "the sky"), isWord("あおい", "aoi", "is blue")], en: "The sky is blue." },
+      { chunks: [doer("うみが", "umi ga", "the sea"), daWord("しずかだ", "shizuka da", "is quiet")], en: "The sea is quiet." },
       {
-        chunks: [
-          { ...car("あかい", "akai", "a describing word, glued to the next car"), glue: true },
-          doer("はなが", "hana ga"),
-          doWord("さく", "saku"),
-        ],
+        chunks: [describes("あかい", "akai", "red"), doer("はなが", "hana ga", "a flower"), doWord("さく", "saku", "blooms")],
         en: "A red flower blooms.",
       },
       {
-        chunks: [
-          { ...car("おおきい", "ookii", "a describing word, glued to the next car"), glue: true },
-          doer("いぬが", "inu ga"),
-          doWord("ねる", "neru"),
-        ],
+        chunks: [describes("おおきい", "ookii", "big"), doer("いぬが", "inu ga", "a dog"), doWord("ねる", "neru", "sleeps")],
         en: "A big dog sleeps.",
       },
       {
-        chunks: [
-          { ...car("きれいな", "kirei na", "a describing word — な is its だ, in glue-on shape"), glue: true },
-          doer("とりが", "tori ga"),
-          doWord("とぶ", "tobu"),
-        ],
+        chunks: [describes("きれいな", "kirei na", "pretty"), doer("とりが", "tori ga", "a bird"), doWord("とぶ", "tobu", "flies")],
         en: "A pretty bird flies.",
       },
-      { chunks: [topic("にほんごは", "nihongo wa"), ghost(), isWord("おもしろい", "omoshiroi")], en: "Japanese is interesting.", lit: "As for Japanese, (it) is interesting." },
       {
-        chunks: [
-          { ...car("ちいさい", "chiisai", "a describing word, glued to the next car"), glue: true },
-          doer("ねこが", "neko ga"),
-          isWord("かわいい", "kawaii"),
-        ],
+        chunks: [topic("にほんごは", "nihongo wa", "as for Japanese"), ghost("it"), isWord("おもしろい", "omoshiroi", "is interesting")],
+        en: "Japanese is interesting.",
+        lit: "As for Japanese, (it) is interesting.",
+      },
+      {
+        chunks: [describes("ちいさい", "chiisai", "small"), doer("ねこが", "neko ga", "the cat"), isWord("かわいい", "kawaii", "is cute")],
         en: "The small cat is cute.",
       },
-      { chunks: [doer("ゆきが", "yuki ga"), isWord("しろい", "shiroi")], en: "The snow is white." },
+      { chunks: [doer("ゆきが", "yuki ga", "the snow"), isWord("しろい", "shiroi", "is white")], en: "The snow is white." },
     ],
   },
   {
-    title: "A whole sentence, describing",
-    tagline: "Park a little sentence in front of a thing and it describes it.",
+    title: "Describing with a whole sentence",
+    tagline: "A little sentence can sit in front of a word and describe it.",
     drills: ["find-engine", "find-doer", "build"],
     particles: ["が", "を"],
     sentences: [
       {
-        chunks: [inner("うたった", "utatta"), doer("しょうじょが", "shoujo ga"), doWord("ねている", "nete iru")],
+        chunks: [
+          inner("うたった", "utatta", "sang"),
+          doer("しょうじょが", "shoujo ga", "the girl"),
+          doWord("ねている", "nete iru", "is sleeping"),
+        ],
         en: "The girl who sang is sleeping.",
         lit: "The sang-girl is sleeping.",
       },
       {
-        chunks: [innerObj("じしょを", "jisho wo"), inner("たべた", "tabeta"), doer("いぬが", "inu ga"), isWord("おおきい", "ookii")],
+        chunks: [
+          innerObj("じしょを", "jisho wo", "the dictionary"),
+          inner("たべた", "tabeta", "ate"),
+          doer("いぬが", "inu ga", "the dog"),
+          isWord("おおきい", "ookii", "is big"),
+        ],
         en: "The dog that ate the dictionary is big.",
         lit: "The ate-the-dictionary dog is big.",
       },
       {
-        chunks: [inner("はしる", "hashiru"), doer("いぬが", "inu ga"), isWord("しろい", "shiroi")],
+        chunks: [inner("はしる", "hashiru", "running"), doer("いぬが", "inu ga", "the dog"), isWord("しろい", "shiroi", "is white")],
         en: "The running dog is white.",
       },
       {
-        chunks: [innerDoer("さくらが", "sakura ga"), inner("よんだ", "yonda"), doer("ほんが", "hon ga"), isWord("おもしろい", "omoshiroi")],
+        chunks: [
+          innerDoer("さくらが", "sakura ga", "Sakura"),
+          inner("よんだ", "yonda", "read"),
+          doer("ほんが", "hon ga", "the book"),
+          isWord("おもしろい", "omoshiroi", "is interesting"),
+        ],
         en: "The book Sakura read is interesting.",
         lit: "The Sakura-read book is interesting.",
       },
       {
-        chunks: [inner("ねている", "nete iru"), doer("ねこが", "neko ga"), isWord("かわいい", "kawaii")],
+        chunks: [inner("ねている", "nete iru", "sleeping"), doer("ねこが", "neko ga", "the cat"), isWord("かわいい", "kawaii", "is cute")],
         en: "The sleeping cat is cute.",
       },
       {
-        chunks: [innerDoer("わたしが", "watashi ga"), inner("かいた", "kaita"), doer("えが", "e ga"), isWord("ちいさい", "chiisai")],
+        chunks: [
+          innerDoer("わたしが", "watashi ga", "I"),
+          inner("かいた", "kaita", "drew"),
+          doer("えが", "e ga", "the picture"),
+          isWord("ちいさい", "chiisai", "is small"),
+        ],
         en: "The picture I drew is small.",
         lit: "The I-drew picture is small.",
       },
       {
-        chunks: [innerObj("みずを", "mizu wo"), inner("のんだ", "nonda"), doer("とりが", "tori ga"), doWord("とぶ", "tobu")],
+        chunks: [
+          innerObj("みずを", "mizu wo", "the water"),
+          inner("のんだ", "nonda", "drank"),
+          doer("とりが", "tori ga", "the bird"),
+          doWord("とぶ", "tobu", "flies"),
+        ],
         en: "The bird that drank the water flies.",
       },
     ],
   },
   {
     title: "Joining two sentences",
-    tagline: "One engine changes shape to hook onto the next. The last engine still ends it.",
+    tagline: "The first one changes shape to hook on. The last word still finishes everything.",
     drills: ["find-engine", "build"],
     particles: ["を", "に", "が"],
     sentences: [
       {
-        chunks: [obj("パンを", "pan wo"), joiner("たべて", "tabete", "the first engine, in hook-on shape — “and then”"), doWord("ねる", "neru")],
+        chunks: [
+          obj("パンを", "pan wo", "bread"),
+          joiner("たべて", "tabete", "eat and then…", "the first sentence, hooked on"),
+          doWord("ねる", "neru", "sleep"),
+        ],
         en: "(I) eat bread and then sleep.",
       },
       {
-        chunks: [joiner("さむいから", "samui kara", "the first engine, plus から — “so”"), car("うちに", "uchi ni", "where it sits", "に"), doWord("いる", "iru")],
+        chunks: [
+          joiner("さむいから", "samui kara", "because it's cold", "the reason, with から"),
+          car("うちに", "uchi ni", "at home", "where it is", "に"),
+          doWord("いる", "iru", "stay"),
+        ],
         en: "It's cold, so (I) stay home.",
       },
       {
-        chunks: [joiner("やすいけど", "yasui kedo", "the first engine, plus けど — “but”"), ghost(), doWord("かわない", "kawanai")],
+        chunks: [
+          joiner("やすいけど", "yasui kedo", "it's cheap, but", "the first sentence, with けど"),
+          ghost("I"),
+          doWord("かわない", "kawanai", "won't buy it"),
+        ],
         en: "It's cheap, but (I) won't buy it.",
       },
       {
-        chunks: [joiner("あさ おきて", "asa okite", "the first engine, in hook-on shape — “and then”"), obj("みずを", "mizu wo"), doWord("のむ", "nomu")],
+        chunks: [
+          joiner("あさ おきて", "asa okite", "wake up in the morning and…", "the first sentence, hooked on"),
+          obj("みずを", "mizu wo", "water"),
+          doWord("のむ", "nomu", "drink"),
+        ],
         en: "(I) wake up in the morning and drink water.",
       },
       {
-        chunks: [joiner("あめが ふって", "ame ga futte", "the first engine, in hook-on shape — “and then”"), doer("さくらが", "sakura ga"), doWord("かえる", "kaeru")],
+        chunks: [
+          joiner("あめが ふって", "ame ga futte", "it rains and…", "the first sentence, hooked on"),
+          doer("さくらが", "sakura ga", "Sakura"),
+          doWord("かえる", "kaeru", "goes home"),
+        ],
         en: "It rains and Sakura goes home.",
       },
       {
-        chunks: [joiner("たかいから", "takai kara", "the first engine, plus から — “so”"), ghost(), doWord("かわない", "kawanai")],
+        chunks: [
+          joiner("たかいから", "takai kara", "because it's expensive", "the reason, with から"),
+          ghost("I"),
+          doWord("かわない", "kawanai", "won't buy it"),
+        ],
         en: "It's expensive, so (I) won't buy it.",
       },
       {
-        chunks: [obj("ほんを", "hon wo"), joiner("よんで", "yonde", "the first engine, in hook-on shape — “and then”"), obj("えを", "e wo"), doWord("かく", "kaku")],
+        chunks: [
+          obj("ほんを", "hon wo", "a book"),
+          joiner("よんで", "yonde", "read and then…", "the first sentence, hooked on"),
+          obj("えを", "e wo", "a picture"),
+          doWord("かく", "kaku", "draw"),
+        ],
         en: "(I) read a book and then draw a picture.",
       },
     ],
@@ -449,23 +645,23 @@ export interface GrammarPoint {
 export const GRAMMAR_POINTS: GrammarPoint[] = [
   {
     id: "engine",
-    title: "The engine",
-    name: "every sentence ends with one",
+    title: "The last word",
+    name: "it finishes every sentence",
     explanation:
-      "A Japanese sentence is like a train: the engine comes last and says what happens or what something is. There are only three kinds of engine: a do-word (あるく), a describing い-word (あかい), or a thing + だ (うなぎだ).",
+      "Japanese saves the point for last. The final word tells you what happens or what something is, and it comes in only three kinds: an action (あるく, walks), a describing word ending in い (あかい, is red), or a thing plus だ (うなぎだ, is eel).",
     unit: 1,
     examples: [
-      { jp: "さくらが あるく。", en: "Sakura walks. (do-word engine)" },
-      { jp: "ペンが あかい。", en: "The pen is red. (describing-word engine)" },
-      { jp: "はなが きれいだ。", en: "The flower is pretty. (thing + だ engine)" },
+      { jp: "さくらが あるく。", en: "Sakura walks. (an action)" },
+      { jp: "ペンが あかい。", en: "The pen is red. (a describing word)" },
+      { jp: "はなが きれいだ。", en: "The flower is pretty. (a thing + だ)" },
     ],
   },
   {
     id: "ga",
     title: "が",
-    name: "who's doing it",
+    name: "points out who's doing it",
     explanation:
-      "が marks who or what the sentence is about — the one doing or being. Every sentence has a が, even when you can't see it.",
+      "が marks the one doing or being. Every sentence has one, even when nobody says it out loud.",
     unit: 1,
     examples: [
       { jp: "ねこが ねる。", en: "The cat sleeps." },
@@ -476,7 +672,8 @@ export const GRAMMAR_POINTS: GrammarPoint[] = [
     id: "da",
     title: "だ",
     name: "the “is” for things",
-    explanation: "だ turns a thing into an engine: A だ means “(it) is A”. It only works one way — さくらが にほんじんだ says Sakura = Japanese person, not the reverse. In polite speech it becomes です.",
+    explanation:
+      "A thing plus だ finishes a sentence: A だ means “(it) is A”. It only points one way — さくらが にほんじんだ says Sakura is a Japanese person, not that Japanese people are Sakura. Politely it becomes です.",
     unit: 1,
     examples: [
       { jp: "あしたは やすみだ。", en: "Tomorrow is a day off." },
@@ -486,21 +683,21 @@ export const GRAMMAR_POINTS: GrammarPoint[] = [
   {
     id: "wa",
     title: "は",
-    name: "the “as for” flag",
+    name: "as for…",
     explanation:
-      "は doesn't mark the doer — it points at the topic: “as for X…”. The doer is still there, often hiding. わたしは うなぎだ isn't “I am an eel”; it's “as for me, (it) is an eel”.",
+      "は doesn't say who does anything. It sets what you're talking about: “as for X…”. The doer is separate, and often unsaid. わたしは うなぎだ isn't “I am an eel” — it's “as for me, (it) is eel”, which is how you order dinner.",
     unit: 2,
     examples: [
-      { jp: "わたしは うなぎだ。", en: "As for me, (it) is an eel. — I'll have the eel." },
+      { jp: "わたしは うなぎだ。", en: "As for me, (it) is eel. — I'll have the eel." },
       { jp: "きょうは あつい。", en: "As for today, (it) is hot." },
     ],
   },
   {
     id: "ghost",
-    title: "∅ (the hidden doer)",
-    name: "the invisible “it”",
+    title: "the unsaid one",
+    name: "when nobody says who",
     explanation:
-      "Japanese leaves out what's obvious. When nobody says who does it, an invisible doer is doing the job — with its invisible が. Its usual value is “I”, but context can make it anything: ウサギだ, “(that thing) is a rabbit”.",
+      "Japanese drops whatever is obvious. If nobody says who, someone is still doing it — usually “I”, but context decides. ウサギだ on a walk means “(that) is a rabbit”. Ask yourself who or what it's about, and it appears.",
     unit: 2,
     examples: [
       { jp: "ねこは かわいい。", en: "As for cats, (they) are cute." },
@@ -510,8 +707,9 @@ export const GRAMMAR_POINTS: GrammarPoint[] = [
   {
     id: "wo",
     title: "を",
-    name: "what it's done to",
-    explanation: "を marks the thing the doing lands on: たべる (eat) — what gets eaten wears を.",
+    name: "what the action lands on",
+    explanation:
+      "を marks the thing the action is done to. When English would need a small word — talk TO Sakura — Japanese reaches for に or と instead: さくらと はなす.",
     unit: 3,
     examples: [
       { jp: "ねこが さかなを たべる。", en: "The cat eats a fish." },
@@ -521,9 +719,9 @@ export const GRAMMAR_POINTS: GrammarPoint[] = [
   {
     id: "ni",
     title: "に",
-    name: "the pin: to / at / on",
+    name: "to / at / on",
     explanation:
-      "に pins a point: the place something goes to or sits at, the person something is aimed at, or the time it happens.",
+      "に pins a point: where something ends up, where it sits, who it's aimed at, or when it happens. Times take に exactly when English needs on, in or at.",
     unit: 4,
     examples: [
       { jp: "さくらが がっこうに いく。", en: "Sakura goes to school." },
@@ -533,8 +731,8 @@ export const GRAMMAR_POINTS: GrammarPoint[] = [
   {
     id: "de",
     title: "で",
-    name: "where or how it happens",
-    explanation: "で tags the scene of the action, or the tool it's done with.",
+    name: "where or how",
+    explanation: "で tags the place something happens, or the thing it's done with.",
     unit: 4,
     examples: [
       { jp: "こどもが こうえんで あそぶ。", en: "The child plays in the park." },
@@ -544,8 +742,8 @@ export const GRAMMAR_POINTS: GrammarPoint[] = [
   {
     id: "e",
     title: "へ",
-    name: "the “towards” arrow",
-    explanation: "へ points a direction: towards home, towards the sky. Softer than に — the journey, not the pin.",
+    name: "towards",
+    explanation: "へ points a direction — the way you're heading, rather than the exact spot に would pin.",
     unit: 4,
     examples: [
       { jp: "わたしは うちへ かえる。", en: "I head home." },
@@ -556,18 +754,18 @@ export const GRAMMAR_POINTS: GrammarPoint[] = [
     id: "kara",
     title: "から",
     name: "from",
-    explanation: "から marks where or when something starts.",
+    explanation: "から marks where or when something starts. At the end of a sentence it means “so” — the reason for what follows.",
     unit: 5,
     examples: [
       { jp: "でんしゃが えきから でる。", en: "The train leaves from the station." },
-      { jp: "ふゆが 12がつから はじまる。", en: "Winter starts in December." },
+      { jp: "さむいから、うちに いる。", en: "It's cold, so (I) stay home." },
     ],
   },
   {
     id: "made",
     title: "まで",
     name: "until / as far as",
-    explanation: "まで marks how far something goes — in place or in time.",
+    explanation: "まで marks how far something goes, in place or in time.",
     unit: 5,
     examples: [
       { jp: "わたしは えきまで あるく。", en: "I walk as far as the station." },
@@ -577,9 +775,9 @@ export const GRAMMAR_POINTS: GrammarPoint[] = [
   {
     id: "i-adj",
     title: "い-words",
-    name: "describing words with “is” built in",
+    name: "describing words with “is” inside",
     explanation:
-      "Words like あかい and つめたい end in い and carry their own “is” — they can be an engine all by themselves. Put one before a thing and it glues on: あかい はな, “a red flower”.",
+      "Words like あかい and つめたい end in い and already contain “is”, so they can finish a sentence alone. Put one in front of a thing and it describes it: あかい はな, “a red flower”.",
     unit: 6,
     examples: [
       { jp: "そらが あおい。", en: "The sky is blue." },
@@ -591,11 +789,35 @@ export const GRAMMAR_POINTS: GrammarPoint[] = [
     title: "な-words",
     name: "describing words that borrow",
     explanation:
-      "Words like きれい and しずか are really thing-words. To be an engine they take だ; and な is just だ changing shape to glue onto the next word: きれいな とり, “a pretty bird”.",
+      "Words like きれい and しずか are really thing-words, so they take だ to finish a sentence. To stick onto the next word, that だ changes shape to な: きれいな とり, “a pretty bird”.",
     unit: 6,
     examples: [
       { jp: "うみが しずかだ。", en: "The sea is quiet." },
       { jp: "きれいな とりが とぶ。", en: "A pretty bird flies." },
+    ],
+  },
+  {
+    id: "modifier",
+    title: "a sentence describing a word",
+    name: "no “who” or “that” needed",
+    explanation:
+      "Park a whole little sentence in front of a word and it describes it: うたった しょうじょ, “the girl who sang”. Japanese does this constantly where English needs “who” or “that”. If a piece doesn't end in a joining word, it's describing something rather than finishing the sentence.",
+    unit: 7,
+    examples: [
+      { jp: "うたった しょうじょが ねている。", en: "The girl who sang is sleeping." },
+      { jp: "じしょを たべた いぬが おおきい。", en: "The dog that ate the dictionary is big." },
+    ],
+  },
+  {
+    id: "te-join",
+    title: "〜て",
+    name: "hooks one sentence to the next",
+    explanation:
+      "Change an action word to its 〜て shape and it stops finishing the sentence, hooking on to what comes next instead: たべて ねる, “eat and then sleep”. The real last word still ends everything.",
+    unit: 8,
+    examples: [
+      { jp: "パンを たべて、ねる。", en: "(I) eat bread and then sleep." },
+      { jp: "ほんを よんで、えを かく。", en: "(I) read a book and then draw a picture." },
     ],
   },
 ];

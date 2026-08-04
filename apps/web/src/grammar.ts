@@ -3,6 +3,7 @@ import { speak } from "./audio.js";
 import {
   GRAMMAR_POINTS,
   GRAMMAR_UNITS,
+  PARTICLE_JOB,
   type Chunk,
   type DrillKind,
   type GrammarUnit,
@@ -152,12 +153,25 @@ function tasksFor(unit: GrammarUnit): Task[] {
   return unit.drills.flatMap((kind) => shuffle(byKind.get(kind) ?? []));
 }
 
-const PROMPTS: Record<DrillKind, string> = {
-  "find-engine": "Tap the engine — the part that says what happens, or what something is.",
-  "find-doer": "Tap who or what this sentence is really about.",
-  particle: "Which little word goes in the blank?",
-  build: "Rebuild the sentence. Any car order works — keep each word with its coupling, and the engine goes last.",
-};
+/**
+ * What the learner is asked, in ordinary words. The find-the-last-word
+ * prompt borrows the wording of that sentence's own label ("what happens",
+ * "what it is", "what it's like") so the question and the answer agree.
+ */
+function promptFor(task: Task): string {
+  switch (task.kind) {
+    case "find-engine": {
+      const last = task.sentence.chunks.find((c) => c.role === "engine");
+      return `Which word tells you ${last?.label ?? "what happens"}?`;
+    }
+    case "find-doer":
+      return "Who or what is doing it?";
+    case "particle":
+      return "Which little word belongs here?";
+    default:
+      return "Put the sentence back together. The word that finishes it goes last.";
+  }
+}
 
 async function runUnit(
   body: HTMLDivElement,
@@ -211,7 +225,7 @@ async function runUnit(
           <span class="glosses">${done}/${total}</span>
         </div>
         <div class="kana-bar"><div class="kana-bar-fill" style="width:${percent}%"></div></div>
-        <div class="gram-prompt">${PROMPTS[task.kind]}</div>
+        <div class="gram-prompt">${promptFor(task)}</div>
         <div class="gram-en glosses">“${escapeHtml(task.sentence.en)}”</div>
         <div class="gram-train" id="gram-train"></div>
         <div id="gram-extra"></div>
@@ -261,6 +275,9 @@ async function runUnit(
 
     const right = (): void => reveal(false, `<span class="ok-text">✓</span>`);
     const wrong = (answerNote: string): void => reveal(true, `<span class="err-text">✗ ${answerNote}</span>`);
+    /** Name a piece the way a person would: 「ねる」(sleeps). */
+    const name = (chunk: Chunk): string =>
+      `<b lang="ja">${escapeHtml(chunk.t || "—")}</b>${chunk.g ? ` (${escapeHtml(chunk.g)})` : ""}`;
 
     if (task.kind === "find-engine" || task.kind === "find-doer") {
       const wantGhost = task.kind === "find-doer" && task.sentence.chunks.some((c) => c.role === "ghost");
@@ -277,7 +294,7 @@ async function runUnit(
           body.querySelector("#gram-ghost")!.addEventListener("click", () => {
             if (settled) return;
             if (wantGhost) right();
-            else wrong("it's right there in the sentence");
+            else wrong("someone <i>is</i> named here — look again");
           });
         }
       }
@@ -288,8 +305,15 @@ async function runUnit(
           const chunk = visible[Number(button.dataset.i)];
           const hit = task.kind === "find-doer" ? chunk.role === "doer" && !wantGhost : chunk.role === wanted;
           if (hit) right();
-          else if (task.kind === "find-doer" && wantGhost) wrong("the doer is hiding in this one");
-          else wrong(`that car is ${escapeHtml(chunk.label)}`);
+          else if (task.kind === "find-doer" && wantGhost) {
+            wrong("nobody is named in this one — it's left unsaid");
+          } else {
+            const answer = task.sentence.chunks.find((c) => c.role === wanted);
+            wrong(
+              `${name(chunk)} is ${escapeHtml(chunk.label)}.` +
+                (answer ? ` It's ${name(answer)}.` : ""),
+            );
+          }
         });
       }
       return;
@@ -315,8 +339,14 @@ async function runUnit(
       for (const button of extra.querySelectorAll<HTMLButtonElement>("button")) {
         button.addEventListener("click", () => {
           if (settled) return;
-          if (button.dataset.p === target.p) right();
-          else wrong(`${escapeHtml(stem.word)} <b>${escapeHtml(target.p!)}</b>`);
+          if (button.dataset.p === target.p) {
+            right();
+          } else {
+            const job = PARTICLE_JOB[target.p!];
+            wrong(
+              `it's <b lang="ja">${escapeHtml(target.p!)}</b>${job ? ` — ${escapeHtml(job)}` : ""}`,
+            );
+          }
         });
       }
       return;
@@ -429,13 +459,13 @@ async function runUnit(
   draw();
 }
 
-// ---------------- rendering the train ----------------
+// ---------------- drawing the sentence ----------------
 
 /**
- * A car and its coupling. Particles are not part of the word: they are
- * small wagons of their own, hooked onto the back of the car they belong
- * to — ペン ｜ が ｜ 赤い — so the sentence reads as pieces joined by
- * connectors, which is exactly what it is.
+ * A word and its little connecting word. The particle is not part of the
+ * word: it is a small block of its own, tucked close behind the word it
+ * belongs to — ペン ｜ が ｜ あかい — so the sentence reads as pieces
+ * joined by connectors, which is what it is.
  */
 function splitChunk(chunk: Chunk): { word: string; wordR: string; particle?: string; particleR?: string } {
   if (!chunk.p || !chunk.t.endsWith(chunk.p)) return { word: chunk.t, wordR: chunk.r };
@@ -449,37 +479,73 @@ function splitChunk(chunk: Chunk): { word: string; wordR: string; particle?: str
   };
 }
 
-function wordBlock(text: string, romaji: string, showRomaji: boolean, role?: string): string {
+/**
+ * One word block: the Japanese, its romaji, and — once the answer is shown
+ * — what it means in English. The meaning is the whole point, so it sits
+ * right under the word rather than off in a translation somewhere.
+ */
+function wordBlock(
+  text: string,
+  romaji: string,
+  showRomaji: boolean,
+  role?: string,
+  meaning?: string,
+): string {
   return `<span class="gram-chunk${role ? ` role-${role}` : ""}"><span lang="ja">${escapeHtml(text)}</span>${
     showRomaji ? `<span class="gram-romaji">${escapeHtml(romaji)}</span>` : ""
-  }</span>`;
+  }${meaning ? `<span class="gram-mean">${escapeHtml(meaning)}</span>` : ""}</span>`;
 }
 
-function particleBlock(text: string, romaji: string, showRomaji: boolean, ghost = false, flag = false): string {
-  return `<span class="gram-particle${ghost ? " role-ghost" : ""}${flag ? " flag" : ""}"><span lang="ja">${escapeHtml(text)}</span>${
-    showRomaji ? `<span class="gram-romaji">${escapeHtml(romaji)}</span>` : ""
+/** A connecting word, with its job shown underneath once the answer is up. */
+function particleBlock(
+  text: string,
+  romaji: string,
+  showRomaji: boolean,
+  ghost = false,
+  flag = false,
+  job?: string,
+): string {
+  return `<span class="gram-particle${ghost ? " role-ghost" : ""}${flag ? " flag" : ""}"><span lang="ja">${escapeHtml(
+    text,
+  )}</span>${showRomaji ? `<span class="gram-romaji">${escapeHtml(romaji)}</span>` : ""}${
+    job ? `<span class="gram-job">${escapeHtml(job)}</span>` : ""
   }</span>`;
 }
 
 /**
- * The word car with its particle wagon, side by side. は is drawn as a flag
- * rather than a coupling: it is not part of the sentence's machinery, it
- * just marks what we're talking about.
+ * The word with its connector beside it. An unsaid doer is drawn as a
+ * dashed block holding the English it stands for — (I), (it) — because
+ * that is the only thing a beginner can actually see about it.
  */
-function carRow(chunk: Chunk, showRomaji: boolean, role?: string): string {
+function carRow(chunk: Chunk, showRomaji: boolean, role?: string, open = false): string {
+  if (chunk.role === "ghost") {
+    return `<span class="gram-car-row">${wordBlock(
+      `(${chunk.g})`,
+      "",
+      false,
+      "ghost",
+      open ? "nobody said it" : undefined,
+    )}</span>`;
+  }
   const { word, wordR, particle, particleR } = splitChunk(chunk);
-  const ghost = chunk.role === "ghost";
-  return `<span class="gram-car-row">${wordBlock(word, wordR, showRomaji, ghost ? "ghost" : role)}${
+  return `<span class="gram-car-row">${wordBlock(word, wordR, showRomaji, role, open ? chunk.g : undefined)}${
     particle !== undefined
-      ? particleBlock(particle, particleR ?? "", showRomaji, ghost, particle === "は")
+      ? particleBlock(
+          particle,
+          particleR ?? "",
+          showRomaji,
+          false,
+          particle === "は",
+          open ? PARTICLE_JOB[particle] : undefined,
+        )
       : ""
   }</span>`;
 }
 
-/** A full car in the opened-up sentence: coloured by role, labelled in plain words. */
+/** A piece in the opened-up sentence: meaning under the word, job under that. */
 function chunkHtml(chunk: Chunk, romaji: boolean, labelled: boolean): string {
   return `<span class="gram-car">
-    ${carRow(chunk, romaji, chunk.role)}
+    ${carRow(chunk, romaji, chunk.role, true)}
     ${labelled ? `<span class="gram-label">${escapeHtml(chunk.label)}</span>` : ""}
   </span>`;
 }

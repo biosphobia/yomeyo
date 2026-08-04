@@ -6,7 +6,7 @@ import type { JlptPoint } from "./grammar-data.js";
  * do-words, describing words, things — never "verbs conjugating".
  */
 export const N5_POINTS: JlptPoint[] = [
-  { t: "は", n: "the “as for” flag", e: "Points at what we're talking about; it never says what that thing does. When は takes over a car, が and を step aside rather than stack — さくらは なぐった is “as for Sakura, (I) hit (her)”.", ex: "わたしは がくせいだ。", en: "As for me, (I) am a student." },
+  { t: "は", n: "the “as for” flag", e: "Points at what we're talking about; it never says what that thing does. When は takes over a word, が and を step aside rather than pile up — さくらは なぐった is “as for Sakura, (I) hit (her)”.", ex: "わたしは がくせいだ。", en: "As for me, (I) am a student." },
   { t: "が", n: "who's doing it", e: "Marks the one doing or being. Every sentence has one, even hidden.", ex: "ねこが ねる。", en: "The cat sleeps." },
   { t: "を", n: "what it's done to", e: "Marks the thing the doing lands on directly. Where English would need a little word — talk TO Sakura — Japanese uses に or と instead: さくらと はなす.", ex: "パンを たべる。", en: "(I) eat bread." },
   { t: "に", n: "the pin: to / at / on", e: "Pins a point: where it goes, where it sits, who it's aimed at, when it happens. Times take に exactly when English needs on/in/at (かようびに); words like today and tomorrow go bare.", ex: "がっこうに いく。", en: "(I) go to school." },
@@ -21,7 +21,7 @@ export const N5_POINTS: JlptPoint[] = [
   { t: "までに", n: "by (a deadline)", e: "The latest moment something happens — done before then.", ex: "5じまでに かえる。", en: "(I'll) be home by five." },
   { t: "より", n: "than", e: "The thing being compared against.", ex: "いぬは ねこより おおきい。", en: "Dogs are bigger than cats." },
   { t: "か", n: "the spoken question mark", e: "Put it at the end and the sentence becomes a question.", ex: "いきますか。", en: "Are you going?" },
-  { t: "ね", n: "right?", e: "Invites agreement — you feel the listener nodding. Enders like ね and よ ride after the finished sentence, so the engine before them is still the real end.", ex: "いい てんきだね。", en: "Nice weather, right?" },
+  { t: "ね", n: "right?", e: "Invites agreement — you feel the listener nodding. Words like ね and よ ride along after the sentence is already finished, so the word before them is still the real ending.", ex: "いい てんきだね。", en: "Nice weather, right?" },
   { t: "よ", n: "you know", e: "Marks news — you're telling them something they didn't know.", ex: "おいしいよ。", en: "It's tasty, you know." },
   { t: "〜う (plain form)", n: "does / will do", e: "The dictionary form of a do-word. It points at the future more often than the present: いぬが たべる is usually “the dog will eat”. For happening-right-now, use 〜ている.", ex: "あした ケーキを たべる。", en: "Tomorrow (I'll) eat cake." },
   { t: "〜て", n: "the connector shape", e: "The linking form of a do-word: it hooks things on (〜ている, 〜てください) and chains actions — “do A and then B”. Made the same way as the 〜た past.", ex: "たべて、ねる。", en: "(I'll) eat and then sleep." },

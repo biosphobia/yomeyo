@@ -620,6 +620,25 @@ button.gram-chunk.wrong {
   color: var(--muted);
 }
 
+/* What the word means, right under it — the thing a beginner is here for. */
+.gram-mean {
+  font-size: 0.78rem;
+  line-height: 1.2;
+  margin-top: 3px;
+  max-width: 130px;
+  text-align: center;
+}
+
+/* What the little connecting word does. */
+.gram-job {
+  font-size: 0.6rem;
+  line-height: 1.15;
+  color: var(--muted);
+  margin-top: 3px;
+  max-width: 84px;
+  text-align: center;
+}
+
 .gram-label {
   font-size: 0.64rem;
   line-height: 1.25;
@@ -647,19 +666,8 @@ button.gram-chunk.wrong {
    two-car core (doer + engine), which keeps the strong colours. */
 .gram-chunk.role-object,
 .gram-chunk.role-other {
-  background: #e9e9f3;
-  border-color: #c9cadd;
-  color: #262640;
-}
-
-.gram-chunk.role-object .gram-romaji,
-.gram-chunk.role-other .gram-romaji {
-  color: #5c5d78;
-}
-
-.gram-chunk.role-object .gram-label,
-.gram-chunk.role-other .gram-label {
-  color: var(--muted);
+  background: rgba(90, 169, 230, 0.12);
+  border-color: rgba(90, 169, 230, 0.5);
 }
 
 .gram-chunk.role-ghost {

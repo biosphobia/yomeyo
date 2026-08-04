@@ -12,9 +12,32 @@ follow.
 | `apps/web/src/grammar-data.ts` | Course units (`GRAMMAR_UNITS`) and the Basics dictionary (`GRAMMAR_POINTS`) |
 | `apps/web/src/grammar-jlpt-n5.ts` … `grammar-jlpt-n2n1.ts` | JLPT dictionary entries (`JlptPoint[]`) |
 
+## Wording rules (read this first)
+
+The model below comes from Cure Dolly's lessons, but **none of her metaphor
+reaches the screen** — no "engine", "carriage", "A-car", "train" — and
+neither does textbook terminology — no "subject", "predicate", "copula",
+"particle", "conjugation". A beginner sees two things per piece: **what it
+means in English**, and **what job it does**, in ordinary words:
+
+| never write | write instead |
+| --- | --- |
+| the engine | what happens / what it is / what it's like |
+| the A-car, the subject | the one doing it |
+| the topic marker は | as for… |
+| the object を | what the action lands on |
+| the zero pronoun / invisible が | nobody said it — but it's there |
+| particle | little word / connecting word |
+| conjugate | change shape |
+| passive | it lands on you |
+
+Every chunk carries `g`, its English meaning, and it is shown right under
+the Japanese. That gloss is the single most important field: it is what
+makes a dissected sentence readable to somebody on day one.
+
 ## The model (source: Cure Dolly, *Unlocking Japanese* / the video series)
 
-Every sentence is a train:
+Internally, every sentence is a train:
 
 - The **engine** comes last and is one of exactly three kinds: a do-word
   (あるく), a describing い-word (あかい — its "is" is built in), or a
@@ -57,13 +80,14 @@ Further points from the later lessons, which the content must respect:
 
 ```ts
 interface Chunk {
-  t: string;      // the car, kana only, particle included: "さくらが"
+  t: string;      // the piece, kana only, particle included: "さくらが"
   r: string;      // romaji, particle separated by a space: "sakura ga"
+  g: string;      // what it MEANS in English: "Sakura" — required, shown on screen
   role: "engine" | "doer" | "topic" | "ghost" | "object" | "other";
-  label: string;  // plain words, no grammar jargon — what a beginner reads
-  p?: string;     // the particle this car ends with, when it has one
-  q?: boolean;    // true ONLY if blanking this particle has exactly one right answer
-  glue?: boolean; // true for a describing word bound to the NEXT car
+  label: string;  // the job, in ordinary words: "the one doing it"
+  p?: string;     // the little word this piece ends with, when it has one
+  q?: boolean;    // true ONLY if blanking that word has exactly one right answer
+  glue?: boolean; // true for a piece bound to the NEXT one
 }
 
 interface Sentence {
@@ -80,16 +104,22 @@ Rules a generator MUST follow:
    in `p`. The romaji `r` mirrors `t` with the particle as the last
    space-separated token.
 3. Every sentence has exactly one `engine` chunk, and it is last.
-4. A sentence whose doer is hidden carries a `ghost` chunk
-   (`{ t: "∅が", r: "(it)", role: "ghost", ... }`) placed where the doer
-   logically sits. Pure-topic sentences (は + noun/adjective engine) need
-   one; a は-flagged doer does not (use role `doer` with `p: "は"`).
+4. A sentence whose doer is unsaid carries a `ghost` chunk
+   (`{ t: "", r: "", g: "I", role: "ghost", ... }` — `g` is who it means
+   *here*, drawn on screen as "(I)") placed where the doer logically sits.
+   Pure-topic sentences (は + thing/describing ending) need one; a
+   は-flagged doer does not (use role `doer` with `p: "は"`).
 5. `q: true` only where one particle is grammatically possible given the
    English shown (e.g. blank the は when the literal reads "as for…";
    never blank がっこうに where へ would also be right).
-6. Labels are plain words — "who or what it's about", "the engine — a
-   do-word" — never "subject", "predicate", "conjugation", "copula".
-7. Vocabulary stays beginner-simple and concrete.
+6. `g` is required on every chunk and is a plain English meaning, not a
+   grammatical description: "the cat", "sleeps", "as for me".
+7. Labels follow the wording table above — never "subject", "predicate",
+   "conjugation", "copula", "engine" or "car".
+8. Engine labels must be one of "what happens", "what it is" or "what it's
+   like", because the question shown to the learner is built from them:
+   *"Which word tells you what happens?"*
+9. Vocabulary stays beginner-simple and concrete.
 
 ## Dictionary format
 
