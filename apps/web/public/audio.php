@@ -13,6 +13,7 @@
  *
  *   GET audio.php?probe=1              204 when configured, 404 when not
  *   GET audio.php?term=…&reading=…     audio bytes, or 404 when nothing found
+ *   GET …&mode=tts                     synthesis only, no recordings
  *
  * On a host without the key file (or on GitHub Pages, which serves this file
  * as plain text) the app notices and falls back to the device voice.
@@ -107,7 +108,14 @@ function clip_urls($payload): array {
 }
 
 // Recorded voices first; synthesis only when nobody has recorded the word.
-$sourceSets = ["forvo", "openai,elevenlabs,polly"];
+//
+// A single kana asks for `mode=tts` instead. Recordings of one letter are
+// people saying it however they chose — a name, a word it starts, a whole
+// sentence — and a learner drilling あ needs the sound itself, said the same
+// way every time. Whole words are the opposite: a real speaker beats
+// synthesis, so they take the default chain.
+$synthesis = "openai,elevenlabs,polly";
+$sourceSets = (($_GET["mode"] ?? "") === "tts") ? [$synthesis] : ["forvo", $synthesis];
 $listBase = "https://allaudio.animecards.site/audio/list?language=ja";
 
 foreach ($sourceSets as $sources) {

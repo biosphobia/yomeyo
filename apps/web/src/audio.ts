@@ -15,9 +15,18 @@ import { assetUrl } from "./store.js";
  * the server, so there is nothing to configure here and no key ever reaches
  * the browser. A deployment without the endpoint — GitHub Pages, a local
  * build — simply falls through to the device voice.
+ *
+ * A single kana is the exception, and takes `playKana` instead: recordings of
+ * one letter are whatever the speaker decided to say around it, so the kana
+ * quiz asks for synthesis, which says the same sound the same way every time.
  */
 
-const clipKey = (term: string, reading: string) => `audioClip:${term}\u0000${reading}`;
+/** `tts` asks for synthesis alone; `voice` prefers a real recording. */
+type Mode = "voice" | "tts";
+
+/** Synthesis and recordings cache apart: a word can be held as both. */
+const clipKey = (term: string, reading: string, mode: Mode) =>
+  `audioClip:${mode === "tts" ? "tts:" : ""}${term}\u0000${reading}`;
 
 // ---------------- device speech (final fallback) ----------------
 
@@ -136,9 +145,12 @@ function audioEndpointReady(): Promise<boolean> {
 }
 
 /** Ask the endpoint for a clip; null when it has none for this word. */
-async function fetchEndpointClip(term: string, reading: string): Promise<Blob | null> {
+async function fetchEndpointClip(term: string, reading: string, mode: Mode): Promise<Blob | null> {
   const res = await fetch(
-    assetUrl(`audio.php?term=${encodeURIComponent(term)}&reading=${encodeURIComponent(reading)}`),
+    assetUrl(
+      `audio.php?term=${encodeURIComponent(term)}&reading=${encodeURIComponent(reading)}` +
+        (mode === "tts" ? "&mode=tts" : ""),
+    ),
   );
   if (!res.ok) return null;
   // The same static-host caution as the probe: only audio is audio.
@@ -178,12 +190,13 @@ export async function playStoredAudio(key: string): Promise<boolean> {
 export async function playWord(
   term: string,
   reading: string,
-  options: { rate?: number } = {},
+  options: { rate?: number; mode?: Mode } = {},
 ): Promise<PlayResult> {
   const spoken = reading?.trim() || term;
+  const mode = options.mode ?? "voice";
   stopPlayback();
 
-  const cached = await getMeta<Blob>(clipKey(term, reading));
+  const cached = await getMeta<Blob>(clipKey(term, reading, mode));
   if (cached instanceof Blob && cached.size > 0) {
     await playBlob(cached);
     return { source: "cache" };
@@ -191,9 +204,9 @@ export async function playWord(
 
   if (await audioEndpointReady()) {
     try {
-      const blob = await fetchEndpointClip(term, reading);
+      const blob = await fetchEndpointClip(term, reading, mode);
       if (blob) {
-        await setMeta(clipKey(term, reading), blob);
+        await setMeta(clipKey(term, reading, mode), blob);
         await playBlob(blob);
         return { source: "online" };
       }
@@ -204,6 +217,18 @@ export async function playWord(
 
   await speakWithDevice(spoken, options.rate ?? 0.9);
   return { source: "device" };
+}
+
+/**
+ * Say one kana, always synthesised.
+ *
+ * Nobody records single letters for their own sake, so what a recording
+ * service has for あ is a person saying whatever they chose to say — a name,
+ * a word beginning with it, a whole sentence. Drilling wants the bare sound,
+ * identical each time it comes round.
+ */
+export async function playKana(kana: string, options: { rate?: number } = {}): Promise<PlayResult> {
+  return playWord(kana, kana, { rate: options.rate ?? 0.8, mode: "tts" });
 }
 
 /** Kept for callers that only want the device voice (e.g. reading a sentence). */

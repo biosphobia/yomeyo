@@ -188,6 +188,12 @@ exists and never silence when it doesn't:
 Clips are cached on the device after the first play, so replaying a card
 during review is instant and keeps working with no signal.
 
+A single kana skips step 1 and goes straight to synthesis. Nobody records
+one letter for its own sake, so what a recording service has for あ is
+somebody saying whatever they chose around it; drilling wants the bare
+sound, said the same way every time it comes round. Whole words — including
+the kana game's word levels — take the full chain, real speaker first.
+
 There is nothing to configure in the app. Online audio is served by a tiny
 endpoint (`audio.php`) deployed with the site, and the API key lives on the
 server — set as the `AUDIO_API_KEY` repository secret, written to the host
