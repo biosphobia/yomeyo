@@ -2,7 +2,7 @@ import { lookup, type DictEntry } from "@yomeyo/core";
 import { getMeta, setMeta } from "./db.js";
 import { speak } from "./audio.js";
 import { activeDictionary } from "./store.js";
-import { carRow } from "./grammar-draw.js";
+import { PARTICLE_JOB, TAIL_JOB } from "./grammar-data.js";
 import { parseSentence, parserAvailable, roughParse, type Parsed, type ParsedChunk } from "./parse-ai.js";
 
 /**
@@ -84,10 +84,10 @@ async function draw(out: HTMLDivElement, parsed: Parsed, original: string): Prom
   out.innerHTML = `
     <div class="card-panel">
       <div class="parse-head">
-        <div lang="ja" class="parse-source">${escapeHtml(original)}</div>
+        <div class="parse-line" lang="ja">${sentenceHtml(parsed, original)}</div>
         <button class="speaker" id="parse-say" title="Read it out" aria-label="Read it out">🔊</button>
       </div>
-      <div class="gram-train">${parsed.chunks.map((c) => pieceHtml(c)).join("")}</div>
+      <div class="parse-parts">${parsed.chunks.map(partHtml).join("")}</div>
       ${
         parsed.en
           ? `<div class="parse-en">${escapeHtml(parsed.en)}</div>
@@ -107,15 +107,77 @@ async function draw(out: HTMLDivElement, parsed: Parsed, original: string): Prom
   await drawWords(out.querySelector<HTMLDivElement>("#parse-words")!, said);
 }
 
-/** One piece: the wagon, with its meaning and its job already open. */
-function pieceHtml(chunk: ParsedChunk): string {
-  const reading =
-    chunk.k && chunk.k !== chunk.t ? `<span class="parse-reading" lang="ja">${escapeHtml(chunk.k)}</span>` : "";
-  return `<span class="gram-car">
-    ${carRow(chunk, Boolean(chunk.r), chunk.role, true)}
-    ${reading}
-    ${chunk.label ? `<span class="gram-label">${escapeHtml(chunk.label)}</span>` : ""}
-  </span>`;
+/**
+ * The sentence as it was written, with each part in its own colour.
+ *
+ * This is the thing the learner came to read, so it stays a sentence: one
+ * line, no boxes, nothing stacked underneath it. The colours are the only
+ * annotation, and they are what tie it to the explanations below — which is
+ * why those live in their own block rather than crowding in here.
+ */
+function sentenceHtml(parsed: Parsed, original: string): string {
+  const parts = parsed.chunks
+    .map((chunk) => {
+      if (chunk.role === "ghost") {
+        return `<span class="parse-part role-ghost" title="nobody said this">(${escapeHtml(chunk.g)})</span>`;
+      }
+      const { word, particle, tail } = splitPiece(chunk);
+      return `<span class="parse-part role-${chunk.role}">${escapeHtml(word)}${
+        particle ? `<span class="parse-link">${escapeHtml(particle)}</span>` : ""
+      }${tail ? `<span class="parse-link">${escapeHtml(tail)}</span>` : ""}</span>`;
+    })
+    .join("");
+
+  // Whatever the parser left off the end — a full stop, a question mark —
+  // still belongs to the sentence the learner pasted.
+  const covered = parsed.chunks.map((c) => c.t).join("");
+  const stripped = original.replace(/\s+/g, "");
+  const rest = stripped.startsWith(covered) ? stripped.slice(covered.length) : "";
+  return parts + (rest ? escapeHtml(rest) : "");
+}
+
+/** One explanation: the colour, the piece, what it means, what job it does. */
+function partHtml(chunk: ParsedChunk): string {
+  const { word, particle, tail } = splitPiece(chunk);
+  const jobs = [
+    // An unsaid piece already says "nobody said it" above and what it means
+    // below; its label only ever says the same thing a third time.
+    chunk.role === "ghost" ? "" : chunk.label,
+    particle && PARTICLE_JOB[particle] ? `${particle} — ${PARTICLE_JOB[particle]}` : "",
+    tail && TAIL_JOB[tail] ? `${tail} — ${TAIL_JOB[tail]}` : "",
+  ].filter(Boolean);
+
+  const japanese =
+    chunk.role === "ghost"
+      ? `<span class="parse-unsaid">nobody said it</span>`
+      : `${escapeHtml(word)}${particle ? `<span class="parse-link">${escapeHtml(particle)}</span>` : ""}${
+          tail ? `<span class="parse-link">${escapeHtml(tail)}</span>` : ""
+        }${chunk.k && chunk.k !== chunk.t ? `<span class="parse-reading">${escapeHtml(chunk.k)}</span>` : ""}`;
+
+  return `<div class="parse-part-row role-${chunk.role}">
+    <span class="parse-swatch"></span>
+    <div class="parse-part-body">
+      <div class="parse-part-jp" lang="ja">${japanese}</div>
+      <div class="parse-part-mean">${escapeHtml(chunk.role === "ghost" ? `it means “${chunk.g}”` : chunk.g)}</div>
+      ${jobs.length > 0 ? `<div class="parse-part-job">${jobs.map((j) => escapeHtml(j)).join(" · ")}</div>` : ""}
+    </div>
+  </div>`;
+}
+
+/** The word, and the small words riding behind it, told apart. */
+function splitPiece(chunk: ParsedChunk): { word: string; particle?: string; tail?: string } {
+  let word = chunk.t;
+  let particle: string | undefined;
+  let tail: string | undefined;
+  if (chunk.tail && word.endsWith(chunk.tail)) {
+    tail = chunk.tail;
+    word = word.slice(0, -chunk.tail.length);
+  }
+  if (chunk.p && word.endsWith(chunk.p)) {
+    particle = chunk.p;
+    word = word.slice(0, -chunk.p.length);
+  }
+  return { word, ...(particle ? { particle } : {}), ...(tail ? { tail } : {}) };
 }
 
 /**

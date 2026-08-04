@@ -906,29 +906,126 @@ button.gram-swap-line:hover {
 }
 
 /* ---------- parse ---------- */
-.parse-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 6px;
+
+/*
+ * One colour per job, carried by a custom property so the sentence, the
+ * swatch beside its explanation and anything else that needs it all take
+ * the same hue from one place. These are the same hues the drills use.
+ */
+.role-doer {
+  --role: #56b4d0;
 }
 
-.parse-source {
+.role-object {
+  --role: #e479b8;
+}
+
+.role-engine {
+  --role: var(--accent);
+}
+
+.role-topic {
+  --role: var(--warn);
+}
+
+.role-other {
+  --role: #94a3b8;
+}
+
+.role-ghost {
+  --role: var(--muted);
+}
+
+.parse-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+/*
+ * The sentence stays a sentence. Colour is the only thing marking the parts
+ * up, so it can be read straight through; everything there is to say about
+ * it is said underneath, where it does not break the line apart.
+ */
+.parse-line {
   flex: 1;
   min-width: 0;
-  font-size: 1.15rem;
-  line-height: 1.7;
+  font-size: 1.45rem;
+  line-height: 2.1;
   word-break: break-word;
 }
 
+.parse-part {
+  color: var(--role, var(--text));
+  border-bottom: 2px solid var(--role, transparent);
+  padding-bottom: 1px;
+}
+
+.parse-part.role-ghost {
+  font-size: 0.8em;
+  border-bottom-style: dashed;
+  opacity: 0.8;
+}
+
+/* The connecting word rides behind its own word, a shade quieter. */
+.parse-link {
+  opacity: 0.65;
+  font-size: 0.85em;
+  padding: 0 1px;
+}
+
+.parse-parts {
+  margin: 18px 0 4px;
+  border-top: 1px solid #ffffff0d;
+}
+
+.parse-part-row {
+  display: flex;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid #ffffff0d;
+}
+
+.parse-swatch {
+  flex: none;
+  width: 4px;
+  border-radius: 2px;
+  background: var(--role, var(--muted));
+}
+
+.parse-part-body {
+  min-width: 0;
+}
+
+.parse-part-jp {
+  font-size: 1.15rem;
+  color: var(--role, var(--text));
+}
+
+.parse-part-mean {
+  font-size: 0.95rem;
+  margin-top: 2px;
+}
+
+.parse-part-job {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+.parse-unsaid {
+  font-style: italic;
+  font-size: 0.95rem;
+}
+
 .parse-en {
-  font-size: 1.05rem;
-  margin-top: 14px;
+  font-size: 1.1rem;
+  margin-top: 16px;
   text-align: center;
 }
 
 .parse-note {
-  margin-top: 10px;
+  margin-top: 12px;
   padding: 10px 12px;
   border-left: 2px solid var(--accent);
   background: var(--accent-soft);
@@ -936,15 +1033,11 @@ button.gram-swap-line:hover {
   font-size: 0.9rem;
 }
 
-/* The kana for a piece written with kanji, under its wagon. */
+/* The kana for a piece written with kanji. */
 .parse-reading {
   font-size: 0.72rem;
-  color: var(--accent);
-  margin-left: 6px;
-}
-
-.gram-car > .parse-reading {
-  margin-left: 0;
+  color: var(--muted);
+  margin-left: 8px;
 }
 
 .parse-word {
@@ -959,6 +1052,10 @@ button.gram-swap-line:hover {
 .parse-word-jp {
   font-size: 1.1rem;
   font-weight: 600;
+}
+
+.parse-word-jp .parse-reading {
+  color: var(--accent);
 }
 
 .parse-from {
