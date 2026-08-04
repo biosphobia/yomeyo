@@ -27,6 +27,9 @@ export interface Chunk {
   p?: string;
   /** True when the particle is fair to quiz (only one right answer). */
   q?: boolean;
+  /** True for a describing word glued to the NEXT car — it must stay
+   * immediately before it, even where cars otherwise move freely. */
+  glue?: boolean;
 }
 
 export interface Sentence {
@@ -65,7 +68,7 @@ const topic = (t: string, r: string): Chunk => ({
   p: "は",
   q: true,
 });
-const ghost = (): Chunk => ({ t: "∅が", r: "(it)", role: "ghost", label: "the hidden doer — an invisible “it”" });
+const ghost = (): Chunk => ({ t: "∅が", r: "(it)", role: "ghost", label: "the hidden doer — an invisible “it” or “I”" });
 const engine = (t: string, r: string, label: string): Chunk => ({ t, r, role: "engine", label });
 const doWord = (t: string, r: string): Chunk => engine(t, r, "the engine — a do-word");
 const isWord = (t: string, r: string): Chunk => engine(t, r, "the engine — a describing word (its “is” is built in)");
@@ -268,7 +271,7 @@ export const GRAMMAR_UNITS: GrammarUnit[] = [
   },
   {
     title: "Describing words",
-    tagline: "い-words carry their own “is”. Others borrow だ — or glue onto the next word.",
+    tagline: "い-words carry their own “is”. な is just だ in its glue-on shape.",
     drills: ["find-engine", "find-doer", "build"],
     particles: ["が", "は"],
     sentences: [
@@ -276,7 +279,7 @@ export const GRAMMAR_UNITS: GrammarUnit[] = [
       { chunks: [doer("うみが", "umi ga"), daWord("しずかだ", "shizuka da")], en: "The sea is quiet." },
       {
         chunks: [
-          car("あかい", "akai", "a describing word, glued to the next car"),
+          { ...car("あかい", "akai", "a describing word, glued to the next car"), glue: true },
           doer("はなが", "hana ga"),
           doWord("さく", "saku"),
         ],
@@ -284,7 +287,7 @@ export const GRAMMAR_UNITS: GrammarUnit[] = [
       },
       {
         chunks: [
-          car("おおきい", "ookii", "a describing word, glued to the next car"),
+          { ...car("おおきい", "ookii", "a describing word, glued to the next car"), glue: true },
           doer("いぬが", "inu ga"),
           doWord("ねる", "neru"),
         ],
@@ -292,7 +295,7 @@ export const GRAMMAR_UNITS: GrammarUnit[] = [
       },
       {
         chunks: [
-          car("きれいな", "kirei na", "a describing word — な glues it to the next car"),
+          { ...car("きれいな", "kirei na", "a describing word — な is its だ, in glue-on shape"), glue: true },
           doer("とりが", "tori ga"),
           doWord("とぶ", "tobu"),
         ],
@@ -301,7 +304,7 @@ export const GRAMMAR_UNITS: GrammarUnit[] = [
       { chunks: [topic("にほんごは", "nihongo wa"), ghost(), isWord("おもしろい", "omoshiroi")], en: "Japanese is interesting.", lit: "As for Japanese, (it) is interesting." },
       {
         chunks: [
-          car("ちいさい", "chiisai", "a describing word, glued to the next car"),
+          { ...car("ちいさい", "chiisai", "a describing word, glued to the next car"), glue: true },
           doer("ねこが", "neko ga"),
           isWord("かわいい", "kawaii"),
         ],
@@ -371,7 +374,7 @@ export const GRAMMAR_POINTS: GrammarPoint[] = [
     id: "da",
     title: "だ",
     name: "the “is” for things",
-    explanation: "だ turns a thing into an engine: A だ means “(it) is A”. In polite speech it becomes です.",
+    explanation: "だ turns a thing into an engine: A だ means “(it) is A”. It only works one way — さくらが にほんじんだ says Sakura = Japanese person, not the reverse. In polite speech it becomes です.",
     unit: 1,
     examples: [
       { jp: "あしたは やすみだ。", en: "Tomorrow is a day off." },
@@ -395,7 +398,7 @@ export const GRAMMAR_POINTS: GrammarPoint[] = [
     title: "∅ (the hidden doer)",
     name: "the invisible “it”",
     explanation:
-      "Japanese leaves out what's obvious. When nobody says who does it, an invisible “it/I/they” is doing the job — with its invisible が. Ask “who or what is this really about?” and the hidden doer appears.",
+      "Japanese leaves out what's obvious. When nobody says who does it, an invisible doer is doing the job — with its invisible が. Its usual value is “I”, but context can make it anything: ウサギだ, “(that thing) is a rabbit”.",
     unit: 2,
     examples: [
       { jp: "ねこは かわいい。", en: "As for cats, (they) are cute." },
@@ -486,7 +489,7 @@ export const GRAMMAR_POINTS: GrammarPoint[] = [
     title: "な-words",
     name: "describing words that borrow",
     explanation:
-      "Words like きれい and しずか don't have “is” built in. To be an engine they borrow だ; to glue onto a thing they use な: きれいな とり, “a pretty bird”.",
+      "Words like きれい and しずか are really thing-words. To be an engine they take だ; and な is just だ changing shape to glue onto the next word: きれいな とり, “a pretty bird”.",
     unit: 6,
     examples: [
       { jp: "うみが しずかだ。", en: "The sea is quiet." },

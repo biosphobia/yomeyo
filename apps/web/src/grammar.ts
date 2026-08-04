@@ -156,7 +156,7 @@ const PROMPTS: Record<DrillKind, string> = {
   "find-engine": "Tap the engine — the part that says what happens, or what something is.",
   "find-doer": "Tap who or what this sentence is really about.",
   particle: "Which little word goes in the blank?",
-  build: "Rebuild the sentence: tap the cars in order. The engine goes last.",
+  build: "Rebuild the sentence. Any car order works — keep each word with its coupling, and the engine goes last.",
 };
 
 async function runUnit(
@@ -322,55 +322,105 @@ async function runUnit(
       return;
     }
 
-    // build: tap the scrambled pieces back into order. Particles are pieces
-    // of their own — the learner places the word, then hooks its wagon on.
-    const pieces = task.sentence.chunks
-      .filter((c) => c.role !== "ghost")
-      .flatMap((chunk) => {
-        const s = splitChunk(chunk);
-        return s.particle !== undefined
+    // build: tap the scrambled pieces into a working sentence. The logical
+    // particles carry the meaning, not the order — so ANY arrangement of
+    // cars is right, as long as each word keeps its own coupling behind it,
+    // a glued describing word stays just before its car, and the engine
+    // comes last. That freedom is the lesson.
+    interface BuildPiece {
+      text: string;
+      r: string;
+      particle: boolean;
+    }
+    interface BuildCar {
+      pieces: BuildPiece[];
+      engine: boolean;
+    }
+    const cars: BuildCar[] = [];
+    let carry: BuildPiece[] = [];
+    for (const chunk of task.sentence.chunks.filter((c) => c.role !== "ghost")) {
+      const s = splitChunk(chunk);
+      const own: BuildPiece[] =
+        s.particle !== undefined
           ? [
               { text: s.word, r: s.wordR, particle: false },
               { text: s.particle, r: s.particleR ?? "", particle: true },
             ]
           : [{ text: chunk.t, r: chunk.r, particle: false }];
-      });
-    let at = 0;
+      if (chunk.glue) {
+        carry.push(...own); // rides with the car it describes
+        continue;
+      }
+      cars.push({ pieces: [...carry, ...own], engine: chunk.role === "engine" });
+      carry = [];
+    }
+    const allPieces = cars.flatMap((c) => c.pieces);
+
+    let carAt: BuildCar | null = null; // the car being assembled
+    let offset = 0;
+    let placedCount = 0;
     let missed = false;
-    const pieceHtml = (piece: (typeof pieces)[number]): string =>
+    const remaining = new Set(cars);
+
+    const pieceHtml = (piece: BuildPiece): string =>
       `<span lang="ja">${escapeHtml(piece.text)}</span>${
         showRomaji ? `<span class="gram-romaji">${escapeHtml(piece.r)}</span>` : ""
       }`;
-    train.innerHTML = `<div class="gram-slots" id="gram-slots">${pieces
-      .map((piece) => `<span class="gram-slot${piece.particle ? " particle" : ""}"></span>`)
-      .join("")}</div>`;
-    const slots = train.querySelectorAll<HTMLSpanElement>(".gram-slot");
-    extra.innerHTML = `<div class="gram-pieces">${shuffle(pieces.map((c, i) => ({ c, i })))
+
+    train.innerHTML = `<div class="gram-slots" id="gram-answer"><span class="glosses" id="gram-answer-hint">Your sentence builds here.</span></div>`;
+    const answer = train.querySelector<HTMLDivElement>("#gram-answer")!;
+    extra.innerHTML = `<div class="gram-pieces">${shuffle(allPieces.map((c, i) => ({ c, i })))
       .map(
         ({ c, i }) =>
           `<button class="${c.particle ? "gram-particle" : "gram-chunk"}" data-i="${i}">${pieceHtml(c)}</button>`,
       )
       .join("")}</div>`;
+
+    /** Which car would this text start, among those allowed to come next? */
+    const carStarting = (text: string): BuildCar | null => {
+      const open = [...remaining].filter((c) => !c.engine || remaining.size === 1);
+      return open.find((c) => c.pieces[0].text === text) ?? null;
+    };
+
     for (const button of extra.querySelectorAll<HTMLButtonElement>("[data-i]")) {
       button.addEventListener("click", () => {
         if (settled) return;
-        const index = Number(button.dataset.i);
-        // An identical twin piece is just as right — the learner can't tell
-        // two same-text wagons apart, and shouldn't have to.
-        if (index === at || pieces[index].text === pieces[at].text) {
-          slots[at].innerHTML = pieceHtml(pieces[at]);
-          slots[at].classList.add("filled");
-          button.disabled = true;
-          button.style.visibility = "hidden";
-          at++;
-          if (at === pieces.length) {
-            if (missed) wrong("rebuilt, with wrong turns");
-            else right();
-          }
+        const piece = allPieces[Number(button.dataset.i)];
+        let target: { car: BuildCar; piece: BuildPiece } | null = null;
+        if (carAt) {
+          if (carAt.pieces[offset].text === piece.text) target = { car: carAt, piece: carAt.pieces[offset] };
         } else {
+          const starts = carStarting(piece.text);
+          if (starts) target = { car: starts, piece: starts.pieces[0] };
+        }
+        if (!target) {
           missed = true;
           button.classList.add("wrong");
           setTimeout(() => button.classList.remove("wrong"), 500);
+          return;
+        }
+
+        if (!carAt) {
+          carAt = target.car;
+          offset = 0;
+          remaining.delete(carAt);
+        }
+        answer.querySelector("#gram-answer-hint")?.remove();
+        const placed = document.createElement("span");
+        placed.className = `gram-slot filled${target.piece.particle ? " particle" : ""}`;
+        placed.innerHTML = pieceHtml(target.piece);
+        answer.appendChild(placed);
+        button.disabled = true;
+        button.style.visibility = "hidden";
+        offset++;
+        placedCount++;
+        if (offset >= carAt.pieces.length) {
+          carAt = null;
+          offset = 0;
+        }
+        if (placedCount === allPieces.length) {
+          if (missed) wrong("rebuilt, with wrong turns");
+          else right();
         }
       });
     }
@@ -405,18 +455,24 @@ function wordBlock(text: string, romaji: string, showRomaji: boolean, role?: str
   }</span>`;
 }
 
-function particleBlock(text: string, romaji: string, showRomaji: boolean, ghost = false): string {
-  return `<span class="gram-particle${ghost ? " role-ghost" : ""}"><span lang="ja">${escapeHtml(text)}</span>${
+function particleBlock(text: string, romaji: string, showRomaji: boolean, ghost = false, flag = false): string {
+  return `<span class="gram-particle${ghost ? " role-ghost" : ""}${flag ? " flag" : ""}"><span lang="ja">${escapeHtml(text)}</span>${
     showRomaji ? `<span class="gram-romaji">${escapeHtml(romaji)}</span>` : ""
   }</span>`;
 }
 
-/** The word car with its particle wagon, side by side. */
+/**
+ * The word car with its particle wagon, side by side. は is drawn as a flag
+ * rather than a coupling: it is not part of the sentence's machinery, it
+ * just marks what we're talking about.
+ */
 function carRow(chunk: Chunk, showRomaji: boolean, role?: string): string {
   const { word, wordR, particle, particleR } = splitChunk(chunk);
   const ghost = chunk.role === "ghost";
   return `<span class="gram-car-row">${wordBlock(word, wordR, showRomaji, ghost ? "ghost" : role)}${
-    particle !== undefined ? particleBlock(particle, particleR ?? "", showRomaji, ghost) : ""
+    particle !== undefined
+      ? particleBlock(particle, particleR ?? "", showRomaji, ghost, particle === "は")
+      : ""
   }</span>`;
 }
 

@@ -562,6 +562,18 @@ button.gram-car:hover .gram-particle {
   border-color: var(--accent);
 }
 
+/* は is not a coupling but a flag flown over its car. */
+.gram-particle.flag {
+  background: rgba(229, 165, 75, 0.16);
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.gram-particle.flag > span[lang="ja"]::before {
+  content: "⚑ ";
+  font-size: 0.7em;
+}
+
 button.gram-particle {
   cursor: pointer;
 }
@@ -631,9 +643,23 @@ button.gram-chunk.wrong {
   border-color: var(--warn);
 }
 
-.gram-chunk.role-object {
-  background: rgba(90, 169, 230, 0.13);
-  border-color: #5aa9e6;
+/* Extra cars are "white cars": part of the sentence's logic, but not the
+   two-car core (doer + engine), which keeps the strong colours. */
+.gram-chunk.role-object,
+.gram-chunk.role-other {
+  background: #e9e9f3;
+  border-color: #c9cadd;
+  color: #262640;
+}
+
+.gram-chunk.role-object .gram-romaji,
+.gram-chunk.role-other .gram-romaji {
+  color: #5c5d78;
+}
+
+.gram-chunk.role-object .gram-label,
+.gram-chunk.role-other .gram-label {
+  color: var(--muted);
 }
 
 .gram-chunk.role-ghost {

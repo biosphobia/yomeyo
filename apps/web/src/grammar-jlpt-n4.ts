@@ -2,6 +2,7 @@ import type { JlptPoint } from "./grammar-data.js";
 
 /** JLPT N4 grammar, in plain words. */
 export const N4_POINTS: JlptPoint[] = [
+  { t: "sentence + thing", n: "a sentence as a describer", e: "Park a whole plain sentence in front of a thing and it describes it: うたった しょうじょ, “the girl who sang”. Japanese does this constantly, where English needs “who” or “that”.", ex: "じしょを たべた いぬが ねている。", en: "The dog that ate the dictionary is sleeping." },
   { t: "〜たら", n: "if / when", e: "The everyday “if”: once A happens, B. Works for one-off “when” too.", ex: "あめが ふったら、うちに いる。", en: "If it rains, (I'll) stay home." },
   { t: "〜ば", n: "if", e: "The tidy “if”: A ば B — B holds whenever A does.", ex: "やすければ かう。", en: "If it's cheap, (I'll) buy it." },
   { t: "〜なら", n: "if that's the case", e: "Takes what was just said and builds on it.", ex: "いくなら、いっしょに いこう。", en: "If you're going, let's go together." },
