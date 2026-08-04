@@ -291,6 +291,47 @@ export class BinaryDictionary implements Dictionary {
     for (let id = 0; id < this.size; id++) yield this.decodeAt(id);
   }
 
+  /**
+   * Words whose reading uses only the given characters — what the kana game
+   * asks for when it needs real words spelt with the rows you have picked.
+   *
+   * Walking `entries()` for this decodes every entry in the dictionary, which
+   * is a JSON parse each and long enough on a phone to look like a hang. This
+   * walks the sorted key index instead. Two arithmetic tests throw out almost
+   * every key before anything is decoded: a kana is always three UTF-8 bytes,
+   * so a key of two to four kana is a key of six to twelve bytes, and every
+   * one of them begins 0xE3. Only what survives is decoded, and only what
+   * matches is looked up in full.
+   */
+  wordsMadeOf(allowed: Set<string>, minLength = 2, maxLength = 4): DictEntry[] {
+    const out: DictEntry[] = [];
+    for (let k = 0; k < this.keyCount; k++) {
+      const start = this.offKeyBlob + this.keyOffsets[k];
+      const end = this.offKeyBlob + this.keyOffsets[k + 1];
+      const length = end - start;
+      if (length < minLength * 3 || length > maxLength * 3 || length % 3 !== 0) continue;
+      if (this.bytes[start] !== 0xe3) continue;
+
+      const key = this.decoder.decode(this.bytes.subarray(start, end));
+      let ok = true;
+      for (const ch of key) {
+        if (!allowed.has(ch)) {
+          ok = false;
+          break;
+        }
+      }
+      if (!ok) continue;
+
+      for (let i = this.postOffsets[k]; i < this.postOffsets[k + 1]; i++) {
+        const entry = this.decodeAt(this.postings[i]);
+        // The key can be this entry's written form rather than its reading;
+        // the game spells words out in kana, so only the reading counts.
+        if (entry.reading === key) out.push(entry);
+      }
+    }
+    return out;
+  }
+
   lookupExact(text: string): DictEntry[] {
     const at = this.find(this.encoder.encode(text));
     if (at < 0) return [];

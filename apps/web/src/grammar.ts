@@ -1,5 +1,6 @@
 import { getMeta, setMeta } from "./db.js";
 import { speak } from "./audio.js";
+import { cheerBox, preloadReactions, showReaction } from "./feedback.js";
 import {
   GRAMMAR_POINTS,
   GRAMMAR_UNITS,
@@ -204,6 +205,7 @@ async function runUnit(
   // new set of sentences rather than the same eight learned by heart. The
   // built-in ones stand in whenever that is not possible.
   body.innerHTML = `<div class="card-panel kana-quiz"><div class="glosses">Getting your sentences ready…</div></div>`;
+  void preloadReactions();
   const fresh = await generateSentences(base, unitIndex).catch(() => null);
   if (!isCurrent() || !body.isConnected) return;
   const unit: GrammarUnit = fresh ? { ...base, sentences: fresh } : base;
@@ -248,6 +250,7 @@ async function runUnit(
         <div class="kana-quiz-top">
           <span class="glosses">${unitIndex + 1}. ${escapeHtml(unit.title)}</span>
           <span class="glosses">${done}/${total}</span>
+          <button id="gram-quit" class="quiz-stop" title="Stop" aria-label="Stop">✕</button>
         </div>
         <div class="kana-bar"><div class="kana-bar-fill" style="width:${percent}%"></div></div>
         <div class="gram-prompt">${promptFor(task)}</div>
@@ -261,10 +264,8 @@ async function runUnit(
         <div class="gram-train" id="gram-train"></div>
         <div id="gram-extra"></div>
         <div class="kana-feedback" id="gram-feedback"></div>
-        <div class="row-actions" style="justify-content:center">
-          <button id="gram-quit" class="ghost">Stop</button>
-        </div>
       </div>
+      ${cheerBox("gram-cheer")}
     `;
     body.querySelector("#gram-quit")!.addEventListener("click", backToUnits);
 
@@ -301,6 +302,7 @@ async function runUnit(
         ? `<div class="gram-lit">literally: ${escapeHtml(task.sentence.lit)}</div>`
         : "";
       feedback.innerHTML = `${note}<div class="glosses">Enter (or tap) to continue</div>`;
+      void showReaction(body.querySelector("#gram-cheer"), missed ? "wrong" : "correct");
       void speak(spoken(task.sentence), { rate: 0.85 }).catch(() => undefined);
       const panel = body.querySelector<HTMLDivElement>(".gram-quiz")!;
       panel.tabIndex = -1;
@@ -454,6 +456,7 @@ async function runUnit(
           feedback.innerHTML = got
             ? `<span class="ok-text">✓</span><div class="glosses">Enter (or tap) to continue</div>`
             : `<span class="err-text">✗ it's the other one</span><div class="glosses">Enter (or tap) to continue</div>`;
+          void showReaction(body.querySelector("#gram-cheer"), got ? "correct" : "wrong");
           void speak(want.jp.replace(/\s/g, ""), { rate: 0.85 }).catch(() => undefined);
           const panel = body.querySelector<HTMLDivElement>(".gram-quiz")!;
           panel.tabIndex = -1;

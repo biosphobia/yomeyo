@@ -1171,6 +1171,43 @@ button.gram-swap-line:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
+}
+
+/* Hearts and the streak stay on one line; the level name gives way first. */
+.kana-quiz-top > :first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kana-quiz-top > :nth-child(2) {
+  flex: none;
+  white-space: nowrap;
+}
+
+/*
+ * Stopping is a corner action, not a choice offered alongside the answers:
+ * down among the buttons it invited a tap meant for the quiz.
+ */
+.quiz-stop {
+  flex: none;
+  margin-left: auto;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  line-height: 1;
+  font-size: 1rem;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid var(--panel-2);
+  color: var(--muted);
+}
+
+.quiz-stop:hover {
+  color: var(--text);
+  border-color: var(--muted);
 }
 
 .kana-bar,
@@ -1320,23 +1357,29 @@ button.gram-swap-line:hover {
 }
 
 /* The reaction that pops into the empty space under the quiz card. */
-.kana-cheer {
+.cheer {
   text-align: center;
   margin-top: 20px;
   opacity: 0;
 }
 
-.kana-cheer.show {
+.cheer.show {
   animation: cheer-pop 0.35s cubic-bezier(0.2, 1.4, 0.4, 1) both;
 }
 
-.kana-cheer img {
-  max-width: min(320px, 80%);
-  max-height: 220px;
+/*
+ * One fixed box, whatever the image. The reactions are swappable on GitHub,
+ * so they arrive at every aspect ratio there is; without a box of its own
+ * each one resized the page around it as it popped.
+ */
+.cheer img {
+  width: min(280px, 72vw);
+  height: min(196px, 50vw);
+  object-fit: contain;
   border-radius: 14px;
 }
 
-.kana-cheer-text {
+.cheer-text {
   font-size: 1.25rem;
   font-weight: 700;
   margin-top: 8px;

@@ -78,6 +78,64 @@ describe("finding a word", () => {
   });
 });
 
+describe("words made only of certain kana", () => {
+  const WORDS: DictEntry[] = [
+    { term: "猫", reading: "ねこ", pos: ["n"], glosses: ["cat"], freq: 12 },
+    { term: "あい", reading: "あい", pos: ["n"], glosses: ["love"] },
+    { term: "いえ", reading: "いえ", pos: ["n"], glosses: ["house"] },
+    { term: "あさ", reading: "あさ", pos: ["n"], glosses: ["morning"] },
+    { term: "ありがとう", reading: "ありがとう", pos: ["int"], glosses: ["thank you"] },
+    { term: "え", reading: "え", pos: ["n"], glosses: ["picture"] },
+    { term: "遠距離恋愛", reading: "えんきょりれんあい", pos: ["n"], glosses: ["long-distance"] },
+  ];
+  const dict = build(WORDS);
+  const readings = (allowed: string[], min = 2, max = 4): string[] =>
+    dict
+      .wordsMadeOf(new Set(allowed), min, max)
+      .map((e) => e.reading)
+      .sort();
+
+  it("returns only words spelt with the given kana", () => {
+    expect(readings(["あ", "い", "え"])).toEqual(["あい", "いえ"]);
+  });
+
+  it("leaves out a word needing one kana the learner has not picked", () => {
+    // さ is missing, so あさ must not appear even though あ is allowed.
+    expect(readings(["あ", "い"])).toEqual(["あい"]);
+  });
+
+  it("respects the length bounds at both ends", () => {
+    const all = ["あ", "り", "が", "と", "う", "え"];
+    // え is too short and ありがとう too long for the game's 2-4 window.
+    expect(readings(all, 2, 4)).toEqual([]);
+    expect(readings(all, 1, 5)).toEqual(["ありがとう", "え"]);
+  });
+
+  it("finds a kanji word by its kana reading", () => {
+    expect(dict.wordsMadeOf(new Set(["ね", "こ"]))[0].term).toBe("猫");
+  });
+
+  it("does not return an entry whose written form merely looks like the key", () => {
+    // ありがとう is filed under the same key as term and as reading; it must
+    // come back once, not twice.
+    expect(dict.wordsMadeOf(new Set([..."ありがとう"]), 1, 8)).toHaveLength(1);
+  });
+
+  it("finds nothing when no kana are allowed", () => {
+    expect(dict.wordsMadeOf(new Set())).toEqual([]);
+  });
+
+  it("agrees with a full scan of the entries", () => {
+    const allowed = new Set(["あ", "い", "え", "さ"]);
+    const scanned = [...dict.entries()]
+      .filter((e) => e.reading.length >= 2 && e.reading.length <= 4)
+      .filter((e) => [...e.reading].every((ch) => allowed.has(ch)))
+      .map((e) => e.reading)
+      .sort();
+    expect(readings([...allowed])).toEqual(scanned);
+  });
+});
+
 describe("matching the in-memory dictionary it replaces", () => {
   it("gives the same answers for every key", () => {
     const memory = new MemoryDictionary(SAMPLE);

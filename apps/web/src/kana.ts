@@ -1,5 +1,6 @@
 import { getMeta, setMeta } from "./db.js";
 import { playKana, playWord } from "./audio.js";
+import { cheerBox, preloadReactions, showReaction } from "./feedback.js";
 import { recordQuestEvents } from "./quests.js";
 import { startGameSession, type GameSession } from "./kana-stats.js";
 import { assetUrl, loadDictionary } from "./store.js";
@@ -70,55 +71,6 @@ async function getGame(): Promise<GameState | null> {
 
 async function saveGame(game: GameState): Promise<void> {
   await setMeta(GAME_KEY, game);
-}
-
-// ---------------- answer reactions ----------------
-
-interface Reaction {
-  image: string;
-  text: string;
-}
-
-interface Reactions {
-  correct: Reaction;
-  wrong: Reaction;
-}
-
-const DEFAULT_REACTIONS: Reactions = {
-  correct: { image: "correct.gif", text: "good job" },
-  wrong: { image: "wrong.gif", text: "nice try!" },
-};
-
-let reactionsLoaded: Promise<Reactions> | null = null;
-
-/**
- * The reactions live in `apps/web/public/feedback/` — a JSON file for the
- * texts and two images — precisely so they can be edited on GitHub without
- * touching any code: change the file, push, and the next deploy shows it.
- */
-function reactions(): Promise<Reactions> {
-  reactionsLoaded ??= fetch(assetUrl("feedback/feedback.json"))
-    .then((res) => (res.ok ? res.json() : {}))
-    .then((parsed: Partial<Reactions>) => ({
-      correct: { ...DEFAULT_REACTIONS.correct, ...(parsed?.correct ?? {}) },
-      wrong: { ...DEFAULT_REACTIONS.wrong, ...(parsed?.wrong ?? {}) },
-    }))
-    .catch(() => DEFAULT_REACTIONS);
-  return reactionsLoaded;
-}
-
-function reactionUrl(image: string): string {
-  return /^(https?:|data:)/i.test(image) ? image : assetUrl(`feedback/${image}`);
-}
-
-function showReaction(body: HTMLElement, reaction: Reaction): void {
-  const box = body.querySelector<HTMLDivElement>("#kana-cheer");
-  if (!box) return;
-  box.innerHTML = `
-    <img src="${reactionUrl(reaction.image).replace(/"/g, "&quot;")}" alt="" />
-    <div class="kana-cheer-text">${escapeHtml(reaction.text)}</div>
-  `;
-  box.classList.add("show");
 }
 
 // ---------------- romaji for whole words ----------------
@@ -325,10 +277,7 @@ async function runLevel(
   isCurrent: () => boolean,
 ): Promise<void> {
   const pool = poolOf(game);
-  const cheer = await reactions();
-  for (const reaction of [cheer.correct, cheer.wrong]) {
-    new Image().src = reactionUrl(reaction.image);
-  }
+  void preloadReactions();
 
   const useLives = level >= 3;
   const timerSec = level === 4 ? 6 : level === 6 ? 10 : 0;
@@ -337,9 +286,28 @@ async function runLevel(
 
   let items: Item[];
   if (level >= 5) {
-    body.innerHTML = `<div class="card-panel kana-quiz"><div class="glosses">Finding words made only of your kana…</div></div>`;
+    // The dictionary may still have to come down the wire, which on mobile
+    // data is long enough that a bare line of text reads as a hung screen.
+    // So: say what is happening, and always leave a way out.
+    body.innerHTML = `
+      <div class="card-panel kana-quiz">
+        <div class="glosses" id="kana-loading">Finding words made only of your kana…</div>
+        <div class="row-actions" style="justify-content:center;margin-top:12px">
+          <button id="kana-back" class="secondary">Change groups</button>
+        </div>
+      </div>`;
+    let left = false;
+    body.querySelector("#kana-back")!.addEventListener("click", () => {
+      left = true; // the search finishes regardless; its result is now moot
+      renderSelection(body, game, main, isCurrent);
+    });
+    const slow = setTimeout(() => {
+      const line = body.querySelector("#kana-loading");
+      if (line) line.textContent = "Downloading the dictionary… this happens once.";
+    }, 4000);
     const words = await wordsFor(pool);
-    if (!isCurrent()) return;
+    clearTimeout(slow);
+    if (left || !isCurrent() || !body.isConnected) return;
     if (words === null || words.length < 5) {
       body.innerHTML = `
         <div class="card-panel kana-quiz">
@@ -485,6 +453,7 @@ async function runLevel(
         <div class="kana-quiz-top">
           <span class="glosses">Level ${level}: ${LEVELS[level].name}</span>
           <span>${streakHtml()} ${useLives ? heartsHtml(health) : ""}</span>
+          <button id="kana-quit" class="quiz-stop" title="Stop" aria-label="Stop">✕</button>
         </div>
         <div class="kana-bar"><div class="kana-bar-fill" style="width:${percent}%"></div></div>
         ${timerSec > 0 ? `<div class="kana-timer"><div class="kana-timer-fill" id="kana-timer-fill"></div></div>` : ""}
@@ -504,11 +473,8 @@ async function runLevel(
                    autocorrect="off" spellcheck="false" placeholder="type the romaji…" />`
         }
         <div class="kana-feedback" id="kana-feedback"></div>
-        <div class="row-actions" style="justify-content:center">
-          <button id="kana-quit" class="ghost">Stop</button>
-        </div>
       </div>
-      <div class="kana-cheer" id="kana-cheer"></div>
+      ${cheerBox("kana-cheer")}
     `;
 
     body.querySelector<HTMLButtonElement>("#kana-quit")!.addEventListener("click", () => {
@@ -549,7 +515,7 @@ async function runLevel(
       void recordQuestEvents(["kana-correct", ...(streak === 20 ? ["kana-streak-20"] : [])]);
       feedback.innerHTML = `<span class="ok-text">✓ ${escapeHtml(itemAnswer(item))}</span>
         <span class="kana-streak">🔥 ${streak}</span>`;
-      showReaction(body, cheer.correct);
+      void showReaction(body.querySelector("#kana-cheer"), "correct");
       say();
       setTimeout(advance, 1100);
     };
@@ -566,7 +532,7 @@ async function runLevel(
         health--;
         if (health <= 0) {
           feedback.innerHTML = `<span class="err-text">${label}</span>`;
-          showReaction(body, cheer.wrong);
+          void showReaction(body.querySelector("#kana-cheer"), "wrong");
           say();
           setTimeout(() => void fail(), 900);
           return;
@@ -574,7 +540,7 @@ async function runLevel(
       }
       feedback.innerHTML = `<span class="err-text">${label}</span>
         <div class="glosses">Enter (or tap) to continue${useLives ? ` · ${"❤️".repeat(health)}` : ""}</div>`;
-      showReaction(body, cheer.wrong);
+      void showReaction(body.querySelector("#kana-cheer"), "wrong");
       say();
       const panel = body.querySelector<HTMLDivElement>(".kana-quiz")!;
       panel.tabIndex = -1;
@@ -673,29 +639,26 @@ function choicesFor(item: Item, pool: KanaEntry[]): string[] {
  */
 async function wordsFor(pool: KanaEntry[]): Promise<Item[] | null> {
   const allowed = new Set(pool.flatMap((entry) => [...entry.kana]));
-  let dictionary;
   try {
-    dictionary = await loadDictionary();
+    const dictionary = await loadDictionary();
+    const best = new Map<string, { gloss: string; freq: number }>();
+    for (const entry of dictionary.wordsMadeOf(allowed, 2, 4)) {
+      const gloss = entry.glosses[0];
+      if (!gloss || gloss.length > 42) continue;
+      const freq = entry.freq ?? Number.MAX_SAFE_INTEGER;
+      const existing = best.get(entry.reading);
+      if (!existing || freq < existing.freq) best.set(entry.reading, { gloss, freq });
+    }
+
+    return [...best.entries()]
+      .sort((a, b) => a[1].freq - b[1].freq)
+      .slice(0, 14)
+      .map(([kana, { gloss }]) => ({ kana, gloss }));
   } catch {
+    // A failed download or an unreadable dictionary both mean no words. The
+    // caller says so on screen; what it must never do is wait forever.
     return null;
   }
-
-  const best = new Map<string, { gloss: string; freq: number }>();
-  for (const entry of dictionary.entries()) {
-    const reading = entry.reading;
-    if (reading.length < 2 || reading.length > 4) continue;
-    if (![...reading].every((ch) => allowed.has(ch))) continue;
-    const gloss = entry.glosses[0];
-    if (!gloss || gloss.length > 42) continue;
-    const freq = entry.freq ?? Number.MAX_SAFE_INTEGER;
-    const existing = best.get(reading);
-    if (!existing || freq < existing.freq) best.set(reading, { gloss, freq });
-  }
-
-  return [...best.entries()]
-    .sort((a, b) => a[1].freq - b[1].freq)
-    .slice(0, 14)
-    .map(([kana, { gloss }]) => ({ kana, gloss }));
 }
 
 // ---------------- helpers ----------------
