@@ -5,6 +5,7 @@ import { renderWords } from "./words.js";
 import { renderDecks } from "./decks.js";
 import { renderCalendar } from "./calendar.js";
 import { renderKana } from "./kana.js";
+import { renderGrammar } from "./grammar.js";
 import { renderKanji } from "./kanji.js";
 import { renderSettings } from "./settings.js";
 import { closePopup } from "./popup.js";
@@ -36,6 +37,7 @@ app.innerHTML = `
     </div>
     <div class="nav-group" data-label="Learn">
       <a href="#kana" data-route="kana"><span class="icon">あ</span>Kana</a>
+      <a href="#grammar" data-route="grammar"><span class="icon">文</span>Grammar</a>
       <a href="#kanji" data-route="kanji"><span class="icon">漢</span>Kanji</a>
     </div>
     <div class="nav-group" data-label="Plan">
@@ -99,6 +101,9 @@ function route(): void {
       break;
     case "kana":
       void renderKana(main, isCurrent);
+      break;
+    case "grammar":
+      void renderGrammar(main, isCurrent);
       break;
     case "kanji":
       void renderKanji(main, isCurrent);

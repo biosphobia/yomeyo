@@ -230,6 +230,7 @@ button.ghost {
 
 input[type="text"],
 input[type="url"],
+input[type="search"],
 input[type="password"],
 textarea {
   width: 100%;
@@ -467,6 +468,200 @@ label {
   height: 100%;
   background: var(--accent);
   border-radius: 3px;
+}
+
+/* ---------------- grammar tab ---------------- */
+
+.gram-unit-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.gram-unit.locked {
+  opacity: 0.55;
+}
+
+.gram-unit-title {
+  font-weight: 600;
+  margin-bottom: 3px;
+}
+
+.gram-prompt {
+  font-size: 0.95rem;
+  margin: 14px 0 4px;
+}
+
+.gram-en {
+  margin-bottom: 14px;
+}
+
+.gram-train,
+.gram-pieces {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.gram-chunk {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--panel-2);
+  border: 1px solid #ffffff14;
+  color: var(--text);
+  font: inherit;
+  font-size: 1.15rem;
+  max-width: 180px;
+}
+
+button.gram-chunk {
+  cursor: pointer;
+}
+
+button.gram-chunk:hover {
+  border-color: var(--accent);
+}
+
+button.gram-chunk.wrong {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+.gram-romaji {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.gram-label {
+  font-size: 0.64rem;
+  line-height: 1.25;
+  color: var(--muted);
+  max-width: 130px;
+  text-align: center;
+}
+
+.gram-chunk.role-engine {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.gram-chunk.role-doer {
+  background: rgba(76, 195, 138, 0.14);
+  border-color: var(--good);
+}
+
+.gram-chunk.role-topic {
+  background: rgba(229, 165, 75, 0.13);
+  border-color: var(--warn);
+}
+
+.gram-chunk.role-object {
+  background: rgba(90, 169, 230, 0.13);
+  border-color: #5aa9e6;
+}
+
+.gram-chunk.role-ghost {
+  border-style: dashed;
+  background: transparent;
+  color: var(--muted);
+}
+
+.gram-hole {
+  color: var(--accent);
+  padding: 0 2px;
+}
+
+.gram-lit {
+  text-align: center;
+  color: var(--muted);
+  font-style: italic;
+  font-size: 0.88rem;
+  margin: 6px 0;
+}
+
+.gram-ghost-btn {
+  display: block;
+  margin: 4px auto;
+}
+
+.gram-slots {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.gram-slot {
+  min-width: 72px;
+  min-height: 46px;
+  border: 1px dashed #ffffff2e;
+  border-radius: 10px;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  font-size: 1.15rem;
+}
+
+.gram-slot.filled {
+  border-style: solid;
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.gram-point summary {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.gram-point-title {
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.gram-point-name {
+  color: var(--muted);
+  font-size: 0.9rem;
+  flex: 1;
+}
+
+.gram-point-unit {
+  color: var(--muted);
+  font-size: 0.72rem;
+  background: var(--panel-2);
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.gram-point-body {
+  margin: 10px 0;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.gram-example {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--accent);
+  margin-bottom: 8px;
+  font-size: 0.95rem;
+}
+
+#gram-search {
+  width: 100%;
 }
 
 .unseen-toggle {
