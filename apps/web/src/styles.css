@@ -905,6 +905,80 @@ button.gram-swap-line:hover {
   text-align: center;
 }
 
+/* ---------- parse ---------- */
+.parse-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.parse-source {
+  flex: 1;
+  min-width: 0;
+  font-size: 1.15rem;
+  line-height: 1.7;
+  word-break: break-word;
+}
+
+.parse-en {
+  font-size: 1.05rem;
+  margin-top: 14px;
+  text-align: center;
+}
+
+.parse-note {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-left: 2px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 0 8px 8px 0;
+  font-size: 0.9rem;
+}
+
+/* The kana for a piece written with kanji, under its wagon. */
+.parse-reading {
+  font-size: 0.72rem;
+  color: var(--accent);
+  margin-left: 6px;
+}
+
+.gram-car > .parse-reading {
+  margin-left: 0;
+}
+
+.parse-word {
+  padding: 10px 0;
+  border-bottom: 1px solid #ffffff0d;
+}
+
+.parse-word:last-child {
+  border-bottom: none;
+}
+
+.parse-word-jp {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.parse-from {
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.parse-senses {
+  font-size: 0.9rem;
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+.parse-senses .pos {
+  color: var(--muted);
+  font-size: 0.72rem;
+  margin-right: 6px;
+}
+
 .gram-levels {
   display: flex;
   flex-wrap: wrap;

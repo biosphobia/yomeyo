@@ -8,8 +8,9 @@
  * file (never committed, never published to GitHub Pages), and the app asks
  * here for sentences without ever seeing the key.
  *
- *   GET  grammar.php?probe=1   204 when configured, 404 when not
- *   POST grammar.php           {unit} -> {sentences:[…]} in the app's format
+ *   GET  grammar.php?probe=1              204 when configured, 404 when not
+ *   POST grammar.php {prompt}             practice sentences for a unit
+ *   POST grammar.php {prompt, mode:parse} one real sentence, taken apart
  *
  * On a host without the key file the app notices and simply uses the
  * sentences that ship with it, so nothing here is ever load-bearing.
@@ -67,38 +68,61 @@ $chunk = [
   "required" => ["t", "r", "g", "role", "label"],
   "additionalProperties" => false,
 ];
-$schema = [
-  "type" => "object",
-  "properties" => [
-    "sentences" => [
-      "type" => "array",
-      "items" => [
-        "type" => "object",
-        "properties" => [
-          "chunks" => ["type" => "array", "items" => $chunk],
-          "en" => ["type" => "string"],
-          "lit" => ["type" => "string"],
-        ],
-        "required" => ["chunks", "en"],
-        "additionalProperties" => false,
+$parse = (($req["mode"] ?? "") === "parse");
+
+// Taking a real sentence apart adds kanji, a reading per piece, and the
+// whole-sentence translations; writing practice sentences does not.
+$chunk["properties"]["k"] = ["type" => "string"];
+$chunkParse = $chunk;
+$chunkParse["required"] = ["t", "r", "g", "role", "label"];
+
+$schema = $parse
+  ? [
+      "type" => "object",
+      "properties" => [
+        "chunks" => ["type" => "array", "items" => $chunkParse],
+        "en" => ["type" => "string"],
+        "lit" => ["type" => "string"],
+        "note" => ["type" => "string"],
       ],
-    ],
-  ],
-  "required" => ["sentences"],
-  "additionalProperties" => false,
-];
+      "required" => ["chunks", "en", "lit"],
+      "additionalProperties" => false,
+    ]
+  : [
+      "type" => "object",
+      "properties" => [
+        "sentences" => [
+          "type" => "array",
+          "items" => [
+            "type" => "object",
+            "properties" => [
+              "chunks" => ["type" => "array", "items" => $chunk],
+              "en" => ["type" => "string"],
+              "lit" => ["type" => "string"],
+            ],
+            "required" => ["chunks", "en"],
+            "additionalProperties" => false,
+          ],
+        ],
+      ],
+      "required" => ["sentences"],
+      "additionalProperties" => false,
+    ];
 
 $body = [
   "model" => "claude-sonnet-5",
   "max_tokens" => 16000,
   "output_config" => [
-    "effort" => "medium",
+    "effort" => $parse ? "high" : "medium",
     "format" => ["type" => "json_schema", "schema" => $schema],
   ],
-  "system" =>
-    "You write practice sentences for a beginner Japanese course. " .
-    "Follow the rules in the request exactly; every sentence is shown to a " .
-    "learner as fact, so a wrong label teaches something wrong.",
+  "system" => $parse
+    ? "You take Japanese sentences apart for a beginner course. Accuracy " .
+      "matters more than anything: the learner is shown your answer as fact. " .
+      "Follow the model and the wording rules in the request exactly."
+    : "You write practice sentences for a beginner Japanese course. " .
+      "Follow the rules in the request exactly; every sentence is shown to a " .
+      "learner as fact, so a wrong label teaches something wrong.",
   "messages" => [["role" => "user", "content" => $prompt]],
 ];
 

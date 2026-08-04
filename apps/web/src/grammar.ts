@@ -16,6 +16,8 @@ import {
 } from "./grammar-data.js";
 import { generateSentences } from "./grammar-ai.js";
 import { unlockAll, unlockAllNow } from "./unlock.js";
+import { renderParse } from "./parse.js";
+import { carRow, chunkHtml, romajiOf, spoken, splitChunk, wordBlock } from "./grammar-draw.js";
 import { N5_POINTS } from "./grammar-jlpt-n5.js";
 import { N4_POINTS } from "./grammar-jlpt-n4.js";
 import { N3_POINTS } from "./grammar-jlpt-n3.js";
@@ -43,7 +45,7 @@ interface GrammarProgress {
   unlocked: number;
 }
 
-let view: "practice" | "dictionary" = "practice";
+let view: "practice" | "dictionary" | "parse" = "practice";
 
 export async function renderGrammar(main: HTMLElement, isCurrent: () => boolean = () => true): Promise<void> {
   const progress = (await getMeta<GrammarProgress>(GAME_KEY)) ?? { unlocked: 0 };
@@ -55,6 +57,7 @@ export async function renderGrammar(main: HTMLElement, isCurrent: () => boolean 
     <h1>Grammar</h1>
     <div class="segmented">
       <button data-view="practice" class="${view === "practice" ? "on" : ""}">Practice</button>
+      <button data-view="parse" class="${view === "parse" ? "on" : ""}">Parse</button>
       <button data-view="dictionary" class="${view === "dictionary" ? "on" : ""}">Dictionary</button>
     </div>
     <div id="grammar-body"></div>
@@ -69,6 +72,7 @@ export async function renderGrammar(main: HTMLElement, isCurrent: () => boolean 
 
   const body = main.querySelector<HTMLDivElement>("#grammar-body")!;
   if (view === "dictionary") renderDictionary(body);
+  else if (view === "parse") void renderParse(body);
   else renderUnits(body, progress, romaji, main, isCurrent);
 }
 
@@ -624,8 +628,15 @@ async function runUnit(
     // Japanese readable, practised on purpose.
     if (task.kind === "who") {
       const hidden = task.sentence.chunks.find((c) => c.role === "ghost")!;
+      // The gap is drawn as a gap. Showing (it) here printed the answer on
+      // the card above the question, on a card that could not be tapped
+      // either — so it read as a dead choice giving the game away.
       train.innerHTML = task.sentence.chunks
-        .map((chunk) => carRow(chunk, showRomaji, chunk.role, chunk.role === "ghost"))
+        .map((chunk) =>
+          chunk.role === "ghost"
+            ? carRow({ ...chunk, g: "?" }, showRomaji, chunk.role, true)
+            : carRow(chunk, showRomaji, chunk.role),
+        )
         .join("");
       const pool = ["I", "you", "she", "he", "it", "they"];
       const options = shuffle([hidden.g, ...shuffle(pool.filter((w) => w !== hidden.g)).slice(0, 2)]);
@@ -953,129 +964,6 @@ async function runUnit(
   };
 
   draw();
-}
-
-// ---------------- drawing the sentence ----------------
-
-/**
- * A word and its little connecting word. The particle is not part of the
- * word: it is a small block of its own, tucked close behind the word it
- * belongs to — ペン ｜ が ｜ あかい — so the sentence reads as pieces
- * joined by connectors, which is what it is.
- */
-function splitChunk(chunk: Chunk): {
-  word: string;
-  wordR: string;
-  particle?: string;
-  particleR?: string;
-  /** だ or です, split off the same way — it is a word, not a word-ending. */
-  tail?: string;
-  tailR?: string;
-} {
-  const cut = chunk.p ?? chunk.tail;
-  if (!cut || !chunk.t.endsWith(cut)) return { word: chunk.t, wordR: chunk.r };
-  const word = chunk.t.slice(0, chunk.t.length - cut.length);
-  const space = chunk.r.lastIndexOf(" ");
-  const wordR = space > 0 ? chunk.r.slice(0, space) : chunk.r;
-  const cutR = space > 0 ? chunk.r.slice(space + 1) : "";
-  return chunk.p
-    ? { word, wordR, particle: cut, particleR: cutR }
-    : { word, wordR, tail: cut, tailR: cutR };
-}
-
-/**
- * One word block: the Japanese, its romaji, and — once the answer is shown
- * — what it means in English. The meaning is the whole point, so it sits
- * right under the word rather than off in a translation somewhere.
- */
-function wordBlock(
-  text: string,
-  romaji: string,
-  showRomaji: boolean,
-  role?: string,
-  meaning?: string,
-): string {
-  return `<span class="gram-chunk${role ? ` role-${role}` : ""}"><span lang="ja">${escapeHtml(text)}</span>${
-    showRomaji ? `<span class="gram-romaji">${escapeHtml(romaji)}</span>` : ""
-  }${meaning ? `<span class="gram-mean">${escapeHtml(meaning)}</span>` : ""}</span>`;
-}
-
-/** A connecting word, with its job shown underneath once the answer is up. */
-function particleBlock(
-  text: string,
-  romaji: string,
-  showRomaji: boolean,
-  ghost = false,
-  flag = false,
-  job?: string,
-): string {
-  return `<span class="gram-particle${ghost ? " role-ghost" : ""}${flag ? " flag" : ""}"><span lang="ja">${escapeHtml(
-    text,
-  )}</span>${showRomaji ? `<span class="gram-romaji">${escapeHtml(romaji)}</span>` : ""}${
-    job ? `<span class="gram-job">${escapeHtml(job)}</span>` : ""
-  }</span>`;
-}
-
-/**
- * The word with its connector beside it. An unsaid doer is drawn as a
- * dashed block holding the English it stands for — (I), (it) — because
- * that is the only thing a beginner can actually see about it.
- */
-function carRow(chunk: Chunk, showRomaji: boolean, role?: string, open = false): string {
-  if (chunk.role === "ghost") {
-    return `<span class="gram-car-row">${wordBlock(
-      `(${chunk.g})`,
-      "",
-      false,
-      "ghost",
-      open ? "nobody said it" : undefined,
-    )}</span>`;
-  }
-  const { word, wordR, particle, particleR, tail, tailR } = splitChunk(chunk);
-  return `<span class="gram-car-row">${wordBlock(word, wordR, showRomaji, role, open ? chunk.g : undefined)}${
-    particle !== undefined
-      ? particleBlock(
-          particle,
-          particleR ?? "",
-          showRomaji,
-          false,
-          particle === "は",
-          open ? PARTICLE_JOB[particle] : undefined,
-        )
-      : ""
-  }${tail !== undefined ? tailBlock(tail, tailR ?? "", showRomaji, open ? TAIL_JOB[tail] : undefined) : ""}</span>`;
-}
-
-/**
- * だ or です. Drawn like a connector because it is small and rides behind a
- * word, but never in a connector's colour: it is the ending, not a link.
- */
-function tailBlock(text: string, romaji: string, showRomaji: boolean, job?: string): string {
-  return `<span class="gram-tail"><span lang="ja">${escapeHtml(text)}</span>${
-    showRomaji ? `<span class="gram-romaji">${escapeHtml(romaji)}</span>` : ""
-  }${job ? `<span class="gram-job">${escapeHtml(job)}</span>` : ""}</span>`;
-}
-
-/** A piece in the opened-up sentence: meaning under the word, job under that. */
-function chunkHtml(chunk: Chunk, romaji: boolean, labelled: boolean, mark = ""): string {
-  return `<span class="gram-car${mark}">
-    ${carRow(chunk, romaji, chunk.role, true)}
-    ${labelled ? `<span class="gram-label">${escapeHtml(chunk.label)}</span>` : ""}
-  </span>`;
-}
-
-function spoken(sentence: Sentence): string {
-  return sentence.chunks
-    .filter((c) => c.role !== "ghost")
-    .map((c) => c.t)
-    .join("");
-}
-
-function romajiOf(sentence: Sentence): string {
-  return sentence.chunks
-    .filter((c) => c.role !== "ghost")
-    .map((c) => c.r)
-    .join(" ");
 }
 
 // ---------------- the dictionary ----------------
