@@ -187,7 +187,7 @@ function promptFor(task: Task): string {
     case "swap":
       return "Same words, different little words. Which one means this?";
     default:
-      return "Put the sentence back together. The word that finishes it goes last.";
+      return "Put the sentence back together. Whatever describes a word goes just before it, and the ending comes last.";
   }
 }
 

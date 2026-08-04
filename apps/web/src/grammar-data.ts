@@ -856,6 +856,18 @@ export const GRAMMAR_POINTS: GrammarPoint[] = [
     ],
   },
   {
+    id: "order",
+    title: "the order of words",
+    name: "two rules, and the rest is free",
+    explanation:
+      "Think of setting up a scene: you dress each figure before you stand it up, and you press the action button last. So anything describing a word comes right before it, and the ending comes last. Between those, the order is yours — メアリーが スーザンを なぐった and スーザンを メアリーが なぐった both mean Mary hit Susan, because が and を say who did what, not the positions. Move a word to the very end, though, and the whole thing turns into a description of it.",
+    unit: 7,
+    examples: [
+      { jp: "いちばで ドレスを かった。", en: "(I) bought a dress at the market." },
+      { jp: "いちばで かった ドレス", en: "the dress (I) bought at the market — no longer a sentence, but a description" },
+    ],
+  },
+  {
     id: "te-join",
     title: "〜て",
     name: "hooks one sentence to the next",

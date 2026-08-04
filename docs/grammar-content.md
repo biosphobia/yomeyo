@@ -49,9 +49,17 @@ Internally, every sentence is a train:
   It never changes the logic of the sentence.
 - **Particles attach to the word BEFORE them** and are rendered as small
   connector wagons of their own: ペン｜が｜赤い.
-- **Word order is free** (the logical particles carry the meaning), with two
-  exceptions the drills enforce: the engine comes last, and a describing
-  word glued to a car stays immediately before it.
+- **Word order matters, but not the way it does in English.** The source is
+  explicit that both "Japanese is SOV" and "word order doesn't matter" are
+  wrong. There are exactly two rules:
+  1. **The ending always comes last.**
+  2. **Anything describing something comes immediately before it.**
+  Within those, the noun pieces may be in any order — メアリーが スーザンを
+  なぐった and スーザンを メアリーが なぐった say the same thing, because
+  が and を carry the roles, not the positions. What order *does* decide:
+  move a noun to the end position and the clause stops being a sentence and
+  becomes a description of that noun (いちばで かった ドレス, "the dress I
+  bought at the market"). That is the whole basis of unit 7.
 
 Further points from the later lessons, which the content must respect:
 
