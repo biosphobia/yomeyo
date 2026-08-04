@@ -6,8 +6,13 @@ import {
   type Chunk,
   type DrillKind,
   type GrammarUnit,
+  type JlptPoint,
   type Sentence,
 } from "./grammar-data.js";
+import { N5_POINTS } from "./grammar-jlpt-n5.js";
+import { N4_POINTS } from "./grammar-jlpt-n4.js";
+import { N3_POINTS } from "./grammar-jlpt-n3.js";
+import { N1_POINTS, N2_POINTS } from "./grammar-jlpt-n2n1.js";
 
 /**
  * The Grammar tab: sentence dissection from zero, plus a plain-words
@@ -372,30 +377,36 @@ function spoken(sentence: Sentence): string {
 
 // ---------------- the dictionary ----------------
 
+const JLPT_LEVELS: { key: string; points: JlptPoint[] }[] = [
+  { key: "N5", points: N5_POINTS },
+  { key: "N4", points: N4_POINTS },
+  { key: "N3", points: N3_POINTS },
+  { key: "N2", points: N2_POINTS },
+  { key: "N1", points: N1_POINTS },
+];
+
+let dictLevel = "Basics";
+
 function renderDictionary(body: HTMLDivElement): void {
   body.innerHTML = `
-    <input type="search" id="gram-search" placeholder="Search: は, from, hidden…"
-      autocomplete="off" autocapitalize="none" style="margin-bottom:12px" />
+    <input type="search" id="gram-search" placeholder="Search everything: は, until, hidden…"
+      autocomplete="off" autocapitalize="none" style="margin-bottom:10px" />
+    <div class="gram-levels" id="gram-levels">
+      ${["Basics", ...JLPT_LEVELS.map((l) => l.key)]
+        .map(
+          (key) => `<button class="gram-level-chip${key === dictLevel ? " on" : ""}" data-level="${key}">
+            ${key}<span class="gram-level-count">${
+              key === "Basics" ? GRAMMAR_POINTS.length : JLPT_LEVELS.find((l) => l.key === key)!.points.length
+            }</span></button>`,
+        )
+        .join("")}
+    </div>
     <div id="gram-dict"></div>
   `;
   const list = body.querySelector<HTMLDivElement>("#gram-dict")!;
+  const search = body.querySelector<HTMLInputElement>("#gram-search")!;
 
-  const draw = (filter: string): void => {
-    const needle = filter.trim().toLowerCase();
-    const points = GRAMMAR_POINTS.filter(
-      (point) =>
-        !needle ||
-        point.title.toLowerCase().includes(needle) ||
-        point.name.toLowerCase().includes(needle) ||
-        point.explanation.toLowerCase().includes(needle) ||
-        point.examples.some((ex) => ex.jp.includes(needle) || ex.en.toLowerCase().includes(needle)),
-    );
-    list.innerHTML =
-      points.length === 0
-        ? `<div class="empty-state"><div class="big">🔍</div>Nothing matches.</div>`
-        : points
-            .map(
-              (point) => `
+  const basicsCard = (point: (typeof GRAMMAR_POINTS)[number]): string => `
       <details class="card-panel gram-point">
         <summary>
           <span class="gram-point-title" lang="ja">${escapeHtml(point.title)}</span>
@@ -409,15 +420,69 @@ function renderDictionary(body: HTMLDivElement): void {
               <span class="glosses">${escapeHtml(ex.en)}</span></div>`,
           )
           .join("")}
-      </details>`,
-            )
+      </details>`;
+
+  const jlptCard = (point: JlptPoint, level: string): string => `
+      <details class="card-panel gram-point">
+        <summary>
+          <span class="gram-point-title" lang="ja">${escapeHtml(point.t)}</span>
+          <span class="gram-point-name">${escapeHtml(point.n)}</span>
+          <span class="gram-point-unit">${level}</span>
+        </summary>
+        <p class="gram-point-body">${escapeHtml(point.e)}</p>
+        <div class="gram-example"><span lang="ja">${escapeHtml(point.ex)}</span>
+          <span class="glosses">${escapeHtml(point.en)}</span></div>
+      </details>`;
+
+  const draw = (): void => {
+    const needle = search.value.trim().toLowerCase();
+
+    // A search reaches across every level; the chips browse one at a time.
+    if (needle) {
+      const basics = GRAMMAR_POINTS.filter(
+        (p) =>
+          p.title.toLowerCase().includes(needle) ||
+          p.name.toLowerCase().includes(needle) ||
+          p.explanation.toLowerCase().includes(needle) ||
+          p.examples.some((ex) => ex.jp.includes(needle) || ex.en.toLowerCase().includes(needle)),
+      ).map(basicsCard);
+      const jlpt = JLPT_LEVELS.flatMap(({ key, points }) =>
+        points
+          .filter(
+            (p) =>
+              p.t.toLowerCase().includes(needle) ||
+              p.n.toLowerCase().includes(needle) ||
+              p.e.toLowerCase().includes(needle) ||
+              p.ex.includes(needle) ||
+              p.en.toLowerCase().includes(needle),
+          )
+          .map((p) => jlptCard(p, key)),
+      );
+      const cards = [...basics, ...jlpt];
+      list.innerHTML = cards.length
+        ? cards.join("")
+        : `<div class="empty-state"><div class="big">🔍</div>Nothing matches.</div>`;
+      return;
+    }
+
+    list.innerHTML =
+      dictLevel === "Basics"
+        ? GRAMMAR_POINTS.map(basicsCard).join("")
+        : JLPT_LEVELS.find((l) => l.key === dictLevel)!
+            .points.map((p) => jlptCard(p, dictLevel))
             .join("");
   };
 
-  body.querySelector<HTMLInputElement>("#gram-search")!.addEventListener("input", (ev) => {
-    draw((ev.target as HTMLInputElement).value);
-  });
-  draw("");
+  for (const chip of body.querySelectorAll<HTMLButtonElement>(".gram-level-chip")) {
+    chip.addEventListener("click", () => {
+      dictLevel = chip.dataset.level!;
+      search.value = "";
+      body.querySelectorAll(".gram-level-chip").forEach((c) => c.classList.toggle("on", c === chip));
+      draw();
+    });
+  }
+  search.addEventListener("input", draw);
+  draw();
 }
 
 // ---------------- helpers ----------------

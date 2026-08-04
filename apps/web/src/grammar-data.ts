@@ -314,6 +314,20 @@ export const GRAMMAR_UNITS: GrammarUnit[] = [
 
 // ---------------- the grammar dictionary ----------------
 
+/** One JLPT dictionary entry: the pattern, its plain name, one breath of
+ * meaning, one example. The per-level lists live in grammar-jlpt-*.ts. */
+export interface JlptPoint {
+  /** The pattern itself: 〜てもいい */
+  t: string;
+  /** The plain-words name: "it's okay to". */
+  n: string;
+  /** One or two short sentences, no jargon. */
+  e: string;
+  /** One example. */
+  ex: string;
+  en: string;
+}
+
 export interface GrammarPoint {
   id: string;
   /** The thing itself: が, だ, … */

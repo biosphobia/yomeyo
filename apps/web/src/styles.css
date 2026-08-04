@@ -617,6 +617,38 @@ button.gram-chunk.wrong {
   background: var(--accent-soft);
 }
 
+.gram-levels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.gram-level-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--panel);
+  color: var(--muted);
+  border: 1px solid #ffffff14;
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.gram-level-chip.on {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.gram-level-count {
+  font-size: 0.7rem;
+  font-weight: 500;
+  opacity: 0.75;
+}
+
 .gram-point summary {
   display: flex;
   align-items: baseline;
