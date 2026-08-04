@@ -102,7 +102,7 @@ function promptFor(unit: GrammarUnit, count: number): string {
     `Write ${count} new practice sentences for a beginner Japanese lesson called "${unit.title}".`,
     `The lesson teaches: ${unit.tagline}`,
     "",
-    "Return JSON: an array of objects exactly like these two examples.",
+    'Return JSON shaped {"sentences": [...]}, where each entry looks exactly like these two examples.',
     "",
     sample,
     "",
@@ -117,8 +117,6 @@ function promptFor(unit: GrammarUnit, count: number): string {
     '- Set "q": true on a little word only if exactly one is possible there.',
     "- Use simple, concrete, everyday words a beginner knows.",
     "- Do not reuse the example sentences.",
-    "",
-    "Output the JSON array and nothing else.",
   ].join("\n");
 }
 

@@ -1,5 +1,5 @@
 import { getMeta, setMeta } from "./db.js";
-import { speak } from "./audio.js";
+import { playWord } from "./audio.js";
 import { recordQuestEvents } from "./quests.js";
 import { startGameSession, type GameSession } from "./kana-stats.js";
 import { assetUrl, loadDictionary } from "./store.js";
@@ -543,7 +543,7 @@ async function runLevel(
       feedback.innerHTML = `<span class="ok-text">✓ ${escapeHtml(itemAnswer(item))}</span>
         <span class="kana-streak">🔥 ${streak}</span>`;
       showReaction(body, cheer.correct);
-      void speak(item.kana, { rate: 0.8 }).catch(() => undefined);
+      void playWord(item.kana, item.kana, { rate: 0.8 }).catch(() => undefined);
       setTimeout(advance, 1100);
     };
 
@@ -560,7 +560,7 @@ async function runLevel(
         if (health <= 0) {
           feedback.innerHTML = `<span class="err-text">${label}</span>`;
           showReaction(body, cheer.wrong);
-          void speak(item.kana, { rate: 0.8 }).catch(() => undefined);
+          void playWord(item.kana, item.kana, { rate: 0.8 }).catch(() => undefined);
           setTimeout(() => void fail(), 900);
           return;
         }
@@ -568,7 +568,7 @@ async function runLevel(
       feedback.innerHTML = `<span class="err-text">${label}</span>
         <div class="glosses">Enter (or tap) to continue${useLives ? ` · ${"❤️".repeat(health)}` : ""}</div>`;
       showReaction(body, cheer.wrong);
-      void speak(item.kana, { rate: 0.8 }).catch(() => undefined);
+      void playWord(item.kana, item.kana, { rate: 0.8 }).catch(() => undefined);
       const panel = body.querySelector<HTMLDivElement>(".kana-quiz")!;
       panel.tabIndex = -1;
       panel.focus();
@@ -583,7 +583,7 @@ async function runLevel(
     };
 
     if (learning) {
-      void speak(item.kana, { rate: 0.8 }).catch(() => undefined);
+      void playWord(item.kana, item.kana, { rate: 0.8 }).catch(() => undefined);
       const nextButton = body.querySelector<HTMLButtonElement>("#kana-next-card")!;
       nextButton.focus();
       nextButton.addEventListener("click", advance);

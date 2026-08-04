@@ -46,12 +46,59 @@ if (!is_array($req) || !isset($req["prompt"]) || !is_string($req["prompt"])) {
 $prompt = substr($req["prompt"], 0, 12000);
 $count = isset($req["count"]) ? max(1, min(12, (int) $req["count"])) : 8;
 
+// The shape every sentence must arrive in. Asking the API to enforce it
+// beats asking the model nicely and then repairing what comes back: the
+// response is guaranteed to parse and to carry the fields the app reads.
+$chunk = [
+  "type" => "object",
+  "properties" => [
+    "t" => ["type" => "string"],
+    "r" => ["type" => "string"],
+    "g" => ["type" => "string"],
+    "role" => [
+      "type" => "string",
+      "enum" => ["engine", "doer", "topic", "ghost", "object", "other"],
+    ],
+    "label" => ["type" => "string"],
+    "p" => ["type" => "string"],
+    "q" => ["type" => "boolean"],
+    "glue" => ["type" => "boolean"],
+  ],
+  "required" => ["t", "r", "g", "role", "label"],
+  "additionalProperties" => false,
+];
+$schema = [
+  "type" => "object",
+  "properties" => [
+    "sentences" => [
+      "type" => "array",
+      "items" => [
+        "type" => "object",
+        "properties" => [
+          "chunks" => ["type" => "array", "items" => $chunk],
+          "en" => ["type" => "string"],
+          "lit" => ["type" => "string"],
+        ],
+        "required" => ["chunks", "en"],
+        "additionalProperties" => false,
+      ],
+    ],
+  ],
+  "required" => ["sentences"],
+  "additionalProperties" => false,
+];
+
 $body = [
-  "model" => "claude-sonnet-4-5",
-  "max_tokens" => 8000,
+  "model" => "claude-sonnet-5",
+  "max_tokens" => 16000,
+  "output_config" => [
+    "effort" => "medium",
+    "format" => ["type" => "json_schema", "schema" => $schema],
+  ],
   "system" =>
     "You write practice sentences for a beginner Japanese course. " .
-    "Reply with JSON only: no prose, no code fences.",
+    "Follow the rules in the request exactly; every sentence is shown to a " .
+    "learner as fact, so a wrong label teaches something wrong.",
   "messages" => [["role" => "user", "content" => $prompt]],
 ];
 
@@ -85,9 +132,6 @@ foreach ($parsed["content"] ?? [] as $part) {
     $text .= $part["text"];
   }
 }
-// Models sometimes wrap JSON in a fence despite being asked not to.
-$text = trim(preg_replace('/^```(?:json)?|```$/m', "", trim($text)));
-
 header("content-type: application/json; charset=utf-8");
 header("cache-control: no-store");
 echo json_encode(["raw" => $text, "count" => $count]);

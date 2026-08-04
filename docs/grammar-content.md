@@ -148,8 +148,21 @@ non-past ("does / will do").
 
 ## Generating with the Claude API
 
-A workable prompt shape: give the model this file, the target unit's theme
-and particle inventory, and ask for JSON matching the `Sentence` interface
-verbatim (kana only, chunked, labelled). Validate mechanically before
-shipping: engine last, ghost placement, romaji token counts, `q` flags only
-on unambiguous particles, and every kana within the learner's syllabary.
+This is already wired up: `apps/web/public/grammar.php` calls the Messages
+API server-side (the key is written from the `ANTHROPIC_API_KEY` repository
+secret at deploy time and never reaches the browser), and
+`apps/web/src/grammar-ai.ts` asks for a fresh batch when a unit starts.
+
+- **Model:** `claude-sonnet-5`, at `medium` effort.
+- **Shape:** enforced by the API with structured outputs
+  (`output_config.format`, a `json_schema` mirroring `Chunk`/`Sentence`), so
+  the reply always parses and always carries the fields the app reads —
+  no fence-stripping or repair.
+- **Prompt:** two real sentences from the unit as worked examples, plus the
+  unit's theme and the particles it has taught.
+- **Validation is still mandatory** and lives in `validSentence()`: a schema
+  guarantees the shape, not the teaching. It re-checks kana-only, exactly one
+  ending and it comes last, an engine label the question wording is built
+  from, a doer said or unsaid, and only particles the unit has taught.
+  Anything failing is dropped; fewer than four survivors falls back to the
+  built-in sentences silently.
