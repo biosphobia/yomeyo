@@ -77,18 +77,15 @@ async function renderPremade(
 
   body.innerHTML = `<div class="card-panel"><div class="msg">Loading the library…</div></div>`;
 
+  // The library is public: browsing it and adding a deck from it need no
+  // account, because a beginner should be able to open the app and start on
+  // a real word list rather than on a sign-up form. An account only decides
+  // what you may do to the library — publish, withdraw — not what you may
+  // take from it.
   let account: AccountInfo | null = null;
   let decks: LibraryDeck[] = [];
   try {
-    account = await currentAccount();
-    if (!account) {
-      body.innerHTML = `
-        <div class="card-panel">
-          <div class="msg">Sign in to see shared decks (<b>Settings → Account</b>).</div>
-        </div>
-      `;
-      return;
-    }
+    account = await currentAccount().catch(() => null);
     decks = await (await loadLibrary()).browseLibrary();
   } catch (err) {
     body.innerHTML = `<div class="card-panel"><div class="msg error">${escapeHtml(
@@ -101,10 +98,11 @@ async function renderPremade(
   const held = new Set(mine.map((deck) => deck.id));
 
   // Whether this account holds the admin seat, for the withdraw buttons.
-  // Failing to find out only costs those buttons, not the screen.
-  const admin = await (await loadLibrary())
-    .adminState()
-    .catch(() => ({ adminUid: null, isAdmin: false }));
+  // Failing to find out only costs those buttons, not the screen — and with
+  // nobody signed in there is nothing to ask, so it is not asked.
+  const admin = account
+    ? await (await loadLibrary()).adminState().catch(() => ({ adminUid: null, isAdmin: false }))
+    : { adminUid: null, isAdmin: false };
 
   // Publisher avatars, fetched together; a missing one is just no picture.
   const { profilesFor } = await import("./profile.js");
@@ -124,13 +122,25 @@ async function renderPremade(
     return;
   }
 
-  body.innerHTML = `<div class="card-panel" style="padding:6px 14px" id="library-list"></div>`;
+  body.innerHTML = `
+    <div class="card-panel" style="padding:6px 14px" id="library-list"></div>
+    ${
+      // Said once, under the list, rather than in place of it: what an
+      // account adds here is publishing, not reading.
+      account
+        ? ""
+        : `<div class="card-panel"><div class="msg">
+             Add any of these and study them right away. Sign in under
+             <b>Settings → Account</b> to share a deck of your own.
+           </div></div>`
+    }
+  `;
   const list = body.querySelector<HTMLDivElement>("#library-list")!;
 
   for (const deck of decks) {
     const row = document.createElement("div");
     row.className = "word-row";
-    const isMine = deck.ownerUid === account.uid;
+    const isMine = account !== null && deck.ownerUid === account.uid;
     const profile = deck.ownerUid ? profiles.get(deck.ownerUid) : undefined;
     row.innerHTML = `
       ${avatarHtml(profile, deck.ownerName)}

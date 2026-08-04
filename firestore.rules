@@ -7,13 +7,19 @@ rules_version = '2';
 // A **mining deck** belongs to exactly one account. Nobody — signed in or not
 // — can read or write anyone else's cards.
 //
-// The **shared library** of premade decks is the opposite: anyone signed in
-// can read every deck in it, because that is the point. Writing is limited to
-// the account that published a deck, which is decided by the deck's own id:
-// ids begin with the publisher's uid, so ownership can be checked from the
-// path without reading the deck first. A published deck carries the words
-// only — no scheduling, so nothing about anyone's review history is exposed
-// by publishing.
+// The **shared library** of premade decks is the opposite: anyone at all can
+// read every deck in it, signed in or not, because that is the point — a
+// beginner should be able to open the app and start on a real word list
+// without making an account first. Writing is limited to the account that
+// published a deck, which is decided by the deck's own id: ids begin with the
+// publisher's uid, so ownership can be checked from the path without reading
+// the deck first. A published deck carries the words only — no scheduling, so
+// nothing about anyone's review history is exposed by publishing.
+//
+// **Public profiles** are readable by everyone for the same reason: they are
+// the username and picture attached to a published deck, and a library whose
+// authors are invisible until you sign in is a worse library. They hold
+// nothing else — never the sign-in identity behind an account.
 //
 // One account can additionally be the **admin**, who may withdraw anyone's
 // deck from the library. The seat is a single document that the first
@@ -60,10 +66,11 @@ service cloud.firestore {
     }
 
     // Public profiles: the username everyone sees and an optional picture.
-    // Readable by anyone signed in — that is what they are for — and only
-    // ever written by their own account.
+    // Readable by anyone at all — that is what they are for, and they name
+    // the publishers in a library anyone can browse — and only ever written
+    // by their own account.
     match /profiles/{userId} {
-      allow read: if request.auth != null;
+      allow read: if true;
       allow create, update: if isOwner(userId) && isValidProfile();
       allow delete: if isOwner(userId);
     }
@@ -100,14 +107,15 @@ service cloud.firestore {
     // that is moderation, the reason the seat exists — but never publish
     // or edit under someone else's name.
     match /decks/{deckId} {
-      allow read: if request.auth != null;
+      // Anyone may browse and add a deck; only its publisher may change it.
+      allow read: if true;
       allow create: if publishedByCaller(deckId) && isValidDeck();
       allow update: if publishedByCaller(deckId) && isValidDeck();
       allow delete: if publishedByCaller(deckId) || isAdmin();
 
       // The cards, in compressed blocks. Same owner, same rule.
       match /blocks/{blockId} {
-        allow read: if request.auth != null;
+        allow read: if true;
         allow create, update: if publishedByCaller(deckId) && isValidBlock();
         allow delete: if publishedByCaller(deckId) || isAdmin();
       }
