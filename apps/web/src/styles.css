@@ -502,8 +502,77 @@ label {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 8px;
+  align-items: flex-start;
+  gap: 14px;
   margin: 10px 0;
+}
+
+/* A car and its coupling: the word, with its particle as a small wagon of
+   its own hooked close behind — ペン｜が｜赤い. */
+.gram-car {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+button.gram-car {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.gram-car-row {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 4px;
+}
+
+button.gram-car:hover .gram-chunk,
+button.gram-car:hover .gram-particle {
+  border-color: var(--accent);
+}
+
+.gram-particle {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 8px 9px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel) 60%, black);
+  border: 1px solid #ffffff20;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.95rem;
+  min-width: 34px;
+}
+
+.gram-particle.role-ghost {
+  border-style: dashed;
+  background: transparent;
+  color: var(--muted);
+}
+
+.gram-particle.hole {
+  border-color: var(--accent);
+}
+
+button.gram-particle {
+  cursor: pointer;
+}
+
+button.gram-particle:hover {
+  border-color: var(--accent);
+}
+
+button.gram-particle.wrong {
+  border-color: var(--bad);
+  color: var(--bad);
 }
 
 .gram-chunk {
@@ -609,6 +678,12 @@ button.gram-chunk.wrong {
   justify-content: center;
   padding: 6px 10px;
   font-size: 1.15rem;
+}
+
+.gram-slot.particle {
+  min-width: 40px;
+  padding: 6px;
+  font-size: 0.95rem;
 }
 
 .gram-slot.filled {

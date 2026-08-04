@@ -132,7 +132,14 @@ function tasksFor(unit: GrammarUnit): Task[] {
         tasks.push({ kind, sentence, chunkAt: spots[Math.floor(Math.random() * spots.length)] });
         continue;
       }
-      if (kind === "build" && sentence.chunks.filter((c) => c.role !== "ghost").length < 3) continue;
+      if (kind === "build") {
+        // Particles count as pieces of their own, so even さくら｜が｜あるく
+        // is a three-piece build.
+        const pieceCount = sentence.chunks
+          .filter((c) => c.role !== "ghost")
+          .reduce((n, c) => n + (splitChunk(c).particle !== undefined ? 2 : 1), 0);
+        if (pieceCount < 3) continue;
+      }
       tasks.push({ kind, sentence });
     }
   }
@@ -260,7 +267,7 @@ async function runUnit(
       const wanted = task.kind === "find-engine" ? "engine" : "doer";
       train.innerHTML = task.sentence.chunks
         .filter((c) => c.role !== "ghost")
-        .map((chunk, i) => `<button class="gram-chunk" data-i="${i}">${chunkInner(chunk, showRomaji)}</button>`)
+        .map((chunk, i) => `<button class="gram-car" data-i="${i}">${carRow(chunk, showRomaji)}</button>`)
         .join("");
       if (task.kind === "find-doer") {
         // The hidden-doer button appears once hiding is on the table at all,
@@ -275,7 +282,7 @@ async function runUnit(
         }
       }
       const visible = task.sentence.chunks.filter((c) => c.role !== "ghost");
-      for (const button of train.querySelectorAll<HTMLButtonElement>(".gram-chunk")) {
+      for (const button of train.querySelectorAll<HTMLButtonElement>("button.gram-car")) {
         button.addEventListener("click", () => {
           if (settled) return;
           const chunk = visible[Number(button.dataset.i)];
@@ -291,15 +298,13 @@ async function runUnit(
     if (task.kind === "particle") {
       const at = task.chunkAt!;
       const target = task.sentence.chunks[at];
-      const stem = target.t.slice(0, target.t.length - target.p!.length);
+      const stem = splitChunk(target);
       train.innerHTML = task.sentence.chunks
         .filter((c) => c.role !== "ghost")
         .map((chunk) =>
           chunk === target
-            ? `<span class="gram-chunk hole">${escapeHtml(stem)}<b class="gram-hole">?</b>${
-                showRomaji ? `<span class="gram-romaji">${escapeHtml(chunk.r)}</span>` : ""
-              }</span>`
-            : `<span class="gram-chunk">${chunkInner(chunk, showRomaji)}</span>`,
+            ? `<span class="gram-car-row">${wordBlock(stem.word, stem.wordR, showRomaji)}<span class="gram-particle hole"><b class="gram-hole">?</b></span></span>`
+            : carRow(chunk, showRomaji),
         )
         .join("");
       const options = shuffle([...new Set([target.p!, ...unit.particles])]).slice(0, 4);
@@ -311,27 +316,49 @@ async function runUnit(
         button.addEventListener("click", () => {
           if (settled) return;
           if (button.dataset.p === target.p) right();
-          else wrong(`${escapeHtml(stem)}<b>${escapeHtml(target.p!)}</b>`);
+          else wrong(`${escapeHtml(stem.word)} <b>${escapeHtml(target.p!)}</b>`);
         });
       }
       return;
     }
 
-    // build: tap the scrambled cars back into order.
-    const pieces = task.sentence.chunks.filter((c) => c.role !== "ghost");
+    // build: tap the scrambled pieces back into order. Particles are pieces
+    // of their own — the learner places the word, then hooks its wagon on.
+    const pieces = task.sentence.chunks
+      .filter((c) => c.role !== "ghost")
+      .flatMap((chunk) => {
+        const s = splitChunk(chunk);
+        return s.particle !== undefined
+          ? [
+              { text: s.word, r: s.wordR, particle: false },
+              { text: s.particle, r: s.particleR ?? "", particle: true },
+            ]
+          : [{ text: chunk.t, r: chunk.r, particle: false }];
+      });
     let at = 0;
     let missed = false;
-    train.innerHTML = `<div class="gram-slots" id="gram-slots">${pieces.map(() => `<span class="gram-slot"></span>`).join("")}</div>`;
+    const pieceHtml = (piece: (typeof pieces)[number]): string =>
+      `<span lang="ja">${escapeHtml(piece.text)}</span>${
+        showRomaji ? `<span class="gram-romaji">${escapeHtml(piece.r)}</span>` : ""
+      }`;
+    train.innerHTML = `<div class="gram-slots" id="gram-slots">${pieces
+      .map((piece) => `<span class="gram-slot${piece.particle ? " particle" : ""}"></span>`)
+      .join("")}</div>`;
     const slots = train.querySelectorAll<HTMLSpanElement>(".gram-slot");
     extra.innerHTML = `<div class="gram-pieces">${shuffle(pieces.map((c, i) => ({ c, i })))
-      .map(({ c, i }) => `<button class="gram-chunk" data-i="${i}">${chunkInner(c, showRomaji)}</button>`)
+      .map(
+        ({ c, i }) =>
+          `<button class="${c.particle ? "gram-particle" : "gram-chunk"}" data-i="${i}">${pieceHtml(c)}</button>`,
+      )
       .join("")}</div>`;
-    for (const button of extra.querySelectorAll<HTMLButtonElement>(".gram-chunk")) {
+    for (const button of extra.querySelectorAll<HTMLButtonElement>("[data-i]")) {
       button.addEventListener("click", () => {
         if (settled) return;
         const index = Number(button.dataset.i);
-        if (index === at) {
-          slots[at].innerHTML = chunkInner(pieces[at], showRomaji);
+        // An identical twin piece is just as right — the learner can't tell
+        // two same-text wagons apart, and shouldn't have to.
+        if (index === at || pieces[index].text === pieces[at].text) {
+          slots[at].innerHTML = pieceHtml(pieces[at]);
           slots[at].classList.add("filled");
           button.disabled = true;
           button.style.visibility = "hidden";
@@ -354,16 +381,49 @@ async function runUnit(
 
 // ---------------- rendering the train ----------------
 
-function chunkInner(chunk: Chunk, romaji: boolean): string {
-  return `<span lang="ja">${escapeHtml(chunk.t)}</span>${
-    romaji ? `<span class="gram-romaji">${escapeHtml(chunk.r)}</span>` : ""
-  }`;
+/**
+ * A car and its coupling. Particles are not part of the word: they are
+ * small wagons of their own, hooked onto the back of the car they belong
+ * to — ペン ｜ が ｜ 赤い — so the sentence reads as pieces joined by
+ * connectors, which is exactly what it is.
+ */
+function splitChunk(chunk: Chunk): { word: string; wordR: string; particle?: string; particleR?: string } {
+  if (!chunk.p || !chunk.t.endsWith(chunk.p)) return { word: chunk.t, wordR: chunk.r };
+  const word = chunk.t.slice(0, chunk.t.length - chunk.p.length);
+  const space = chunk.r.lastIndexOf(" ");
+  return {
+    word,
+    wordR: space > 0 ? chunk.r.slice(0, space) : chunk.r,
+    particle: chunk.p,
+    particleR: space > 0 ? chunk.r.slice(space + 1) : "",
+  };
 }
 
-/** A car in the opened-up sentence: coloured by role, labelled in plain words. */
+function wordBlock(text: string, romaji: string, showRomaji: boolean, role?: string): string {
+  return `<span class="gram-chunk${role ? ` role-${role}` : ""}"><span lang="ja">${escapeHtml(text)}</span>${
+    showRomaji ? `<span class="gram-romaji">${escapeHtml(romaji)}</span>` : ""
+  }</span>`;
+}
+
+function particleBlock(text: string, romaji: string, showRomaji: boolean, ghost = false): string {
+  return `<span class="gram-particle${ghost ? " role-ghost" : ""}"><span lang="ja">${escapeHtml(text)}</span>${
+    showRomaji ? `<span class="gram-romaji">${escapeHtml(romaji)}</span>` : ""
+  }</span>`;
+}
+
+/** The word car with its particle wagon, side by side. */
+function carRow(chunk: Chunk, showRomaji: boolean, role?: string): string {
+  const { word, wordR, particle, particleR } = splitChunk(chunk);
+  const ghost = chunk.role === "ghost";
+  return `<span class="gram-car-row">${wordBlock(word, wordR, showRomaji, ghost ? "ghost" : role)}${
+    particle !== undefined ? particleBlock(particle, particleR ?? "", showRomaji, ghost) : ""
+  }</span>`;
+}
+
+/** A full car in the opened-up sentence: coloured by role, labelled in plain words. */
 function chunkHtml(chunk: Chunk, romaji: boolean, labelled: boolean): string {
-  return `<span class="gram-chunk role-${chunk.role}">
-    ${chunkInner(chunk, romaji)}
+  return `<span class="gram-car">
+    ${carRow(chunk, romaji, chunk.role)}
     ${labelled ? `<span class="gram-label">${escapeHtml(chunk.label)}</span>` : ""}
   </span>`;
 }
