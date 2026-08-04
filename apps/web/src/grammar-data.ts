@@ -74,6 +74,32 @@ const doWord = (t: string, r: string): Chunk => engine(t, r, "the engine — a d
 const isWord = (t: string, r: string): Chunk => engine(t, r, "the engine — a describing word (its “is” is built in)");
 const daWord = (t: string, r: string): Chunk => engine(t, r, "the engine — a thing + だ (“is”)");
 const obj = (t: string, r: string): Chunk => ({ t, r, role: "object", label: "the thing it happens to", p: "を", q: true });
+/** A piece of a little sentence parked in front of a car, describing it. */
+const inner = (t: string, r: string): Chunk => ({
+  t,
+  r,
+  role: "other",
+  label: "a little sentence describing the next car",
+  glue: true,
+});
+const innerDoer = (t: string, r: string): Chunk => ({
+  t,
+  r,
+  role: "other",
+  label: "who did it, inside the describing part",
+  p: "が",
+  glue: true,
+});
+const innerObj = (t: string, r: string): Chunk => ({
+  t,
+  r,
+  role: "other",
+  label: "what it happened to, inside the describing part",
+  p: "を",
+  glue: true,
+});
+/** An engine wearing a hook, so another sentence can follow it. */
+const joiner = (t: string, r: string, label: string): Chunk => ({ t, r, role: "other", label });
 const car = (t: string, r: string, label: string, p?: string, q?: boolean): Chunk => ({
   t,
   r,
@@ -311,6 +337,82 @@ export const GRAMMAR_UNITS: GrammarUnit[] = [
         en: "The small cat is cute.",
       },
       { chunks: [doer("ゆきが", "yuki ga"), isWord("しろい", "shiroi")], en: "The snow is white." },
+    ],
+  },
+  {
+    title: "A whole sentence, describing",
+    tagline: "Park a little sentence in front of a thing and it describes it.",
+    drills: ["find-engine", "find-doer", "build"],
+    particles: ["が", "を"],
+    sentences: [
+      {
+        chunks: [inner("うたった", "utatta"), doer("しょうじょが", "shoujo ga"), doWord("ねている", "nete iru")],
+        en: "The girl who sang is sleeping.",
+        lit: "The sang-girl is sleeping.",
+      },
+      {
+        chunks: [innerObj("じしょを", "jisho wo"), inner("たべた", "tabeta"), doer("いぬが", "inu ga"), isWord("おおきい", "ookii")],
+        en: "The dog that ate the dictionary is big.",
+        lit: "The ate-the-dictionary dog is big.",
+      },
+      {
+        chunks: [inner("はしる", "hashiru"), doer("いぬが", "inu ga"), isWord("しろい", "shiroi")],
+        en: "The running dog is white.",
+      },
+      {
+        chunks: [innerDoer("さくらが", "sakura ga"), inner("よんだ", "yonda"), doer("ほんが", "hon ga"), isWord("おもしろい", "omoshiroi")],
+        en: "The book Sakura read is interesting.",
+        lit: "The Sakura-read book is interesting.",
+      },
+      {
+        chunks: [inner("ねている", "nete iru"), doer("ねこが", "neko ga"), isWord("かわいい", "kawaii")],
+        en: "The sleeping cat is cute.",
+      },
+      {
+        chunks: [innerDoer("わたしが", "watashi ga"), inner("かいた", "kaita"), doer("えが", "e ga"), isWord("ちいさい", "chiisai")],
+        en: "The picture I drew is small.",
+        lit: "The I-drew picture is small.",
+      },
+      {
+        chunks: [innerObj("みずを", "mizu wo"), inner("のんだ", "nonda"), doer("とりが", "tori ga"), doWord("とぶ", "tobu")],
+        en: "The bird that drank the water flies.",
+      },
+    ],
+  },
+  {
+    title: "Joining two sentences",
+    tagline: "One engine changes shape to hook onto the next. The last engine still ends it.",
+    drills: ["find-engine", "build"],
+    particles: ["を", "に", "が"],
+    sentences: [
+      {
+        chunks: [obj("パンを", "pan wo"), joiner("たべて", "tabete", "the first engine, in hook-on shape — “and then”"), doWord("ねる", "neru")],
+        en: "(I) eat bread and then sleep.",
+      },
+      {
+        chunks: [joiner("さむいから", "samui kara", "the first engine, plus から — “so”"), car("うちに", "uchi ni", "where it sits", "に"), doWord("いる", "iru")],
+        en: "It's cold, so (I) stay home.",
+      },
+      {
+        chunks: [joiner("やすいけど", "yasui kedo", "the first engine, plus けど — “but”"), ghost(), doWord("かわない", "kawanai")],
+        en: "It's cheap, but (I) won't buy it.",
+      },
+      {
+        chunks: [joiner("あさ おきて", "asa okite", "the first engine, in hook-on shape — “and then”"), obj("みずを", "mizu wo"), doWord("のむ", "nomu")],
+        en: "(I) wake up in the morning and drink water.",
+      },
+      {
+        chunks: [joiner("あめが ふって", "ame ga futte", "the first engine, in hook-on shape — “and then”"), doer("さくらが", "sakura ga"), doWord("かえる", "kaeru")],
+        en: "It rains and Sakura goes home.",
+      },
+      {
+        chunks: [joiner("たかいから", "takai kara", "the first engine, plus から — “so”"), ghost(), doWord("かわない", "kawanai")],
+        en: "It's expensive, so (I) won't buy it.",
+      },
+      {
+        chunks: [obj("ほんを", "hon wo"), joiner("よんで", "yonde", "the first engine, in hook-on shape — “and then”"), obj("えを", "e wo"), doWord("かく", "kaku")],
+        en: "(I) read a book and then draw a picture.",
+      },
     ],
   },
 ];

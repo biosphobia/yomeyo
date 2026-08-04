@@ -2,6 +2,8 @@ import type { JlptPoint } from "./grammar-data.js";
 
 /** JLPT N4 grammar, in plain words. */
 export const N4_POINTS: JlptPoint[] = [
+  { t: "でる / だす pairs", n: "moves itself vs moves something", e: "Japanese keeps two versions of a word: one where the thing moves by itself (でる, come out) and one where somebody moves it (だす, take out). ある is the parent of all self-movers, する of all the others.", ex: "でんしゃが でる。かばんを だす。", en: "The train leaves. (I) take out the bag." },
+  { t: "には / にも / とは", n: "a flag on top of a car", e: "に, で and と keep their job and take は or も on top: には, にも, とは. が and を never stack like this — they just step aside.", ex: "ここには なにも ない。", en: "As for here, there's nothing." },
   { t: "sentence + thing", n: "a sentence as a describer", e: "Park a whole plain sentence in front of a thing and it describes it: うたった しょうじょ, “the girl who sang”. Japanese does this constantly, where English needs “who” or “that”.", ex: "じしょを たべた いぬが ねている。", en: "The dog that ate the dictionary is sleeping." },
   { t: "〜たら", n: "if / when", e: "The everyday “if”: once A happens, B. Works for one-off “when” too.", ex: "あめが ふったら、うちに いる。", en: "If it rains, (I'll) stay home." },
   { t: "〜ば", n: "if", e: "The tidy “if”: A ば B — B holds whenever A does.", ex: "やすければ かう。", en: "If it's cheap, (I'll) buy it." },
@@ -20,7 +22,7 @@ export const N4_POINTS: JlptPoint[] = [
   { t: "〜たところ", n: "just did", e: "Fresh off finishing.", ex: "いま ついたところだ。", en: "(I) just arrived." },
   { t: "〜たばかり", n: "only just did", e: "So recent it still colours things.", ex: "はじめたばかりだ。", en: "(I've) only just started." },
   { t: "〜られる (can)", n: "can do", e: "Morphs a do-word into “able to do it”: たべる → たべられる.", ex: "なっとうが たべられる。", en: "(I) can eat natto." },
-  { t: "〜られる (happens to you)", n: "it lands on you", e: "The doing comes at you from someone else — often unasked.", ex: "あめに ふられた。", en: "(I) got rained on." },
+  { t: "〜られる (happens to you)", n: "it lands on you", e: "The doing comes at you from someone else — often unasked. Not a backwards sentence: the one it lands on is still the doer of the receiving, so あめに ふられた is “(I) received the rain's falling”.", ex: "あめに ふられた。", en: "(I) got rained on." },
   { t: "〜させる", n: "make or let someone do", e: "You cause the doing: force it or allow it.", ex: "こどもに やさいを たべさせる。", en: "(I) make the kids eat vegetables." },
   { t: "〜させられる", n: "be made to do", e: "Someone causes it, and it lands on you.", ex: "またされた? いえ、うたわせられた。", en: "(I) was made to sing." },
   { t: "〜そうだ (looks)", n: "looks about to", e: "From what you see: it looks that way, or about to happen.", ex: "あめが ふりそうだ。", en: "It looks like rain." },

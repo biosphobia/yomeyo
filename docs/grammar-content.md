@@ -30,6 +30,29 @@ Every sentence is a train:
   exceptions the drills enforce: the engine comes last, and a describing
   word glued to a car stays immediately before it.
 
+Further points from the later lessons, which the content must respect:
+
+- **Logical vs non-logical particles.** が を に で と から まで mark what a
+  word is doing. は and も do not — they flag a topic. Two logical particles
+  never stack. に/で/と can carry は or も on top (には, にも, とは), but
+  **が and を never stack — they step aside**: さくらは なぐった is
+  さくらは ∅が ∅を なぐった.
+- **Finding the sentence** (the analysis technique): the last engine is the
+  end of the main clause. Anything earlier that looks like a clause but does
+  *not* end in a connector is a **modifier** of a car or the engine, not a
+  clause of its own. Sentence-enders (よ ね か) sit after the finished
+  sentence.
+- **The hidden doer need not be nameable.** It can mean "the circumstances"
+  — よかった is ∅が よかった, "it would have been good".
+- **Three word types only**: い-engines (describing words), う-engines
+  (do-words), and everything else is a thing-word. な-words, の-words and
+  する-words are all thing-words; there is no separate adverb car.
+- **Self-move vs other-move**, not transitive/intransitive: でる (it comes
+  out) vs だす (someone takes it out). ある is the parent of self-movers,
+  する of other-movers.
+- **No passive, no conjugation.** られる is the receptive — the doing lands
+  on you; words *morph* into new words rather than conjugating.
+
 ## Sentence format
 
 ```ts
