@@ -231,6 +231,56 @@ export async function playKana(kana: string, options: { rate?: number } = {}): P
   return playWord(kana, kana, { rate: options.rate ?? 0.8, mode: "tts" });
 }
 
+/**
+ * Fetch clips ahead of time and put them in the cache, without playing any.
+ *
+ * A quiz asks for its first clip the moment an answer lands, and waiting on
+ * the network right then is the whole of the delay: the sound arrives after
+ * the moment it belonged to. Warming the pool while the learner is still
+ * reading the first question moves that wait somewhere it costs nothing.
+ *
+ * Deliberately quiet and interruptible: anything already cached is skipped,
+ * failures are ignored, and `signal` lets a screen being left stop the rest.
+ */
+export async function prefetchAudio(
+  items: { term: string; reading?: string; mode?: Mode }[],
+  signal?: { aborted: boolean },
+): Promise<void> {
+  if (items.length === 0 || !(await audioEndpointReady())) return;
+
+  // Same word twice in a pool is one download.
+  const seen = new Set<string>();
+  const queue = items.filter((item) => {
+    const key = clipKey(item.term, item.reading ?? item.term, item.mode ?? "voice");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  // A handful at a time: enough to hide the latency, few enough that the
+  // clip actually being waited for is not stuck behind the queue.
+  const WIDTH = 4;
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < queue.length) {
+      if (signal?.aborted) return;
+      const item = queue[next++];
+      const reading = item.reading ?? item.term;
+      const mode = item.mode ?? "voice";
+      const key = clipKey(item.term, reading, mode);
+      try {
+        const cached = await getMeta<Blob>(key);
+        if (cached instanceof Blob && cached.size > 0) continue;
+        const blob = await fetchEndpointClip(item.term, reading, mode);
+        if (blob) await setMeta(key, blob);
+      } catch {
+        // A clip that will not come now can still come when it is played.
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(WIDTH, queue.length) }, worker));
+}
+
 /** Kept for callers that only want the device voice (e.g. reading a sentence). */
 export async function speak(text: string, options: { rate?: number } = {}): Promise<void> {
   await speakWithDevice(text, options.rate ?? 0.9);

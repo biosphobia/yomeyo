@@ -35,6 +35,12 @@ export interface Chunk {
   label: string;
   /** The particle this piece ends with, when it has one. */
   p?: string;
+  /**
+   * だ or です, when the piece ends with one. Shown as a small block of its
+   * own — うなぎ｜だ — because it is a word doing its own job ("it IS that"),
+   * not part of うなぎ. It is not a particle and never shares their colour.
+   */
+  tail?: string;
   /** True when the particle is fair to quiz (only one right answer). */
   q?: boolean;
   /** True for a piece bound to the NEXT one — it must stay just before it. */
@@ -55,7 +61,10 @@ export type DrillKind =
   | "build"
   | "meaning"
   | "who"
-  | "swap";
+  | "swap"
+  | "translate"
+  | "real"
+  | "listen";
 
 /**
  * Two sentences built from the same words, where only the little connecting
@@ -105,6 +114,16 @@ export interface GrammarUnit {
   particles: string[];
   sentences: Sentence[];
 }
+
+/**
+ * だ and です are not connecting words — they are the ending itself, saying
+ * that the thing before them is what the sentence is about. Shown separately
+ * so a beginner sees where "is" actually lives in a Japanese sentence.
+ */
+export const TAIL_JOB: Record<string, string> = {
+  だ: "says it IS that",
+  です: "says it IS that, politely",
+};
 
 /**
  * What each little connecting word does, shown under it. Looked up by the
@@ -173,12 +192,18 @@ const isWord = (t: string, r: string, g: string): Chunk => ({
   role: "engine",
   label: "what it's like",
 });
+/**
+ * A thing + だ. The だ is split off into its own block: "is" is a word in
+ * Japanese too, and hiding it inside うなぎだ is exactly what leaves beginners
+ * unable to find it later.
+ */
 const daWord = (t: string, r: string, g: string): Chunk => ({
   t,
   r,
   g,
   role: "engine",
   label: "what it is",
+  tail: t.endsWith("です") ? "です" : t.endsWith("だ") ? "だ" : undefined,
 });
 const obj = (t: string, r: string, g: string): Chunk => ({
   t,
@@ -247,7 +272,7 @@ export const GRAMMAR_UNITS: GrammarUnit[] = [
   {
     title: "The smallest sentence",
     tagline: "Someone or something, then what they do. That is already a whole sentence.",
-    drills: ["find-engine", "find-doer", "meaning", "build"],
+    drills: ["find-engine", "real", "find-doer", "meaning", "listen", "build"],
     particles: ["が"],
     sentences: [
       { chunks: [doer("さくらが", "sakura ga", "Sakura"), doWord("あるく", "aruku", "walks")], en: "Sakura walks." },
@@ -263,7 +288,7 @@ export const GRAMMAR_UNITS: GrammarUnit[] = [
   {
     title: "When nobody says who",
     tagline: "Japanese leaves out what's obvious. You fill it in from context.",
-    drills: ["find-doer", "who", "particle", "meaning", "build"],
+    drills: ["find-doer", "who", "particle", "meaning", "translate", "build"],
     particles: ["は", "が"],
     sentences: [
       {
@@ -311,7 +336,7 @@ export const GRAMMAR_UNITS: GrammarUnit[] = [
   {
     title: "Doing something to something",
     tagline: "を shows what the action lands on.",
-    drills: ["find-engine", "find-doer", "particle", "swap", "meaning", "build"],
+    drills: ["find-engine", "find-doer", "particle", "swap", "meaning", "listen", "build"],
     particles: ["を", "が", "は"],
     sentences: [
       {
@@ -354,7 +379,7 @@ export const GRAMMAR_UNITS: GrammarUnit[] = [
   {
     title: "Where and how",
     tagline: "に pins a spot. で says where or how it happens. へ points the way.",
-    drills: ["find-engine", "particle", "swap", "meaning", "build"],
+    drills: ["find-engine", "particle", "swap", "meaning", "translate", "build"],
     particles: ["に", "で", "へ", "を", "が"],
     sentences: [
       {
@@ -429,7 +454,7 @@ export const GRAMMAR_UNITS: GrammarUnit[] = [
   {
     title: "From and until",
     tagline: "から is where it starts. まで is how far it goes.",
-    drills: ["find-engine", "particle", "build"],
+    drills: ["find-engine", "particle", "real", "listen", "build"],
     particles: ["から", "まで", "に", "で"],
     sentences: [
       {
@@ -500,7 +525,7 @@ export const GRAMMAR_UNITS: GrammarUnit[] = [
   {
     title: "Describing words",
     tagline: "Words like あかい already contain “is”. Others borrow だ, or use な to stick on.",
-    drills: ["find-engine", "find-doer", "build"],
+    drills: ["find-engine", "find-doer", "translate", "build"],
     particles: ["が", "は"],
     sentences: [
       { chunks: [doer("そらが", "sora ga", "the sky"), isWord("あおい", "aoi", "is blue")], en: "The sky is blue." },
@@ -532,7 +557,7 @@ export const GRAMMAR_UNITS: GrammarUnit[] = [
   {
     title: "Describing with a whole sentence",
     tagline: "A little sentence can sit in front of a word and describe it.",
-    drills: ["find-engine", "find-doer", "meaning", "build"],
+    drills: ["find-engine", "find-doer", "meaning", "real", "build"],
     particles: ["が", "を"],
     sentences: [
       {
@@ -596,7 +621,7 @@ export const GRAMMAR_UNITS: GrammarUnit[] = [
   {
     title: "Joining two sentences",
     tagline: "The first one changes shape to hook on. The last word still finishes everything.",
-    drills: ["find-engine", "build"],
+    drills: ["find-engine", "meaning", "listen", "build"],
     particles: ["を", "に", "が"],
     sentences: [
       {

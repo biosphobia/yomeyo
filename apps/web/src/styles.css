@@ -783,32 +783,126 @@ button.gram-swap-line:hover {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
+  align-items: center;
   gap: 8px;
+  min-height: 72px;
+  padding: 10px;
+  border: 1px dashed #ffffff2e;
+  border-radius: 12px;
+  transition: border-color 0.12s, background 0.12s;
 }
 
-.gram-slot {
-  min-width: 72px;
-  min-height: 46px;
-  border: 1px dashed #ffffff2e;
+/* Lit up while a piece is over it, so a drag has somewhere it clearly lands. */
+.gram-slots.is-target {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* A draggable piece, in the tray or in the row. */
+.gram-piece {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 14px;
   border-radius: 10px;
+  background: var(--panel-2);
+  border: 1px solid #ffffff14;
+  font-size: 1.15rem;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.gram-piece.kind-particle,
+.gram-piece.kind-tail {
+  padding: 8px 10px;
+  font-size: 0.95rem;
+  background: color-mix(in srgb, var(--panel) 60%, black);
+}
+
+.gram-piece.kind-particle {
+  color: var(--accent);
+}
+
+/* だ / です: the ending, so it wears the ending's colour, not a link's. */
+.gram-piece.kind-tail {
+  color: var(--warn);
+}
+
+.gram-piece:hover {
+  border-color: var(--accent);
+}
+
+.gram-slots .gram-piece {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.gram-piece.is-dragging {
+  opacity: 0.3;
+}
+
+/* The copy that follows the finger. */
+.gram-piece-float {
+  position: fixed;
+  z-index: 60;
+  pointer-events: none;
+  cursor: grabbing;
+  opacity: 0.95;
+  transform: scale(1.06);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+/* Where the piece would land if it were let go now. */
+.gram-piece.gap-before {
+  box-shadow: -6px 0 0 -2px var(--accent);
+}
+
+.gram-piece.gap-after {
+  box-shadow: 6px 0 0 -2px var(--accent);
+}
+
+.gram-nudge {
+  text-align: center;
+  margin-top: 10px;
+  font-size: 0.9rem;
+}
+
+/* The answer for "nobody says who": a card, because it has to be tappable. */
+.gram-unsaid {
+  margin: 4px auto 0;
+  display: block;
+}
+
+.gram-unsaid .gram-chunk {
+  border-style: dashed;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1rem;
+}
+
+/* だ and です in a drawn sentence. */
+.gram-tail {
   display: inline-flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 6px 10px;
-  font-size: 1.15rem;
-}
-
-.gram-slot.particle {
-  min-width: 40px;
-  padding: 6px;
+  gap: 2px;
+  padding: 8px 9px;
+  border-radius: 10px;
+  background: rgba(229, 165, 75, 0.12);
+  border: 1px solid rgba(229, 165, 75, 0.5);
+  color: var(--warn);
   font-size: 0.95rem;
+  min-width: 34px;
 }
 
-.gram-slot.filled {
-  border-style: solid;
-  border-color: var(--accent);
-  background: var(--accent-soft);
+.gram-tail .gram-job {
+  font-size: 0.6rem;
+  color: var(--muted);
+  max-width: 90px;
+  text-align: center;
 }
 
 .gram-levels {

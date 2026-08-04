@@ -23,6 +23,7 @@ import { getAdvancedMode, setAdvancedMode } from "./prefs.js";
 import { levelState } from "./levels.js";
 import { changeUsername, ensureProfile, setProfilePhoto } from "./profile.js";
 import { toast } from "./toast.js";
+import { setUnlockAll, unlockAll, unlockAllNow } from "./unlock.js";
 import { getDeckConfig, resetDeckConfig, saveDeckConfig } from "./deck.js";
 import {
   importDictionary,
@@ -142,6 +143,7 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
     // account to carry them further.
     const profile = await ensureProfile().catch(() => null);
     const level = await levelState();
+    await unlockAll();
     const isAdmin = account
       ? await import("./library.js")
           .then((library) => library.adminState())
@@ -174,7 +176,18 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
           <input type="file" id="prof-photo" accept="image/*" style="display:none" />
         </div>
         <div class="msg" id="prof-msg"></div>
-      </details>`
+      </details>
+      ${
+        // The admin's key to every level, on this device only. Nobody else's
+        // progress moves, and turning it off puts each course back exactly
+        // where the learner had really got to.
+        isAdmin
+          ? `<label class="unseen-toggle" style="margin-top:10px">
+               <input type="checkbox" id="prof-unlock" ${unlockAllNow() ? "checked" : ""} />
+               Unlock every level on this device
+             </label>`
+          : ""
+      }`
       : "";
 
     const wireIdentity = (): void => {
@@ -195,6 +208,11 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
       });
       const photoInput = body.querySelector<HTMLInputElement>("#prof-photo");
       body.querySelector<HTMLButtonElement>("#prof-photo-pick")?.addEventListener("click", () => photoInput?.click());
+      body.querySelector<HTMLInputElement>("#prof-unlock")?.addEventListener("change", async (ev) => {
+        const on = (ev.target as HTMLInputElement).checked;
+        await setUnlockAll(on);
+        toast(on ? "Every level unlocked here" : "Levels back to your own progress");
+      });
       photoInput?.addEventListener("change", async () => {
         const file = photoInput.files?.[0];
         photoInput.value = "";

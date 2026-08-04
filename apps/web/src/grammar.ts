@@ -6,6 +6,7 @@ import {
   GRAMMAR_UNITS,
   PARTICLE_JOB,
   SWAP_PAIRS,
+  TAIL_JOB,
   type SwapPair,
   type Chunk,
   type DrillKind,
@@ -14,6 +15,7 @@ import {
   type Sentence,
 } from "./grammar-data.js";
 import { generateSentences } from "./grammar-ai.js";
+import { unlockAll, unlockAllNow } from "./unlock.js";
 import { N5_POINTS } from "./grammar-jlpt-n5.js";
 import { N4_POINTS } from "./grammar-jlpt-n4.js";
 import { N3_POINTS } from "./grammar-jlpt-n3.js";
@@ -46,6 +48,7 @@ let view: "practice" | "dictionary" = "practice";
 export async function renderGrammar(main: HTMLElement, isCurrent: () => boolean = () => true): Promise<void> {
   const progress = (await getMeta<GrammarProgress>(GAME_KEY)) ?? { unlocked: 0 };
   const romaji = (await getMeta<boolean>(ROMAJI_KEY)) ?? true;
+  await unlockAll();
   if (!isCurrent()) return;
 
   main.innerHTML = `
@@ -92,8 +95,10 @@ function renderUnits(
   });
 
   const list = body.querySelector<HTMLDivElement>("#gram-units")!;
+  const open = unlockAllNow();
   GRAMMAR_UNITS.forEach((unit, index) => {
-    const state = index < progress.unlocked ? "done" : index === progress.unlocked ? "next" : "locked";
+    const state =
+      index < progress.unlocked ? "done" : index === progress.unlocked || open ? "next" : "locked";
     const panel = document.createElement("div");
     panel.className = `card-panel gram-unit ${state}`;
     panel.innerHTML = `
@@ -140,6 +145,13 @@ function tasksFor(unit: GrammarUnit): Task[] {
         continue;
       }
       if (kind === "who" && !sentence.chunks.some((c) => c.role === "ghost")) continue;
+      // Swap tasks are built below, from their own pool of sentence pairs.
+      // Making one per unit sentence produced tasks with no pair to show.
+      if (kind === "swap") continue;
+      // Three sentences to choose between, or it is not a choice.
+      if ((kind === "translate" || kind === "listen") && unit.sentences.length < 3) continue;
+      // Moving the ending needs something for it to move past.
+      if (kind === "real" && sentence.chunks.filter((c) => c.role !== "ghost").length < 2) continue;
       if (kind === "build") {
         // Particles count as pieces of their own, so even さくら｜が｜あるく
         // is a three-piece build.
@@ -163,32 +175,93 @@ function tasksFor(unit: GrammarUnit): Task[] {
     if (!byKind.has(task.kind)) byKind.set(task.kind, []);
     byKind.get(task.kind)!.push(task);
   }
-  return unit.drills.flatMap((kind) => shuffle(byKind.get(kind) ?? []));
+  // A few of each, not every sentence through every drill: a unit that runs
+  // to forty questions gets abandoned halfway whatever is in it.
+  const PER_KIND = 4;
+  return unit.drills.flatMap((kind) => shuffle(byKind.get(kind) ?? []).slice(0, PER_KIND));
 }
 
 /**
- * What the learner is asked, in ordinary words. The find-the-last-word
- * prompt borrows the wording of that sentence's own label ("what happens",
- * "what it is", "what it's like") so the question and the answer agree.
+ * The ending's meaning, bent into something a question can be built around.
+ *
+ * The doer question used to read "Who or what is doing it?", which is a lie
+ * about half the sentences in the course: the water is not *doing* being
+ * cold. Asking "Who or what is cold?" instead is both true and answerable
+ * without knowing a word of grammar.
  */
+function endingAsked(sentence: Sentence): string {
+  const engine = sentence.chunks.find((c) => c.role === "engine");
+  const gloss = (engine?.g ?? "").trim();
+  return gloss ? thirdPerson(gloss) : "is doing it";
+}
+
+/** Irregulars, and the ones that never take an -s at all. */
+const THIRD_PERSON: Record<string, string> = {
+  am: "is",
+  are: "is",
+  were: "was",
+  have: "has",
+  do: "does",
+  is: "is",
+  was: "was",
+  has: "has",
+  does: "does",
+  did: "did",
+  will: "will",
+  can: "can",
+  could: "could",
+  would: "would",
+  should: "should",
+  must: "must",
+  might: "might",
+};
+
+/**
+ * A meaning written to read in its own sentence, bent to read in a question.
+ *
+ * The glosses say what the sentence says — "I buy", "we eat" — so lifting one
+ * straight into "Who or what …?" produces "Who or what buy?". Only the first
+ * word changes, and only when it plainly needs to.
+ */
+function thirdPerson(gloss: string): string {
+  const parts = gloss.split(" ");
+  const word = parts[0];
+  const lower = word.toLowerCase();
+  if (lower in THIRD_PERSON) {
+    parts[0] = THIRD_PERSON[lower];
+  } else if (/^[a-z]+$/.test(lower) && !lower.endsWith("s")) {
+    parts[0] = /(?:ch|sh|x|z|o)$/.test(lower)
+      ? `${word}es`
+      : /[^aeiou]y$/.test(lower)
+        ? `${word.slice(0, -1)}ies`
+        : `${word}s`;
+  }
+  return parts.join(" ");
+}
+
+/** What the learner is asked, in ordinary words — never grammar words. */
 function promptFor(task: Task): string {
   switch (task.kind) {
-    case "find-engine": {
-      const last = task.sentence.chunks.find((c) => c.role === "engine");
-      return `Which word tells you ${last?.label ?? "what happens"}?`;
-    }
+    case "find-engine":
+      return "These are jumbled. Which one has to come last?";
     case "find-doer":
-      return "Who or what is doing it?";
+      return `Who or what ${endingAsked(task.sentence)}?`;
     case "particle":
       return "Which little word belongs here?";
     case "meaning":
       return "What does this say?";
+    case "translate":
+      return "Which one says this?";
+    case "real":
+      return "One of these is a real sentence. Which?";
+    case "listen":
+      return "Listen. Which one was it?";
     case "who":
       return "Nobody said who. Who does it mean here?";
     case "swap":
       return "Same words, different little words. Which one means this?";
     default:
-      return "Put the sentence back together. Whatever describes a word goes just before it, and the ending comes last.";
+      return "Build this sentence.";
   }
 }
 
@@ -216,6 +289,8 @@ async function runUnit(
 
   const backToUnits = (): void => {
     active = false;
+    for (const undo of cleanups) undo();
+    cleanups = [];
     void renderGrammar(main, isCurrent);
   };
 
@@ -240,7 +315,14 @@ async function runUnit(
     body.querySelector("#gram-back")!.addEventListener("click", backToUnits);
   };
 
+  // A drill that reaches outside its own markup — the build drill listens on
+  // the window so a finger leaving the tray is still heard — leaves its
+  // undo here, and the next question runs it before drawing.
+  let cleanups: (() => void)[] = [];
+
   const draw = (): void => {
+    for (const undo of cleanups) undo();
+    cleanups = [];
     const task = queue[0];
     const percent = Math.round((done / total) * 100);
     const showRomaji = romaji;
@@ -257,7 +339,8 @@ async function runUnit(
         ${
           // A swap task carries its own target sentence, shown with the
           // choices; the placeholder sentence must not appear above them.
-          task.kind === "swap" || task.kind === "meaning"
+          // The others are questions the English would answer outright.
+          task.kind === "swap" || task.kind === "meaning" || task.kind === "listen"
             ? ""
             : `<div class="gram-en glosses">“${escapeHtml(task.sentence.en)}”</div>`
         }
@@ -325,47 +408,191 @@ async function runUnit(
     const name = (chunk: Chunk): string =>
       `<b lang="ja">${escapeHtml(chunk.t || "—")}</b>${chunk.g ? ` (${escapeHtml(chunk.g)})` : ""}`;
 
-    if (task.kind === "find-engine" || task.kind === "find-doer") {
-      const wantGhost = task.kind === "find-doer" && task.sentence.chunks.some((c) => c.role === "ghost");
-      const wanted = task.kind === "find-engine" ? "engine" : "doer";
-      train.innerHTML = task.sentence.chunks
-        .filter((c) => c.role !== "ghost")
-        .map((chunk, i) => `<button class="gram-car" data-i="${i}">${carRow(chunk, showRomaji)}</button>`)
-        .join("");
-      if (task.kind === "find-doer") {
-        // The hidden-doer button appears once hiding is on the table at all,
-        // so its presence never gives the answer away.
-        if (unitIndex >= 1) {
-          extra.innerHTML = `<button class="secondary gram-ghost-btn" id="gram-ghost">It's hidden (∅)</button>`;
-          body.querySelector("#gram-ghost")!.addEventListener("click", () => {
-            if (settled) return;
-            const ghostChunk = task.sentence.chunks.find((c) => c.role === "ghost");
-            const namedDoer = task.sentence.chunks.find((c) => c.role === "doer");
-            if (wantGhost) right({ answer: ghostChunk });
-            else wrong("someone <i>is</i> named here — look again", { answer: namedDoer });
-          });
-        }
-      }
+    /**
+     * Which word has to come last?
+     *
+     * Shown in the sentence's own order this was no question at all: the
+     * ending is always last, so tapping the last card won every time without
+     * reading anything. Jumbled, the same question is the rule itself —
+     * find the word that says what happens, because that is the one Japanese
+     * puts at the end.
+     */
+    if (task.kind === "find-engine") {
       const visible = task.sentence.chunks.filter((c) => c.role !== "ghost");
+      const shown = shuffle(visible.map((chunk, i) => ({ chunk, i })));
+      train.innerHTML = shown
+        .map(({ i }) => `<button class="gram-car" data-i="${i}">${carRow(visible[i], showRomaji)}</button>`)
+        .join("");
+      const answer = visible.find((c) => c.role === "engine");
       for (const button of train.querySelectorAll<HTMLButtonElement>("button.gram-car")) {
         button.addEventListener("click", () => {
           if (settled) return;
           const chunk = visible[Number(button.dataset.i)];
-          const hit = task.kind === "find-doer" ? chunk.role === "doer" && !wantGhost : chunk.role === wanted;
-          const answer = task.sentence.chunks.find((c) =>
-            wantGhost ? c.role === "ghost" : c.role === wanted,
-          );
-          if (hit) {
-            right({ answer: chunk });
-          } else if (task.kind === "find-doer" && wantGhost) {
-            wrong("nobody is named in this one — it's left unsaid", { answer, mistake: chunk });
-          } else {
+          if (chunk.role === "engine") right({ answer: chunk });
+          else {
             wrong(
-              `${name(chunk)} is ${escapeHtml(chunk.label)}.` +
-                (answer ? ` It's ${name(answer)}.` : ""),
+              `${name(chunk)} is ${escapeHtml(chunk.label)}. The last word is ${name(answer!)}.`,
               { answer, mistake: chunk },
             );
           }
+        });
+      }
+      return;
+    }
+
+    /**
+     * Who or what is the ending about?
+     *
+     * When nobody says who, the answer is an extra card reading "not said" —
+     * a card you can actually tap. It used to be a dashed word in the
+     * sentence that did nothing when pressed, with the real answer hiding in
+     * a button underneath, which is a puzzle about the interface rather than
+     * about Japanese. The card is offered from the unit where leaving the
+     * doer out is first taught onwards, so its presence gives nothing away.
+     */
+    if (task.kind === "find-doer") {
+      const ghostChunk = task.sentence.chunks.find((c) => c.role === "ghost");
+      const visible = task.sentence.chunks.filter((c) => c.role !== "ghost");
+      train.innerHTML = visible
+        .map((chunk, i) => `<button class="gram-car" data-i="${i}">${carRow(chunk, showRomaji)}</button>`)
+        .join("");
+      if (unitIndex >= 1) {
+        extra.innerHTML = `
+          <button class="gram-car gram-unsaid" id="gram-ghost">
+            <span class="gram-car-row"><span class="gram-chunk role-ghost">
+              <span>not said</span><span class="gram-mean">it isn't in the sentence</span>
+            </span></span>
+          </button>`;
+        body.querySelector("#gram-ghost")!.addEventListener("click", () => {
+          if (settled) return;
+          if (ghostChunk) {
+            reveal(
+              false,
+              `<span class="ok-text">✓ nobody says who — here it means “${escapeHtml(ghostChunk.g)}”.</span>`,
+              { answer: ghostChunk },
+            );
+          } else {
+            const named = task.sentence.chunks.find((c) => c.role === "doer");
+            wrong(`it is said here — it's ${name(named!)}.`, { answer: named });
+          }
+        });
+      }
+      for (const button of train.querySelectorAll<HTMLButtonElement>("button.gram-car")) {
+        button.addEventListener("click", () => {
+          if (settled) return;
+          const chunk = visible[Number(button.dataset.i)];
+          if (!ghostChunk && chunk.role === "doer") {
+            right({ answer: chunk });
+          } else if (ghostChunk) {
+            wrong(
+              `${name(chunk)} is ${escapeHtml(chunk.label)}. Nobody says who at all here — ` +
+                `Japanese leaves it out when it's obvious, and this one means “${escapeHtml(ghostChunk.g)}”.`,
+              { answer: ghostChunk, mistake: chunk },
+            );
+          } else {
+            const named = task.sentence.chunks.find((c) => c.role === "doer");
+            wrong(
+              `${name(chunk)} is ${escapeHtml(chunk.label)}.` + (named ? ` It's ${name(named)}.` : ""),
+              { answer: named, mistake: chunk },
+            );
+          }
+        });
+      }
+      return;
+    }
+
+    /**
+     * One of these is a real sentence — the other has its ending somewhere
+     * else. Nothing else changes, so the only way to tell them apart is the
+     * rule the whole course rests on.
+     */
+    if (task.kind === "real") {
+      const visible = task.sentence.chunks.filter((c) => c.role !== "ghost");
+      const real = visible.map((c) => c.t).join(" ");
+      // Move the ending out of last place; where it lands does not matter,
+      // only that it no longer ends the sentence.
+      const ending = visible[visible.length - 1];
+      const rest = visible.slice(0, -1).map((c) => c.t);
+      const broken = [ending.t, ...rest].join(" ");
+      const lines = shuffle([
+        { text: real, ok: true },
+        { text: broken, ok: false },
+      ]);
+      train.innerHTML = `<div class="gram-swap">${lines
+        .map(
+          (line) =>
+            `<button class="gram-swap-line" data-ok="${line.ok}">
+               <span lang="ja">${escapeHtml(line.text)}</span>
+             </button>`,
+        )
+        .join("")}</div>`;
+      for (const button of train.querySelectorAll<HTMLButtonElement>(".gram-swap-line")) {
+        button.addEventListener("click", () => {
+          if (settled) return;
+          if (button.dataset.ok === "true") {
+            right({ answer: ending });
+          } else {
+            wrong(
+              `${name(ending)} says ${escapeHtml(ending.label)}, so it has to come last.`,
+              { answer: ending },
+            );
+          }
+        });
+      }
+      return;
+    }
+
+    /**
+     * English first, Japanese second: the direction you need to speak in,
+     * and the one a course of tap-the-right-word never practises.
+     */
+    if (task.kind === "translate") {
+      const others = unit.sentences.filter((sn) => sn !== task.sentence);
+      const options = shuffle([task.sentence, ...shuffle(others).slice(0, 2)]);
+      train.innerHTML = `<div class="gram-swap">${options
+        .map(
+          (sn) =>
+            `<button class="gram-swap-line" data-en="${escapeHtml(sn.en)}">
+               <span lang="ja">${escapeHtml(spoken(sn))}</span>
+               ${showRomaji ? `<span class="gram-romaji">${escapeHtml(romajiOf(sn))}</span>` : ""}
+             </button>`,
+        )
+        .join("")}</div>`;
+      for (const button of train.querySelectorAll<HTMLButtonElement>(".gram-swap-line")) {
+        button.addEventListener("click", () => {
+          if (settled) return;
+          if (button.dataset.en === task.sentence.en) right();
+          else wrong(`“${escapeHtml(task.sentence.en)}” is the one below.`);
+        });
+      }
+      return;
+    }
+
+    /** Hear it, then pick it out. Reading is not the only way in. */
+    if (task.kind === "listen") {
+      const others = unit.sentences.filter((sn) => sn !== task.sentence);
+      const options = shuffle([task.sentence, ...shuffle(others).slice(0, 2)]);
+      const say = (): void => void speak(spoken(task.sentence), { rate: 0.8 }).catch(() => undefined);
+      extra.innerHTML = `<div class="row-actions" style="justify-content:center"><button id="gram-hear">🔊 Play again</button></div>`;
+      extra.querySelector("#gram-hear")!.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        say();
+      });
+      train.innerHTML = `<div class="gram-swap">${options
+        .map(
+          (sn) =>
+            `<button class="gram-swap-line" data-en="${escapeHtml(sn.en)}">
+               <span lang="ja">${escapeHtml(spoken(sn))}</span>
+               <span class="gram-mean">${escapeHtml(sn.en)}</span>
+             </button>`,
+        )
+        .join("")}</div>`;
+      say();
+      for (const button of train.querySelectorAll<HTMLButtonElement>(".gram-swap-line")) {
+        button.addEventListener("click", () => {
+          if (settled) return;
+          if (button.dataset.en === task.sentence.en) right();
+          else wrong(`it was <b lang="ja">${escapeHtml(spoken(task.sentence))}</b>.`);
         });
       }
       return;
@@ -507,15 +734,20 @@ async function runUnit(
       return;
     }
 
-    // build: tap the scrambled pieces into a working sentence. The logical
-    // particles carry the meaning, not the order — so ANY arrangement of
-    // cars is right, as long as each word keeps its own coupling behind it,
-    // a glued describing word stays just before its car, and the engine
-    // comes last. That freedom is the lesson.
+    /**
+     * Build the sentence by dragging its pieces into place.
+     *
+     * The little connecting words carry the roles, not the positions, so any
+     * order of the noun pieces is right — as long as each word keeps its own
+     * connector directly behind it, a describing word stays immediately
+     * before what it describes, and the ending comes last. That freedom is
+     * the lesson, so the arrangement is judged when it is finished rather
+     * than one tap at a time.
+     */
     interface BuildPiece {
       text: string;
       r: string;
-      particle: boolean;
+      kind: "word" | "particle" | "tail";
     }
     interface BuildCar {
       pieces: BuildPiece[];
@@ -525,13 +757,11 @@ async function runUnit(
     let carry: BuildPiece[] = [];
     for (const chunk of task.sentence.chunks.filter((c) => c.role !== "ghost")) {
       const s = splitChunk(chunk);
-      const own: BuildPiece[] =
-        s.particle !== undefined
-          ? [
-              { text: s.word, r: s.wordR, particle: false },
-              { text: s.particle, r: s.particleR ?? "", particle: true },
-            ]
-          : [{ text: chunk.t, r: chunk.r, particle: false }];
+      const own: BuildPiece[] = [{ text: s.word, r: s.wordR, kind: "word" }];
+      if (s.particle !== undefined) own.push({ text: s.particle, r: s.particleR ?? "", kind: "particle" });
+      // だ is a piece of its own here too, so the learner puts "is" in place
+      // themselves rather than finding it pre-attached to a noun.
+      if (s.tail !== undefined) own.push({ text: s.tail, r: s.tailR ?? "", kind: "tail" });
       if (chunk.glue) {
         carry.push(...own); // rides with the car it describes
         continue;
@@ -541,74 +771,185 @@ async function runUnit(
     }
     const allPieces = cars.flatMap((c) => c.pieces);
 
-    let carAt: BuildCar | null = null; // the car being assembled
-    let offset = 0;
-    let placedCount = 0;
-    let missed = false;
-    const remaining = new Set(cars);
-
     const pieceHtml = (piece: BuildPiece): string =>
       `<span lang="ja">${escapeHtml(piece.text)}</span>${
         showRomaji ? `<span class="gram-romaji">${escapeHtml(piece.r)}</span>` : ""
       }`;
 
-    train.innerHTML = `<div class="gram-slots" id="gram-answer"><span class="glosses" id="gram-answer-hint">Your sentence builds here.</span></div>`;
+    train.innerHTML = `<div class="gram-slots" id="gram-answer"><span class="glosses" id="gram-answer-hint">Drag the pieces up here.</span></div>`;
     const answer = train.querySelector<HTMLDivElement>("#gram-answer")!;
-    extra.innerHTML = `<div class="gram-pieces">${shuffle(allPieces.map((c, i) => ({ c, i })))
-      .map(
-        ({ c, i }) =>
-          `<button class="${c.particle ? "gram-particle" : "gram-chunk"}" data-i="${i}">${pieceHtml(c)}</button>`,
-      )
-      .join("")}</div>`;
+    extra.innerHTML = `<div class="gram-pieces" id="gram-tray"></div><div class="gram-nudge" id="gram-nudge"></div>`;
+    const tray = extra.querySelector<HTMLDivElement>("#gram-tray")!;
+    const nudge = extra.querySelector<HTMLDivElement>("#gram-nudge")!;
 
-    /** Which car would this text start, among those allowed to come next? */
-    const carStarting = (text: string): BuildCar | null => {
-      const open = [...remaining].filter((c) => !c.engine || remaining.size === 1);
-      return open.find((c) => c.pieces[0].text === text) ?? null;
+    const chipFor = (piece: BuildPiece): HTMLElement => {
+      const chip = document.createElement("div");
+      chip.className = `gram-piece kind-${piece.kind}`;
+      chip.innerHTML = pieceHtml(piece);
+      chip.dataset.i = String(allPieces.indexOf(piece));
+      return chip;
+    };
+    for (const piece of shuffle([...allPieces])) tray.appendChild(chipFor(piece));
+
+    /** The pieces currently in the answer row, in the order they sit. */
+    const built = (): BuildPiece[] =>
+      [...answer.querySelectorAll<HTMLElement>(".gram-piece")].map((el) => allPieces[Number(el.dataset.i)]);
+
+    /**
+     * Is this arrangement a real sentence? Each car has to appear whole and
+     * in its own order, and the ending's car has to be the last one.
+     */
+    const check = (order: BuildPiece[]): string | null => {
+      let at = 0;
+      const used = new Set<BuildCar>();
+      const seen: BuildCar[] = [];
+      while (at < order.length) {
+        const car = cars.find((c) => !used.has(c) && c.pieces.every((p, k) => order[at + k] === p));
+        if (!car) {
+          const piece = order[at];
+          if (piece.kind === "particle") return `<b lang="ja">${escapeHtml(piece.text)}</b> goes straight after the word it belongs to.`;
+          if (piece.kind === "tail") return `<b lang="ja">${escapeHtml(piece.text)}</b> goes straight after the thing it says you are.`;
+          return "Something is in the wrong place — a word and its little word travel together.";
+        }
+        used.add(car);
+        seen.push(car);
+        at += car.pieces.length;
+      }
+      if (!seen[seen.length - 1].engine) return "The ending has to come last.";
+      return null;
     };
 
-    for (const button of extra.querySelectorAll<HTMLButtonElement>("[data-i]")) {
-      button.addEventListener("click", () => {
-        if (settled) return;
-        const piece = allPieces[Number(button.dataset.i)];
-        let target: { car: BuildCar; piece: BuildPiece } | null = null;
-        if (carAt) {
-          if (carAt.pieces[offset].text === piece.text) target = { car: carAt, piece: carAt.pieces[offset] };
-        } else {
-          const starts = carStarting(piece.text);
-          if (starts) target = { car: starts, piece: starts.pieces[0] };
-        }
-        if (!target) {
-          missed = true;
-          button.classList.add("wrong");
-          setTimeout(() => button.classList.remove("wrong"), 500);
-          return;
-        }
+    let missed = false;
+    const finishIfDone = (): void => {
+      if (answer.querySelectorAll(".gram-piece").length !== allPieces.length) return;
+      const problem = check(built());
+      if (!problem) {
+        if (missed) wrong("rebuilt, after a wrong turn");
+        else right();
+        return;
+      }
+      // Not settled: the pieces are all there, so say what is off and let
+      // them move one. Fixing your own sentence teaches more than being told.
+      missed = true;
+      nudge.innerHTML = `<span class="err-text">${problem}</span>`;
+    };
 
-        if (!carAt) {
-          carAt = target.car;
-          offset = 0;
-          remaining.delete(carAt);
-        }
-        answer.querySelector("#gram-answer-hint")?.remove();
-        const placed = document.createElement("span");
-        placed.className = `gram-slot filled${target.piece.particle ? " particle" : ""}`;
-        placed.innerHTML = pieceHtml(target.piece);
-        answer.appendChild(placed);
-        button.disabled = true;
-        button.style.visibility = "hidden";
-        offset++;
-        placedCount++;
-        if (offset >= carAt.pieces.length) {
-          carAt = null;
-          offset = 0;
-        }
-        if (placedCount === allPieces.length) {
-          if (missed) wrong("rebuilt, with wrong turns");
-          else right();
-        }
-      });
+    // ---- dragging ----
+    //
+    // Written on pointer events rather than HTML drag-and-drop, which does
+    // not exist on a touchscreen. A press that never moves counts as a tap
+    // and sends the piece to the end of the row, so the drill still works
+    // one-handed, with a keyboard, or for anyone who would rather not drag.
+
+    let drag: {
+      chip: HTMLElement;
+      float: HTMLElement;
+      from: HTMLElement;
+      moved: boolean;
+      dx: number;
+      dy: number;
+    } | null = null;
+
+    /** Where in the row a drop at this x belongs. */
+    const dropIndex = (x: number): number => {
+      const chips = [...answer.querySelectorAll<HTMLElement>(".gram-piece")].filter((c) => c !== drag?.chip);
+      for (let i = 0; i < chips.length; i++) {
+        const box = chips[i].getBoundingClientRect();
+        if (x < box.left + box.width / 2) return i;
+      }
+      return chips.length;
+    };
+
+    const showGap = (index: number | null): void => {
+      answer.querySelectorAll(".gram-piece").forEach((c) => c.classList.remove("gap-before", "gap-after"));
+      if (index === null) return;
+      const chips = [...answer.querySelectorAll<HTMLElement>(".gram-piece")].filter((c) => c !== drag?.chip);
+      if (chips.length === 0) return;
+      if (index >= chips.length) chips[chips.length - 1].classList.add("gap-after");
+      else chips[index].classList.add("gap-before");
+    };
+
+    const place = (chip: HTMLElement, index: number): void => {
+      const chips = [...answer.querySelectorAll<HTMLElement>(".gram-piece")].filter((c) => c !== chip);
+      answer.querySelector("#gram-answer-hint")?.remove();
+      if (index >= chips.length) answer.appendChild(chip);
+      else answer.insertBefore(chip, chips[index]);
+      nudge.textContent = "";
+      finishIfDone();
+    };
+
+    const onDown = (ev: PointerEvent): void => {
+      if (settled) return;
+      const chip = (ev.target as HTMLElement).closest<HTMLElement>(".gram-piece");
+      if (!chip) return;
+      ev.preventDefault();
+      const box = chip.getBoundingClientRect();
+      const float = chip.cloneNode(true) as HTMLElement;
+      float.className = `${chip.className} gram-piece-float`;
+      float.style.width = `${box.width}px`;
+      float.style.left = `${box.left}px`;
+      float.style.top = `${box.top}px`;
+      document.body.appendChild(float);
+      chip.classList.add("is-dragging");
+      drag = {
+        chip,
+        float,
+        from: chip.parentElement as HTMLElement,
+        moved: false,
+        dx: ev.clientX - box.left,
+        dy: ev.clientY - box.top,
+      };
+      (ev.target as HTMLElement).setPointerCapture?.(ev.pointerId);
+    };
+
+    const onMove = (ev: PointerEvent): void => {
+      if (!drag) return;
+      ev.preventDefault();
+      drag.moved ||= true;
+      drag.float.style.left = `${ev.clientX - drag.dx}px`;
+      drag.float.style.top = `${ev.clientY - drag.dy}px`;
+      const box = answer.getBoundingClientRect();
+      const over = ev.clientY > box.top - 40 && ev.clientY < box.bottom + 40;
+      answer.classList.toggle("is-target", over);
+      showGap(over ? dropIndex(ev.clientX) : null);
+    };
+
+    const onUp = (ev: PointerEvent): void => {
+      if (!drag) return;
+      const { chip, float, from, moved } = drag;
+      const box = answer.getBoundingClientRect();
+      const over = ev.clientY > box.top - 40 && ev.clientY < box.bottom + 40;
+      const index = dropIndex(ev.clientX);
+      drag = null;
+      float.remove();
+      chip.classList.remove("is-dragging");
+      answer.classList.remove("is-target");
+      showGap(null);
+      if (!moved) {
+        // A tap: into the row if it came from the tray, back out if not.
+        if (from === tray) place(chip, answer.querySelectorAll(".gram-piece").length);
+        else tray.appendChild(chip);
+        return;
+      }
+      if (over) place(chip, index);
+      else if (from === answer) tray.appendChild(chip);
+    };
+
+    for (const box of [tray, answer]) {
+      box.addEventListener("pointerdown", onDown);
     }
+    // On the window, so a finger that leaves the tray mid-drag is still heard.
+    const moveHandler = onMove as EventListener;
+    const upHandler = onUp as EventListener;
+    window.addEventListener("pointermove", moveHandler, { passive: false });
+    window.addEventListener("pointerup", upHandler);
+    window.addEventListener("pointercancel", upHandler);
+    cleanups.push(() => {
+      window.removeEventListener("pointermove", moveHandler);
+      window.removeEventListener("pointerup", upHandler);
+      window.removeEventListener("pointercancel", upHandler);
+      drag?.float.remove();
+    });
   };
 
   draw();
@@ -622,16 +963,24 @@ async function runUnit(
  * belongs to — ペン ｜ が ｜ あかい — so the sentence reads as pieces
  * joined by connectors, which is what it is.
  */
-function splitChunk(chunk: Chunk): { word: string; wordR: string; particle?: string; particleR?: string } {
-  if (!chunk.p || !chunk.t.endsWith(chunk.p)) return { word: chunk.t, wordR: chunk.r };
-  const word = chunk.t.slice(0, chunk.t.length - chunk.p.length);
+function splitChunk(chunk: Chunk): {
+  word: string;
+  wordR: string;
+  particle?: string;
+  particleR?: string;
+  /** だ or です, split off the same way — it is a word, not a word-ending. */
+  tail?: string;
+  tailR?: string;
+} {
+  const cut = chunk.p ?? chunk.tail;
+  if (!cut || !chunk.t.endsWith(cut)) return { word: chunk.t, wordR: chunk.r };
+  const word = chunk.t.slice(0, chunk.t.length - cut.length);
   const space = chunk.r.lastIndexOf(" ");
-  return {
-    word,
-    wordR: space > 0 ? chunk.r.slice(0, space) : chunk.r,
-    particle: chunk.p,
-    particleR: space > 0 ? chunk.r.slice(space + 1) : "",
-  };
+  const wordR = space > 0 ? chunk.r.slice(0, space) : chunk.r;
+  const cutR = space > 0 ? chunk.r.slice(space + 1) : "";
+  return chunk.p
+    ? { word, wordR, particle: cut, particleR: cutR }
+    : { word, wordR, tail: cut, tailR: cutR };
 }
 
 /**
@@ -682,7 +1031,7 @@ function carRow(chunk: Chunk, showRomaji: boolean, role?: string, open = false):
       open ? "nobody said it" : undefined,
     )}</span>`;
   }
-  const { word, wordR, particle, particleR } = splitChunk(chunk);
+  const { word, wordR, particle, particleR, tail, tailR } = splitChunk(chunk);
   return `<span class="gram-car-row">${wordBlock(word, wordR, showRomaji, role, open ? chunk.g : undefined)}${
     particle !== undefined
       ? particleBlock(
@@ -694,7 +1043,17 @@ function carRow(chunk: Chunk, showRomaji: boolean, role?: string, open = false):
           open ? PARTICLE_JOB[particle] : undefined,
         )
       : ""
-  }</span>`;
+  }${tail !== undefined ? tailBlock(tail, tailR ?? "", showRomaji, open ? TAIL_JOB[tail] : undefined) : ""}</span>`;
+}
+
+/**
+ * だ or です. Drawn like a connector because it is small and rides behind a
+ * word, but never in a connector's colour: it is the ending, not a link.
+ */
+function tailBlock(text: string, romaji: string, showRomaji: boolean, job?: string): string {
+  return `<span class="gram-tail"><span lang="ja">${escapeHtml(text)}</span>${
+    showRomaji ? `<span class="gram-romaji">${escapeHtml(romaji)}</span>` : ""
+  }${job ? `<span class="gram-job">${escapeHtml(job)}</span>` : ""}</span>`;
 }
 
 /** A piece in the opened-up sentence: meaning under the word, job under that. */
@@ -710,6 +1069,13 @@ function spoken(sentence: Sentence): string {
     .filter((c) => c.role !== "ghost")
     .map((c) => c.t)
     .join("");
+}
+
+function romajiOf(sentence: Sentence): string {
+  return sentence.chunks
+    .filter((c) => c.role !== "ghost")
+    .map((c) => c.r)
+    .join(" ");
 }
 
 // ---------------- the dictionary ----------------

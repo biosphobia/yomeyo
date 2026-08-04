@@ -1,7 +1,8 @@
 import { getMeta, setMeta } from "./db.js";
-import { playKana, playWord } from "./audio.js";
+import { playKana, playWord, prefetchAudio } from "./audio.js";
 import { cheerBox, preloadReactions, showReaction } from "./feedback.js";
 import { recordQuestEvents } from "./quests.js";
+import { unlockAll, unlockAllNow } from "./unlock.js";
 import { startGameSession, type GameSession } from "./kana-stats.js";
 import { assetUrl, loadDictionary } from "./store.js";
 import { KANA_GROUPS, isCorrect, type KanaEntry, type KanaGroup } from "./kana-data.js";
@@ -125,6 +126,7 @@ function primaryRomaji(kana: string): string {
 
 export async function renderKana(main: HTMLElement, isCurrent: () => boolean = () => true): Promise<void> {
   const game = await getGame();
+  await unlockAll();
   if (!isCurrent()) return;
 
   main.innerHTML = `
@@ -179,7 +181,30 @@ function renderSelection(
       <button id="kana-start" disabled>Start</button>
       <span class="glosses" id="kana-start-note"></span>
     </div>
+    ${
+      // The admin's key: jump straight to any level, to see one without
+      // playing through everything below it first.
+      unlockAllNow()
+        ? `<div class="gram-levels" id="kana-jump">${LEVELS.map(
+            (lv, i) => `<button class="gram-level-chip" data-level="${i}">${i}<span class="gram-level-count">${lv.name}</span></button>`,
+          ).join("")}</div>`
+        : ""
+    }
   `;
+
+  for (const chip of body.querySelectorAll<HTMLButtonElement>("#kana-jump button")) {
+    chip.addEventListener("click", async () => {
+      if (chosen.size === 0) return;
+      const level = Number(chip.dataset.level);
+      const next: GameState =
+        game && sameGroups(game.groups, chosen)
+          ? { ...game, skipLearn }
+          : { groups: [...chosen].sort(), unlocked: level, health: MAX_HEALTH, skipLearn };
+      next.unlocked = Math.max(next.unlocked, level);
+      await saveGame(next);
+      void runLevel(body, next, level, main, isCurrent);
+    });
+  }
 
   body.querySelector<HTMLInputElement>("#kana-skip")!.addEventListener("change", (ev) => {
     skipLearn = (ev.target as HTMLInputElement).checked;
@@ -334,6 +359,19 @@ async function runLevel(
   let health = game.health;
   let missedAny = false;
   let active = true; // cleared on quit, so a pending auto-advance dies quietly
+
+  // Every sound this level will need, fetched now rather than at the moment
+  // it is wanted: an answer lands and the clip has to play immediately, and
+  // a download started right then always arrives after the moment it was for.
+  const warming = { aborted: false };
+  void prefetchAudio(
+    items.map((item) =>
+      item.entry
+        ? { term: item.kana, reading: item.kana, mode: "tts" as const }
+        : { term: item.kana, reading: item.kana },
+    ),
+    warming,
+  );
   let timer: ReturnType<typeof setInterval> | null = null;
   bestStreak = (await getMeta<number>(BEST_STREAK_KEY)) ?? bestStreak;
 
@@ -479,6 +517,7 @@ async function runLevel(
 
     body.querySelector<HTMLButtonElement>("#kana-quit")!.addEventListener("click", () => {
       active = false;
+      warming.aborted = true;
       stopTimer();
       session?.end("quit");
       renderSelection(body, game, main, isCurrent);
