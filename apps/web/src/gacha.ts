@@ -120,10 +120,25 @@ export async function renderGacha(main: HTMLElement, isCurrent: () => boolean = 
   void import("./gacha-scene.js").then((mod) => mod.warmUpCutscene()).catch(() => undefined);
 
   drawCollection(main, table, have, wearing, () => void renderGacha(main, isCurrent));
-  main.querySelector<HTMLButtonElement>("#gacha-open")?.addEventListener("click", () => {
-    void pull(main, table, isCurrent);
-  });
+  const open = main.querySelector<HTMLButtonElement>("#gacha-open");
+  if (open) {
+    open.disabled = open.disabled || opening;
+    open.addEventListener("click", () => {
+      if (opening) return;
+      void pull(main, table, isCurrent);
+    });
+  }
 }
+
+/**
+ * One crate at a time.
+ *
+ * A pull spends yennies and starts a film, and the button sits under the
+ * cursor for the fifteen seconds that film runs. Without this, leaning on it
+ * charges for a dozen crates and leaves a dozen half-built scenes fighting
+ * over one canvas.
+ */
+let opening = false;
 
 // ---------------- the collection ----------------
 
@@ -183,6 +198,18 @@ function prizeFace(prize: Prize): string {
 // ---------------- opening one ----------------
 
 async function pull(main: HTMLElement, table: PrizeTable, isCurrent: () => boolean): Promise<void> {
+  if (opening) return;
+  opening = true;
+  const openButton = main.querySelector<HTMLButtonElement>("#gacha-open");
+  if (openButton) openButton.disabled = true;
+  try {
+    await openCrate(main, table, isCurrent);
+  } finally {
+    opening = false;
+  }
+}
+
+async function openCrate(main: HTMLElement, table: PrizeTable, isCurrent: () => boolean): Promise<void> {
   const free = unlockAllNow();
   if (!free && !(await spendYennies(table.cost))) {
     toast("Not enough yennies.", "error");
@@ -264,12 +291,15 @@ async function pull(main: HTMLElement, table: PrizeTable, isCurrent: () => boole
       </div>
     </div>
   `;
-  stage.querySelector("#gacha-again")!.addEventListener("click", async () => {
+  const again = stage.querySelector<HTMLButtonElement>("#gacha-again")!;
+  again.addEventListener("click", async () => {
+    if (opening) return;
     const balance = await yennies();
     if (!unlockAllNow() && balance < table.cost) {
       toast("Not enough yennies.", "error");
       return;
     }
+    again.disabled = true;
     void pull(main, table, isCurrent);
   });
   stage.querySelector("#gacha-done")!.addEventListener("click", () => void renderGacha(main, isCurrent));

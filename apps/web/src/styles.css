@@ -905,6 +905,159 @@ button.gram-swap-line:hover {
   text-align: center;
 }
 
+/* ---------- kana stats ---------- */
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+  gap: 10px;
+}
+
+.stat-tile {
+  background: var(--panel-2);
+  border-radius: 10px;
+  padding: 12px 8px;
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+.stat-label {
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.stat-row {
+  padding: 12px 0;
+  border-bottom: 1px solid #ffffff0d;
+}
+
+.stat-row:last-child {
+  border-bottom: none;
+}
+
+.stat-row-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.stat-row-head .glosses {
+  margin-left: 6px;
+}
+
+.stars {
+  color: var(--warn);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+/* Every kana, weakest first. */
+.kana-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.kana-stat {
+  background: var(--panel-2);
+  border-radius: 10px;
+  border-bottom: 3px solid #ffffff14;
+  padding: 8px 4px 6px;
+  text-align: center;
+}
+
+/* The weak ones should be findable without reading a single number. */
+.kana-stat[data-stars="0"] {
+  border-bottom-color: var(--bad);
+}
+
+.kana-stat[data-stars="1"],
+.kana-stat[data-stars="2"] {
+  border-bottom-color: var(--warn);
+}
+
+.kana-stat[data-stars="3"],
+.kana-stat[data-stars="4"] {
+  border-bottom-color: #56b4d0;
+}
+
+.kana-stat[data-stars="5"] {
+  border-bottom-color: var(--good);
+}
+
+.kana-stat-face {
+  font-size: 1.45rem;
+  line-height: 1.1;
+}
+
+.kana-stat-stars {
+  font-size: 0.55rem;
+}
+
+.kana-stat-rate {
+  font-size: 0.66rem;
+  color: var(--muted);
+}
+
+.confusion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 0;
+  border-bottom: 1px solid #ffffff0d;
+}
+
+.confusion:last-child {
+  border-bottom: none;
+}
+
+.confusion-kana {
+  font-size: 1.3rem;
+  min-width: 1.6em;
+  text-align: center;
+}
+
+.confusion-arrow {
+  color: var(--muted);
+}
+
+.confusion-given {
+  min-width: 3.4em;
+  color: var(--bad);
+  font-size: 0.92rem;
+}
+
+.confusion-bar {
+  flex: 1;
+  height: 5px;
+  border-radius: 3px;
+  background: #ffffff14;
+  overflow: hidden;
+}
+
+.confusion-bar span {
+  display: block;
+  height: 100%;
+  background: var(--bad);
+}
+
+.confusion-count {
+  font-size: 0.78rem;
+  color: var(--muted);
+  min-width: 2.4em;
+  text-align: right;
+}
+
 /* ---------- gacha ---------- */
 
 .gacha-stage {

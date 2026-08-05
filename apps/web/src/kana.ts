@@ -5,6 +5,7 @@ import { recordQuestEvents } from "./quests.js";
 import { unlockAll, unlockAllNow } from "./unlock.js";
 import { PER_CORRECT, earnYennies, formatYennies, yennies } from "./yennies.js";
 import { startGameSession, type GameSession } from "./kana-stats.js";
+import { renderKanaStats } from "./kana-stats-view.js";
 import { assetUrl, loadDictionary } from "./store.js";
 import { KANA_GROUPS, isCorrect, type KanaEntry, type KanaGroup } from "./kana-data.js";
 
@@ -136,6 +137,9 @@ function primaryRomaji(kana: string): string {
 
 // ---------------- the screens ----------------
 
+/** Play or the record of playing. Remembered while the app is open. */
+let view: "play" | "stats" = "play";
+
 export async function renderKana(main: HTMLElement, isCurrent: () => boolean = () => true): Promise<void> {
   const game = await getGame();
   await unlockAll();
@@ -143,9 +147,23 @@ export async function renderKana(main: HTMLElement, isCurrent: () => boolean = (
 
   main.innerHTML = `
     <h1>Kana</h1>
+    <div class="segmented">
+      <button data-view="play" class="${view === "play" ? "on" : ""}">Play</button>
+      <button data-view="stats" class="${view === "stats" ? "on" : ""}">Stats</button>
+    </div>
     <div id="kana-body"></div>
   `;
-  renderSelection(main.querySelector<HTMLDivElement>("#kana-body")!, game, main, isCurrent);
+
+  for (const button of main.querySelectorAll<HTMLButtonElement>(".segmented button")) {
+    button.addEventListener("click", () => {
+      view = button.dataset.view as typeof view;
+      void renderKana(main, isCurrent);
+    });
+  }
+
+  const body = main.querySelector<HTMLDivElement>("#kana-body")!;
+  if (view === "stats") void renderKanaStats(body);
+  else renderSelection(body, game, main, isCurrent);
 }
 
 function renderSelection(
@@ -261,6 +279,7 @@ function renderSelection(
   }
 
   startButton.addEventListener("click", async () => {
+    view = "play";
     // A different pool is a different game: the levels start over.
     const next: GameState =
       game && sameGroups(game.groups, chosen)
