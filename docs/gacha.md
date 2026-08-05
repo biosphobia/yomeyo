@@ -99,6 +99,12 @@ that have been pulled the more varied the answering gets.
 a path like `../feedback/correct.gif`, or a full `https://` URL. Any size
 works: reactions are drawn in a box of their own.
 
+**After adding gifs, run `node scripts/optimize-gifs.mjs`.** It squeezes
+every one to the same budget — longest side 320px, 260 KB — so a tall gif
+and a wide gif cost the same to fetch. Frames are the last thing it touches,
+because a gif with half its frames gone looks worse than one drawn slightly
+smaller. Anything already inside the budget is left alone.
+
 ## Admin pulls
 
 Whoever holds the admin seat and has **Unlock every level on this device**
@@ -116,8 +122,14 @@ anything about how a replacement was exported.
 
 Both were 25 MB on arrival, almost all of it a 4096² texture; they ship at
 about 550 KB each, resized to 1024 and re-encoded as WebP. Keep replacements
-in that range: they are downloaded the first time a crate is opened, and
-never precached.
+in that range: they are downloaded when the Gacha tab first opens, and never
+precached.
+
+The scene measures each model after updating its world matrices and scales it
+to a fixed height, with the foot offset baked into a holder group — so
+`position.y = 0` means feet on the floor whatever the exporter thought the
+origin was. Models face +Z at rest, which is towards the camera, so a
+character walking towards it needs no turn at all.
 
 If only one model has a real animation, its clip drives both — the mixer
 binds by joint name and these rigs match. A clip shorter than 0.1s is taken
@@ -126,23 +138,55 @@ to be a pose rather than a movement and ignored.
 Everything else in the shot — the ruins, the snow, the fog, the crate — is
 built in code in `apps/web/src/gacha-scene.ts`.
 
-### The five films
+### The seven films
 
-One is drawn at random each time, and its name is captioned in the corner:
+One is drawn at random each time. They do not all begin the same way — some
+walk in out of the fog, some are already sitting, some are already in the
+water — and they run 12 to 13 seconds each.
 
-| | |
-| --- | --- |
-| **Unscheduled delivery** | They walk out of the fog. A crate falls out of the sky onto one of them. The other comes over and pokes it. |
-| **Percussive maintenance** | A crate is already here, half buried. Two kicks do nothing. The third launches it out of frame, and it comes back down flat. |
-| **A disagreement** | Both take a side and pull. It does not move. They give up and sit in the snow, at which point it opens by itself. |
-| **Right of way** | Something rolls in from the left at speed, bowls straight through both of them, hits a ruin off-screen, and rolls back. |
-| **Adverse weather** | The sky fills with crates. They dodge, badly. All of them sink into the snow except one, which lands gently. |
+| | Where | |
+| --- | --- | --- |
+| **Unscheduled delivery** | city | A crate falls out of the sky onto one of them. The other comes over and pokes it. |
+| **Percussive maintenance** | city | Two kicks do nothing. The third launches it out of frame; they both stand looking up until it comes down flat. |
+| **Right of way** | city | Something rolls in from the left at speed, bowls straight through both of them, and comes back. |
+| **Adverse weather** | city | The sky fills with crates. They dodge, badly. All of them sink into the snow except one. |
+| **Table service** | cafe | Sat at a counter nobody has served at for years. They ring the bell three times. Something slides down the counter the way a drink would. |
+| **Something in the water** | bath | Up to the shoulders in the last hot water on earth. Something is under it, and it is rising. |
+| **Feeding time** | aquarium | Stood at the glass. A crate drifts past inside the tank among the fish, then leaves through the glass. |
 
-A scenario is an entry in `SCENARIOS`: an id, a name, a length, and a
-`run(t, dt, stage)` called every frame. The stage hands it the cast, the
-crate and its lid, nine spare crates, the sound kit, and `once(key, at, fn)`
-for anything that should happen exactly one time. Camera shake is automatic
-on any beat whose key mentions an impact.
+**The names are editable on GitHub** — the `cutscenes` block in
+`prizes.json` maps a scenario id to its caption. The ids are fixed by the
+code, but every name can be rewritten, and one left out falls back to the
+name in `gacha-scene.ts`.
+
+### The four places
+
+`apps/web/src/gacha-locations.ts`. Each is built from boxes and points at run
+time, so a location costs nothing to download:
+
+- **city** — ruins under snow, grey fog
+- **cafe** — a counter, stools, a swinging lamp, one wall missing and the
+  weather coming in through the gap
+- **bath** — tiles, a sunken bath, pipes, steam rising off the water
+- **aquarium** — dark room, a lit tank filling the back wall, fish drifting
+
+A location returns an `ambient(dt, t)` called every frame for whatever moves
+on its own, and the height the camera should look at.
+
+### Poses
+
+The models came with one usable animation between them — a walk cycle — so
+everything else is posed procedurally against the rig's named joints in
+`pose()`: sit, soak, wave, reach, panic, flat. No extra clips and nothing
+more to download. Adding one is a case in that switch.
+
+### It does not skip
+
+There is no skip button on either half, and the pull happens inside the
+film: when the lid comes off, the strip rolls over the top of the picture
+while the scene keeps playing underneath. three.js and the models are
+fetched when the Gacha tab opens rather than when the button is pressed, so
+the film starts at once instead of after a wait on an empty box.
 
 ### Sound
 

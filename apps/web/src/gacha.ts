@@ -2,7 +2,15 @@ import { levelState } from "./levels.js";
 import { toast } from "./toast.js";
 import { earnYennies, formatYennies, levelReward, spendYennies, yennies } from "./yennies.js";
 import { addOwned, equipSkin, equippedSkin, owned } from "./gacha-collection.js";
-import { drawPrize, prizeImageUrl, prizeTable, rarityOdds, type Prize, type PrizeTable } from "./gacha-data.js";
+import {
+  cutsceneTitle,
+  drawPrize,
+  prizeImageUrl,
+  prizeTable,
+  rarityOdds,
+  type Prize,
+  type PrizeTable,
+} from "./gacha-data.js";
 import { applySkin } from "./skins.js";
 import { unlockAll, unlockAllNow } from "./unlock.js";
 
@@ -106,6 +114,10 @@ export async function renderGacha(main: HTMLElement, isCurrent: () => boolean = 
     </div>
   `;
 
+  // three.js and the models, fetched now rather than when the button is
+  // pressed, so the film starts at once instead of after a wait.
+  void import("./gacha-scene.js").then((mod) => mod.warmUpCutscene()).catch(() => undefined);
+
   drawCollection(main, table, have, wearing, () => void renderGacha(main, isCurrent));
   main.querySelector<HTMLButtonElement>("#gacha-open")?.addEventListener("click", () => {
     void pull(main, table, isCurrent);
@@ -199,24 +211,28 @@ async function pull(main: HTMLElement, table: PrizeTable, isCurrent: () => boole
   const sceneBox = stage.querySelector<HTMLDivElement>("#gacha-scene")!;
   sceneBox.scrollIntoView({ behavior: "smooth", block: "center" });
 
-  // The cutscene, if this device will have it. Tapping it skips.
+  // The film, and the roll inside it. When the lid comes off the strip
+  // starts over the top of the picture rather than replacing it, so the
+  // pull happens in the scene rather than after it. Neither part skips.
   const { playCutscene } = await import("./gacha-scene.js");
-  const cutscene = playCutscene(sceneBox);
-  sceneBox.addEventListener("click", cutscene.stop);
-  void cutscene.name.then((title) => {
-    const caption = stage.querySelector("#scene-caption");
-    if (caption && title) caption.textContent = title;
-  });
-  await cutscene.done;
-  if (!isCurrent() || !stage.isConnected) {
-    cutscene.stop();
-    return;
-  }
-  cutscene.stop();
-  sceneBox.remove();
-
   const { runRoll } = await import("./gacha-roll.js");
-  await runRoll(stage.querySelector<HTMLDivElement>("#gacha-roll")!, prize, table);
+  const rollBox = stage.querySelector<HTMLDivElement>("#gacha-roll")!;
+
+  let rolled: Promise<void> = Promise.resolve();
+  const cutscene = playCutscene(sceneBox, {
+    onOpen: () => {
+      rollBox.classList.add("over-scene");
+      rolled = runRoll(rollBox, prize, table);
+    },
+  });
+  void cutscene.id.then((id) => {
+    const caption = stage.querySelector("#scene-caption");
+    if (caption && id) caption.textContent = cutsceneTitle(table, id);
+  });
+
+  await cutscene.done;
+  await rolled;
+  cutscene.stop();
   if (!isCurrent() || !stage.isConnected) return;
 
   const rarity = table.rarities[prize.rarity];

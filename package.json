@@ -17,5 +17,8 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "gifsicle": "^7.0.1"
   }
 }

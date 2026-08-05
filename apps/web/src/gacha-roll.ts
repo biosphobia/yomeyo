@@ -5,11 +5,10 @@ import { prizeImageUrl, type Prize, type PrizeTable } from "./gacha-data.js";
  * slows onto the one that was won.
  *
  * The winner is already decided before a single frame is drawn — the strip
- * is built to land on it. Nothing here can change what was pulled, and the
- * animation is skippable, because a fifteenth pull should not owe anybody
- * seven seconds. What it is for is the moment of not-quite-knowing while
- * the strip slows down, which is worth building properly and worth nothing
- * at all if it is also a lie about where it stops.
+ * is built to land on it. Nothing here can change what was pulled. What it
+ * is for is the moment of not-quite-knowing while the strip slows down,
+ * which is worth building properly and worth nothing at all if it is also a
+ * lie about where it stops.
  */
 
 /** How many cards the strip holds, and where the winner sits in it. */
@@ -43,7 +42,6 @@ export function runRoll(
   box: HTMLElement,
   winner: Prize,
   table: PrizeTable,
-  options: { onSkip?: () => void } = {},
 ): Promise<void> {
   const pool = table.prizes.length > 0 ? table.prizes : [winner];
   const strip: Prize[] = Array.from({ length: STRIP }, (_, i) =>
@@ -56,7 +54,6 @@ export function runRoll(
         <div class="roll-marker"></div>
         <div class="roll-strip" id="roll-strip">${strip.map((p) => cardHtml(p, table)).join("")}</div>
       </div>
-      <button class="ghost roll-skip" id="roll-skip">Skip</button>
     </div>
   `;
 
@@ -90,14 +87,6 @@ export function runRoll(
       // Belt and braces: a dropped transitionend must not hang the pull.
       setTimeout(finish, 7200);
     };
-
-    box.querySelector<HTMLButtonElement>("#roll-skip")!.addEventListener("click", () => {
-      stripEl.style.transition = "transform 0.35s ease-out";
-      const centre = windowEl.clientWidth / 2;
-      stripEl.style.transform = `translate3d(${-(WINNER_AT * PITCH + CARD_WIDTH / 2 - centre)}px,0,0)`;
-      options.onSkip?.();
-      setTimeout(finish, 360);
-    });
 
     settle();
   });

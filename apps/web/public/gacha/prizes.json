@@ -18,6 +18,17 @@
   },
   "_rarities": "Only used when draw is 'rarity'. Weights are relative, not percentages — they need not add to 100.",
 
+  "cutscenes": {
+    "airdrop": "Unscheduled delivery",
+    "kick": "Percussive maintenance",
+    "bowling": "Right of way",
+    "hail": "Adverse weather",
+    "order": "Table service",
+    "soak": "Something in the water",
+    "tank": "Feeding time"
+  },
+  "_cutscenes": "What each cutscene is captioned. The keys are the scenario ids in gacha-scene.ts and cannot be invented here, but every name can be rewritten. Leave one out and it falls back to the name in the code.",
+
   "prizes": [
     {
       "id": "gif-default-correct",

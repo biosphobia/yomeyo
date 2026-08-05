@@ -59,6 +59,25 @@ export interface PrizeTable {
   draw: DrawMode;
   rarities: Record<Rarity, RarityInfo>;
   prizes: Prize[];
+  /** Scenario id to the name shown under the picture, editable on GitHub. */
+  cutscenes: Record<string, string>;
+}
+
+/** What each cutscene is called when the file does not say. */
+const CUTSCENE_TITLES: Record<string, string> = {
+  airdrop: "Unscheduled delivery",
+  kick: "Percussive maintenance",
+  bowling: "Right of way",
+  hail: "Adverse weather",
+  order: "Table service",
+  soak: "Something in the water",
+  tank: "Feeding time",
+};
+
+/** The caption for a scenario: whatever the file says, or the default. */
+export function cutsceneTitle(table: PrizeTable, id: string): string {
+  const named = table.cutscenes?.[id];
+  return typeof named === "string" && named.trim() ? named.trim() : (CUTSCENE_TITLES[id] ?? "");
 }
 
 const FALLBACK: PrizeTable = {
@@ -67,6 +86,7 @@ const FALLBACK: PrizeTable = {
   draw: "uniform",
   rarities: { common: { label: "Common", weight: 100, color: "#94a3b8" } },
   prizes: [],
+  cutscenes: {},
 };
 
 /** Where a prize's image lives, given a filename in the gacha folder. */
@@ -121,6 +141,8 @@ export function prizeTable(): Promise<PrizeTable> {
             : FALLBACK.duplicateRefund,
         rarities,
         prizes,
+        cutscenes:
+          raw.cutscenes && typeof raw.cutscenes === "object" ? (raw.cutscenes as Record<string, string>) : {},
       };
     })
     .catch(() => FALLBACK);
