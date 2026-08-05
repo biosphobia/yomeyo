@@ -905,6 +905,236 @@ button.gram-swap-line:hover {
   text-align: center;
 }
 
+/* ---------- gacha ---------- */
+
+.gacha-stage {
+  padding: 0;
+  overflow: hidden;
+}
+
+/* The cutscene. Sized by aspect so it is the same shot on every screen. */
+.gacha-stage .scene {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  background: #b9c2cc;
+  cursor: pointer;
+}
+
+.gacha-stage .scene canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* The roll: a strip flying past a marker. */
+.roll {
+  padding: 18px 0 12px;
+}
+
+.roll-window {
+  position: relative;
+  overflow: hidden;
+  height: 152px;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+
+.roll-marker {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--warn);
+  box-shadow: 0 0 12px var(--warn);
+  z-index: 2;
+}
+
+.roll-marker::before,
+.roll-marker::after {
+  content: "";
+  position: absolute;
+  left: -5px;
+  border: 6px solid transparent;
+}
+
+.roll-marker::before {
+  top: -1px;
+  border-top-color: var(--warn);
+}
+
+.roll-marker::after {
+  bottom: -1px;
+  border-bottom-color: var(--warn);
+}
+
+.roll-strip {
+  display: flex;
+  gap: 10px;
+  padding: 8px 0;
+  will-change: transform;
+}
+
+.roll-card {
+  flex: none;
+  width: 116px;
+  height: 136px;
+  border-radius: 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--rarity);
+  border-bottom: 3px solid var(--rarity);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px;
+  overflow: hidden;
+}
+
+.roll-name {
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.2;
+}
+
+.roll-gif,
+.prize-gif {
+  width: 62px;
+  height: 52px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+/* A skin shows as what it looks like: its background, with its accent. */
+.roll-swatch,
+.prize-swatch {
+  width: 62px;
+  height: 52px;
+  border-radius: 8px;
+  border: 2px solid;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 4px;
+  padding: 7px;
+}
+
+.roll-swatch i,
+.prize-swatch i {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.roll-skip {
+  display: block;
+  margin: 6px auto 0;
+}
+
+/* What came out. */
+.gacha-won {
+  text-align: center;
+  border-color: var(--rarity);
+  box-shadow: 0 0 0 1px var(--rarity), 0 10px 40px -18px var(--rarity);
+}
+
+.won-rarity {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--rarity);
+}
+
+.won-face {
+  margin: 14px 0 8px;
+  display: flex;
+  justify-content: center;
+}
+
+.won-face .prize-swatch,
+.won-face .prize-gif {
+  width: 120px;
+  height: 100px;
+}
+
+.won-name {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+/* The collection. */
+.prize-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.prize {
+  position: relative;
+  background: var(--panel-2);
+  border: 1px solid #ffffff14;
+  border-bottom: 3px solid var(--rarity);
+  border-radius: 12px;
+  padding: 10px 6px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+}
+
+.prize.locked {
+  opacity: 0.45;
+  border-bottom-color: #ffffff14;
+}
+
+.prize.worn {
+  box-shadow: 0 0 0 2px var(--rarity);
+}
+
+.prize:disabled {
+  cursor: default;
+}
+
+.prize-locked {
+  width: 62px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  color: var(--muted);
+}
+
+.prize-name {
+  font-size: 0.78rem;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.prize-rarity {
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.prize-worn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  font-size: 0.58rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--rarity);
+}
+
 /* ---------- yennies ---------- */
 
 /*

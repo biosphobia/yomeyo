@@ -26,6 +26,10 @@ import { toast } from "./toast.js";
 // previous account's cards replaced a moment later.
 await restoreAccount();
 
+// Whatever skin was won and put on, applied before the first screen draws,
+// so a skinned app never flashes the default palette on the way in.
+await import("./skins.js").then((mod) => mod.applySkin()).catch(() => undefined);
+
 const app = document.querySelector<HTMLDivElement>("#app")!;
 app.innerHTML = `
   <nav>

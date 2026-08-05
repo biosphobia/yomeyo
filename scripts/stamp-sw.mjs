@@ -39,10 +39,18 @@ function isExcluded(relPath) {
     relPath === "grammar-key.php" ||
     relPath.startsWith("dict/") || // megabytes; cached on first use instead
     relPath.startsWith("feedback/") || // quiz reaction gifs; cached on first sight
+    // The gacha's character models, and the gifs it hands out. A megabyte of
+    // cutscene is not the shell, and someone who never opens a crate should
+    // never download it.
+    relPath.startsWith("gacha/models/") ||
+    relPath.startsWith("gacha/gifs/") ||
     relPath.endsWith(".zip") || // the packaged extension
     // The Firebase SDK is loaded only when cloud sync is configured; a user
     // who never signs in should never download it, let alone at install time.
-    base.startsWith("firebase-")
+    base.startsWith("firebase-") ||
+    // three.js, for the same reason: it arrives when a crate is opened.
+    base.startsWith("three.module") ||
+    base.startsWith("GLTFLoader")
   );
 }
 

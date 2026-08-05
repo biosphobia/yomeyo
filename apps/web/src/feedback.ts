@@ -63,7 +63,7 @@ function reaction(raw: RawReaction | undefined, fallback: Reaction): Reaction {
 
 let loaded: Promise<Reactions> | null = null;
 
-function reactions(): Promise<Reactions> {
+function fromFile(): Promise<Reactions> {
   loaded ??= fetch(assetUrl("feedback/feedback.json"))
     .then((res) => (res.ok ? res.json() : {}))
     .then((parsed: Partial<Record<ReactionKind, RawReaction>>) => ({
@@ -72,6 +72,41 @@ function reactions(): Promise<Reactions> {
     }))
     .catch(() => DEFAULTS);
   return loaded;
+}
+
+/**
+ * The file's reactions, plus every gif won from the gacha.
+ *
+ * A won gif is a real one — it joins the pool the drills draw from, so the
+ * more that have been pulled the more varied the answering gets. Read fresh
+ * each time rather than cached, because a pull during a session should show
+ * up in the very next question.
+ */
+async function reactions(): Promise<Reactions> {
+  const base = await fromFile();
+  try {
+    const [{ prizeTable, prizeImageUrl }, { owned }] = await Promise.all([
+      import("./gacha-data.js"),
+      import("./gacha-collection.js"),
+    ]);
+    const [table, have] = await Promise.all([prizeTable(), owned()]);
+    const won = table.prizes.filter((p) => p.type === "gif" && have.has(p.id));
+    if (won.length === 0) return base;
+
+    const merged: Reactions = {
+      correct: { images: [...base.correct.images], texts: [...base.correct.texts] },
+      wrong: { images: [...base.wrong.images], texts: [...base.wrong.texts] },
+    };
+    for (const prize of won) {
+      if (prize.type !== "gif") continue;
+      const side = merged[prize.on];
+      side.images.push(prizeImageUrl(prize.image));
+      side.texts.push(prize.text);
+    }
+    return merged;
+  } catch {
+    return base; // the prize table is optional; the reactions are not
+  }
 }
 
 function reactionUrl(image: string): string {
