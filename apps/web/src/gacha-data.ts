@@ -40,9 +40,23 @@ export interface GifPrize extends BasePrize {
 
 export type Prize = SkinPrize | GifPrize;
 
+/**
+ * How a pull is decided.
+ *
+ * `uniform` — every prize equally likely, whatever its rarity says. Adding a
+ * prize on GitHub then changes nothing about the others' chances, which is
+ * what you want while the table is still being filled in.
+ *
+ * `rarity` — the weighted draw: a rarity is picked by weight, then a prize
+ * within it, so a tenth legendary makes legendaries no commoner, only more
+ * varied.
+ */
+export type DrawMode = "uniform" | "rarity";
+
 export interface PrizeTable {
   cost: number;
   duplicateRefund: number;
+  draw: DrawMode;
   rarities: Record<Rarity, RarityInfo>;
   prizes: Prize[];
 }
@@ -50,6 +64,7 @@ export interface PrizeTable {
 const FALLBACK: PrizeTable = {
   cost: 120,
   duplicateRefund: 0.4,
+  draw: "uniform",
   rarities: { common: { label: "Common", weight: 100, color: "#94a3b8" } },
   prizes: [],
 };
@@ -99,6 +114,7 @@ export function prizeTable(): Promise<PrizeTable> {
         : [];
       return {
         cost: typeof raw.cost === "number" && raw.cost > 0 ? Math.floor(raw.cost) : FALLBACK.cost,
+        draw: (raw.draw === "rarity" ? "rarity" : "uniform") as DrawMode,
         duplicateRefund:
           typeof raw.duplicateRefund === "number" && raw.duplicateRefund >= 0 && raw.duplicateRefund <= 1
             ? raw.duplicateRefund
@@ -114,12 +130,21 @@ export function prizeTable(): Promise<PrizeTable> {
 /**
  * Draw one prize.
  *
- * The rarity is picked first, by weight, and then a prize of that rarity at
- * random — so adding a tenth legendary makes legendaries no commoner, only
- * more varied. A rarity nobody has written a prize for is skipped rather
- * than swallowing its share of the odds.
+ * Under `uniform` every prize has the same chance, so the table can be
+ * filled in over time without any addition quietly changing what everything
+ * else was worth.
+ *
+ * Under `rarity` the rarity is picked first, by weight, and then a prize of
+ * that rarity at random — so adding a tenth legendary makes legendaries no
+ * commoner, only more varied. A rarity nobody has written a prize for is
+ * skipped rather than swallowing its share of the odds.
  */
 export function drawPrize(table: PrizeTable): Prize | null {
+  if (table.prizes.length === 0) return null;
+  if (table.draw === "uniform") {
+    return table.prizes[Math.floor(Math.random() * table.prizes.length)];
+  }
+
   const buckets = Object.entries(table.rarities)
     .map(([key, info]) => ({ key, info, prizes: table.prizes.filter((p) => p.rarity === key) }))
     .filter((b) => b.prizes.length > 0 && b.info.weight > 0);
@@ -135,8 +160,13 @@ export function drawPrize(table: PrizeTable): Prize | null {
   return last.prizes[Math.floor(Math.random() * last.prizes.length)];
 }
 
-/** The odds each rarity actually carries, for showing them honestly. */
+/**
+ * The odds each rarity actually carries, for showing them honestly. Empty
+ * under a uniform draw, where rarity decides nothing and saying otherwise
+ * on screen would be a lie.
+ */
 export function rarityOdds(table: PrizeTable): { key: string; info: RarityInfo; chance: number }[] {
+  if (table.draw === "uniform") return [];
   const buckets = Object.entries(table.rarities)
     .map(([key, info]) => ({ key, info, count: table.prizes.filter((p) => p.rarity === key).length }))
     .filter((b) => b.count > 0 && b.info.weight > 0);

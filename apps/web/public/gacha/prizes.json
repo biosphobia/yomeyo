@@ -1,5 +1,5 @@
 {
-  "_comment": "Everything the gacha can give out. Edit this file on GitHub and the next deploy has it — no code changes. A skin is a set of CSS variables applied to the whole site; a gif is a reaction that joins the pool the kana and grammar drills draw from. Images are filenames in this folder (or in ../feedback/) or full https:// URLs.",
+  "_comment": "Everything the gacha can give out. Edit this file on GitHub and the next deploy has it — no code changes. A gif is a reaction that joins the pool the kana and grammar drills draw from. Images are filenames in this folder (put them in gifs/), a path like ../feedback/correct.gif, or a full https:// URL.",
 
   "cost": 120,
   "_cost": "Yennies per pull.",
@@ -7,130 +7,18 @@
   "duplicateRefund": 0.4,
   "_duplicateRefund": "Fraction of the cost paid back when a pull is one you already own.",
 
+  "draw": "uniform",
+  "_draw": "'uniform' — every prize equally likely, so adding one never changes what the others were worth. 'rarity' — weighted by the table below instead. While the pool is still being filled in, uniform is the honest one; under it the rarity of a prize is only its colour, and no odds are claimed on screen.",
+
   "rarities": {
     "common": { "label": "Common", "weight": 62, "color": "#94a3b8" },
     "rare": { "label": "Rare", "weight": 25, "color": "#56b4d0" },
     "epic": { "label": "Epic", "weight": 10, "color": "#a855f7" },
     "legendary": { "label": "Legendary", "weight": 3, "color": "#e5a54b" }
   },
-  "_rarities": "Weights are relative, not percentages — they need not add to 100.",
+  "_rarities": "Only used when draw is 'rarity'. Weights are relative, not percentages — they need not add to 100.",
 
   "prizes": [
-    {
-      "id": "skin-ash",
-      "type": "skin",
-      "name": "Ash",
-      "rarity": "common",
-      "note": "Grey snow, dead sky.",
-      "vars": {
-        "--bg": "#15161a",
-        "--panel": "#1e2026",
-        "--panel-2": "#292c34",
-        "--text": "#e6e7ea",
-        "--muted": "#9aa0aa",
-        "--accent": "#8a9bb0",
-        "--accent-soft": "rgba(138, 155, 176, 0.18)"
-      }
-    },
-    {
-      "id": "skin-rust",
-      "type": "skin",
-      "name": "Rust",
-      "rarity": "common",
-      "note": "Everything left outside long enough.",
-      "vars": {
-        "--bg": "#17120f",
-        "--panel": "#221a15",
-        "--panel-2": "#2f241d",
-        "--text": "#f0e6dd",
-        "--muted": "#a89383",
-        "--accent": "#c2703c",
-        "--accent-soft": "rgba(194, 112, 60, 0.18)"
-      }
-    },
-    {
-      "id": "skin-signal",
-      "type": "skin",
-      "name": "Signal",
-      "rarity": "rare",
-      "note": "Something is still transmitting.",
-      "vars": {
-        "--bg": "#08131a",
-        "--panel": "#0e1e29",
-        "--panel-2": "#152b3a",
-        "--text": "#dff2fb",
-        "--muted": "#7fa3b5",
-        "--accent": "#31c8e8",
-        "--accent-soft": "rgba(49, 200, 232, 0.18)"
-      }
-    },
-    {
-      "id": "skin-ration",
-      "type": "skin",
-      "name": "Ration",
-      "rarity": "rare",
-      "note": "Sweet potato, one more time.",
-      "vars": {
-        "--bg": "#1a1408",
-        "--panel": "#241d0e",
-        "--panel-2": "#332916",
-        "--text": "#f6efdc",
-        "--muted": "#b0a480",
-        "--accent": "#e0b23c",
-        "--accent-soft": "rgba(224, 178, 60, 0.18)"
-      }
-    },
-    {
-      "id": "skin-reactor",
-      "type": "skin",
-      "name": "Reactor",
-      "rarity": "epic",
-      "note": "Warm, in a way you should not stand near.",
-      "vars": {
-        "--bg": "#0d0714",
-        "--panel": "#170e22",
-        "--panel-2": "#22163190",
-        "--text": "#f2e8ff",
-        "--muted": "#a08cbd",
-        "--accent": "#b45cff",
-        "--accent-soft": "rgba(180, 92, 255, 0.2)"
-      }
-    },
-    {
-      "id": "skin-whiteout",
-      "type": "skin",
-      "name": "Whiteout",
-      "rarity": "epic",
-      "note": "The snow won.",
-      "vars": {
-        "--bg": "#e9ecf1",
-        "--panel": "#f7f8fb",
-        "--panel-2": "#e2e6ee",
-        "--text": "#1b1d24",
-        "--muted": "#5d6474",
-        "--accent": "#3f5bd9",
-        "--accent-soft": "rgba(63, 91, 217, 0.16)"
-      }
-    },
-    {
-      "id": "skin-lastlight",
-      "type": "skin",
-      "name": "Last Light",
-      "rarity": "legendary",
-      "note": "The top of the city, and nothing above it.",
-      "vars": {
-        "--bg": "#100a16",
-        "--panel": "#1a1024",
-        "--panel-2": "#281a36",
-        "--text": "#fdeede",
-        "--muted": "#b39ab0",
-        "--accent": "#ff8a5c",
-        "--accent-soft": "rgba(255, 138, 92, 0.2)",
-        "--good": "#5fd6a4",
-        "--warn": "#ffc46b"
-      }
-    },
-
     {
       "id": "gif-default-correct",
       "type": "gif",
@@ -151,5 +39,5 @@
     }
   ],
 
-  "_prizes": "type is 'skin' or 'gif'. A skin needs 'vars' (any CSS custom property the site uses). A gif needs 'on' ('correct' or 'wrong'), 'image', and 'text'. 'note' is optional flavour shown in the collection. Add more by copying an entry and changing the id — ids must be unique and are what the save file remembers, so do not reuse one for a different prize."
+  "_prizes": "Add one by copying an entry: drop the gif in gifs/, give it a unique id, set 'on' to 'correct' or 'wrong', and write the line that goes under it. Ids are what the save file remembers, so never reuse one for a different prize. 'note' is optional flavour shown in the collection. Skins are still supported — type 'skin' with a 'vars' object of CSS custom properties — but none are in the pool for now."
 }

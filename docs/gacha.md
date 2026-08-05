@@ -10,22 +10,42 @@ change and nothing to rebuild by hand.
 | --- | --- |
 | `cost` | Yennies per pull |
 | `duplicateRefund` | Fraction of the cost paid back when a pull is one you already own (`0.4` = 40%) |
-| `rarities` | Each rarity's label, colour and **relative** weight — they need not add to 100 |
+| `draw` | `"uniform"` or `"rarity"` — see below |
+| `rarities` | Each rarity's label, colour and **relative** weight. Only consulted when `draw` is `"rarity"` |
 
-A rarity nobody has written a prize for is skipped rather than swallowing its
-share of the odds, so a half-finished table still rolls fairly. The Gacha tab
-shows the real percentages, worked out from the weights.
+### How a pull is decided
+
+**`"uniform"` (what the table uses now).** Every prize has the same chance.
+Adding one on GitHub changes nothing about what the others were worth, which
+is what you want while the pool is still being filled in. Under it a prize's
+`rarity` is only its colour: the collection prints no rarity label and the
+Odds panel says "every prize, equally likely · 1 in N", because claiming
+odds that rarity does not control would be a lie.
+
+**`"rarity"`.** The weighted draw: a rarity is picked by weight, then a prize
+within it — so a tenth legendary makes legendaries no commoner, only more
+varied. A rarity nobody has written a prize for is skipped rather than
+swallowing its share, so a half-finished table still rolls fairly, and the
+Odds panel shows the real percentages worked out from the weights.
+
+Switching between them is one word in `prizes.json`.
 
 ## Prizes
 
-Two kinds. Both need `id`, `name` and `rarity`; `note` is optional flavour
+Two kinds are supported. **Only gifs are in the pool at the moment** — the
+skins were taken out, though everything below still works if any are put
+back. Both kinds need `id`, `name` and `rarity`; `note` is optional flavour
 shown in the collection.
+
+Removing a prize from the file is safe: anyone who already owned it simply
+stops seeing it, and a skin that was being worn falls back to the palette the
+app ships with. Put it back under the same id and it returns to them.
 
 **The `id` is what a save file remembers.** Renaming a prize is fine; reusing
 an id for a different prize silently hands it to everyone who owned the old
 one.
 
-### A skin
+### A skin — supported, none in the pool right now
 
 ```json
 {

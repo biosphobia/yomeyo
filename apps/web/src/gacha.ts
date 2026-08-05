@@ -68,14 +68,25 @@ export async function renderGacha(main: HTMLElement, isCurrent: () => boolean = 
 
     <div class="card-panel">
       <b>Odds</b>
-      ${rarityOdds(table)
-        .map(
-          ({ info, chance }) => `<div class="purse-source">
-            <span style="color:${escapeAttr(info.color)}">${escapeHtml(info.label)}</span>
-            <span class="purse-rate">${(chance * 100).toFixed(1)}%</span>
-          </div>`,
-        )
-        .join("")}
+      ${
+        // Under a uniform draw there is nothing to weigh up, and printing a
+        // rarity table would claim odds that do not exist.
+        table.draw === "uniform"
+          ? `<div class="purse-source">
+               <span>Every prize, equally likely</span>
+               <span class="purse-rate">${
+                 table.prizes.length > 0 ? `1 in ${table.prizes.length}` : "—"
+               }</span>
+             </div>`
+          : rarityOdds(table)
+              .map(
+                ({ info, chance }) => `<div class="purse-source">
+                  <span style="color:${escapeAttr(info.color)}">${escapeHtml(info.label)}</span>
+                  <span class="purse-rate">${(chance * 100).toFixed(1)}%</span>
+                </div>`,
+              )
+              .join("")
+      }
       <div class="purse-source">
         <span>A pull you already own</span>
         <span class="purse-rate">${Math.round(table.cost * table.duplicateRefund).toLocaleString()} ¥ back</span>
@@ -126,7 +137,9 @@ function drawCollection(
           ${mine && prize.type === "skin" ? "" : "disabled"}>
         ${mine ? prizeFace(prize) : `<span class="prize-locked">?</span>`}
         <span class="prize-name">${mine ? escapeHtml(prize.name) : "&nbsp;"}</span>
-        <span class="prize-rarity">${escapeHtml(rarity?.label ?? "")}</span>
+        <span class="prize-rarity">${
+          table.draw === "uniform" ? (mine ? "&nbsp;" : "locked") : escapeHtml(rarity?.label ?? "")
+        }</span>
         ${worn ? `<span class="prize-worn">worn</span>` : ""}
       </button>`;
     })
@@ -209,7 +222,9 @@ async function pull(main: HTMLElement, table: PrizeTable, isCurrent: () => boole
   const rarity = table.rarities[prize.rarity];
   stage.innerHTML = `
     <div class="card-panel gacha-won" style="--rarity:${escapeAttr(rarity?.color ?? "#94a3b8")}">
-      <div class="won-rarity">${escapeHtml(rarity?.label ?? "")}</div>
+      <div class="won-rarity">${
+        table.draw === "uniform" ? "New reaction" : escapeHtml(rarity?.label ?? "")
+      }</div>
       <div class="won-face">${prizeFace(prize)}</div>
       <div class="won-name">${escapeHtml(prize.name)}</div>
       ${prize.note ? `<div class="glosses">${escapeHtml(prize.note)}</div>` : ""}
