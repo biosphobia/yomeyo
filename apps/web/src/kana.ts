@@ -57,6 +57,17 @@ const LEVELS = [
  * ever is kept on the device.
  */
 const BEST_STREAK_KEY = "kanaBestStreak";
+
+/**
+ * The word levels draw from the dictionary afresh each time.
+ *
+ * How many words a game asks, how deep into the frequency list it may reach
+ * for them, and how many of the last games' words it tries to avoid.
+ */
+const WORDS_PER_GAME = 14;
+const WORD_POOL = 300;
+const RECENT_WORDS_KEY = "kanaRecentWords";
+const RECENT_WORDS = 60;
 let streak = 0;
 let bestStreak = 0;
 
@@ -284,6 +295,33 @@ interface Item {
   gloss?: string;
   /** For single kana, the entry with its accepted spellings. */
   entry?: KanaEntry;
+  /** For words: how the word is actually written, for finding a recording. */
+  term?: string;
+  /** For words: this spelling is several different words, so nobody's
+   *  recording of it is reliably the one on screen. */
+  ambiguous?: boolean;
+}
+
+/**
+ * How this item is asked for, in sound.
+ *
+ * A single kana is synthesised — nobody records one letter for its own sake.
+ * A word is a real speaker's recording where one can be found for it, which
+ * needs the word as it is actually WRITTEN: asking a recording service for
+ * いこう and nothing else invites a recording of any of the words spelt that
+ * way, which is how a drill on いこう came back saying something else.
+ * Where the spelling is several different words, no recording of it is
+ * reliably the right one, so those are read out instead.
+ */
+function audioFor(item: Item): { term: string; reading: string; mode?: "tts" } {
+  if (item.entry || item.ambiguous) return { term: item.kana, reading: item.kana, mode: "tts" };
+  return { term: item.term ?? item.kana, reading: item.kana };
+}
+
+function playItem(item: Item): Promise<unknown> {
+  const { term, reading, mode } = audioFor(item);
+  if (item.entry) return playKana(item.kana);
+  return playWord(term, reading, mode ? { mode } : {});
 }
 
 function itemMatches(item: Item, answer: string): boolean {
@@ -364,14 +402,7 @@ async function runLevel(
   // it is wanted: an answer lands and the clip has to play immediately, and
   // a download started right then always arrives after the moment it was for.
   const warming = { aborted: false };
-  void prefetchAudio(
-    items.map((item) =>
-      item.entry
-        ? { term: item.kana, reading: item.kana, mode: "tts" as const }
-        : { term: item.kana, reading: item.kana },
-    ),
-    warming,
-  );
+  void prefetchAudio(items.map(audioFor), warming);
   let timer: ReturnType<typeof setInterval> | null = null;
   bestStreak = (await getMeta<number>(BEST_STREAK_KEY)) ?? bestStreak;
 
@@ -529,8 +560,7 @@ async function runLevel(
     // A single kana is synthesised, a real word is a real speaker where one
     // has recorded it. Never let a silent device stop the quiz.
     const say = (): void => {
-      const sound = item.entry ? playKana(item.kana) : playWord(item.kana, item.kana);
-      void sound.catch(() => undefined);
+      void playItem(item).catch(() => undefined);
     };
 
     const advance = (): void => {
@@ -680,19 +710,56 @@ async function wordsFor(pool: KanaEntry[]): Promise<Item[] | null> {
   const allowed = new Set(pool.flatMap((entry) => [...entry.kana]));
   try {
     const dictionary = await loadDictionary();
-    const best = new Map<string, { gloss: string; freq: number }>();
+
+    interface Word {
+      /** The commonest way this reading is written, for finding a recording. */
+      term: string;
+      gloss: string;
+      freq: number;
+      /** Every distinct written form with this reading — homophones. */
+      forms: Set<string>;
+    }
+    const best = new Map<string, Word>();
     for (const entry of dictionary.wordsMadeOf(allowed, 2, 4)) {
       const gloss = entry.glosses[0];
       if (!gloss || gloss.length > 42) continue;
       const freq = entry.freq ?? Number.MAX_SAFE_INTEGER;
-      const existing = best.get(entry.reading);
-      if (!existing || freq < existing.freq) best.set(entry.reading, { gloss, freq });
+      const found = best.get(entry.reading);
+      if (!found) {
+        best.set(entry.reading, { term: entry.term, gloss, freq, forms: new Set([entry.term]) });
+        continue;
+      }
+      found.forms.add(entry.term);
+      if (freq < found.freq) {
+        found.freq = freq;
+        found.gloss = gloss;
+        found.term = entry.term;
+      }
     }
 
-    return [...best.entries()]
-      .sort((a, b) => a[1].freq - b[1].freq)
-      .slice(0, 14)
-      .map(([kana, { gloss }]) => ({ kana, gloss }));
+    // The commonest words these kana can spell. Sampling from the whole of
+    // JMdict would be random in the worst sense — a beginner reading their
+    // first hiragana does not need an obscure botanical term.
+    const ranked = [...best.entries()].sort((a, b) => a[1].freq - b[1].freq).slice(0, WORD_POOL);
+    if (ranked.length === 0) return [];
+
+    // Drawn fresh every game, and biased away from the last few games, so
+    // the level teaches reading rather than the answers to fourteen cards.
+    const recent = new Set((await getMeta<string[]>(RECENT_WORDS_KEY)) ?? []);
+    const unseen = ranked.filter(([kana]) => !recent.has(kana));
+    const source = unseen.length >= WORDS_PER_GAME ? unseen : ranked;
+    const chosen = shuffle(source).slice(0, WORDS_PER_GAME);
+    await setMeta(RECENT_WORDS_KEY, [...chosen.map(([kana]) => kana), ...recent].slice(0, RECENT_WORDS));
+
+    return chosen.map(([kana, word]) => ({
+      kana,
+      gloss: word.gloss,
+      term: word.term,
+      // いこう is 意向, 移行 and 以降; はし is chopsticks, a bridge and an
+      // edge, each said with its own pitch. No recording of that spelling is
+      // reliably the word on screen, so those get read out instead.
+      ambiguous: [...word.forms].filter((form) => form !== kana).length > 1,
+    }));
   } catch {
     // A failed download or an unreadable dictionary both mean no words. The
     // caller says so on screen; what it must never do is wait forever.
