@@ -42,6 +42,7 @@ app.innerHTML = `
     </div>
     <div class="nav-group" data-label="Plan">
       <a href="#calendar" data-route="calendar"><span class="icon">📅</span>Calendar</a>
+      <a href="#gacha" data-route="gacha"><span class="icon">🎁</span>Gacha</a>
     </div>
     <div class="nav-group nav-tail">
       <a href="#settings" data-route="settings"><span class="icon">⚙️</span>Settings</a>
@@ -110,6 +111,9 @@ function route(): void {
       break;
     case "calendar":
       void renderCalendar(main, isCurrent);
+      break;
+    case "gacha":
+      void import("./gacha.js").then((mod) => mod.renderGacha(main, isCurrent));
       break;
     case "settings":
       void renderSettings(main, isCurrent);

@@ -3,6 +3,7 @@ import { playKana, playWord, prefetchAudio } from "./audio.js";
 import { cheerBox, preloadReactions, showReaction } from "./feedback.js";
 import { recordQuestEvents } from "./quests.js";
 import { unlockAll, unlockAllNow } from "./unlock.js";
+import { PER_CORRECT, earnYennies, formatYennies, yennies } from "./yennies.js";
 import { startGameSession, type GameSession } from "./kana-stats.js";
 import { assetUrl, loadDictionary } from "./store.js";
 import { KANA_GROUPS, isCorrect, type KanaEntry, type KanaGroup } from "./kana-data.js";
@@ -396,6 +397,7 @@ async function runLevel(
   let done = 0;
   let health = game.health;
   let missedAny = false;
+  let gotRight = 0;
   let active = true; // cleared on quit, so a pending auto-advance dies quietly
 
   // Every sound this level will need, fetched now rather than at the moment
@@ -422,16 +424,34 @@ async function runLevel(
     timer = null;
   };
 
+  /**
+   * Bank what the run earned and describe it, for the screen that ends it.
+   *
+   * Nothing about yennies appears while playing — a counter climbing beside
+   * the questions is a reason to keep tapping, which is not the reason to be
+   * here. Once, at the end, with the balance beside it.
+   */
+  const payout = async (): Promise<string> => {
+    const earned = gotRight * PER_CORRECT;
+    const balance = earned > 0 ? await earnYennies(earned) : await yennies();
+    return `<div class="yen-line">${
+      earned > 0 ? `<b>+${earned.toLocaleString()}</b> · ` : ""
+    }${formatYennies(balance)}</div>`;
+  };
+
   const fail = async (): Promise<void> => {
     stopTimer();
     session?.end("failed");
     game.health = MAX_HEALTH; // a fresh attempt starts with fresh hearts
     await saveGame(game);
     if (!isCurrent()) return;
+    const purse = await payout();
+    if (!isCurrent()) return;
     body.innerHTML = `
       <div class="card-panel kana-quiz">
         <div class="big">💔</div>
         <div class="kana-score">Out of hearts</div>
+        ${purse}
         <div class="row-actions" style="justify-content:center;margin-top:12px">
           <button id="kana-retry">Try again</button>
           <button id="kana-back" class="secondary">Change groups</button>
@@ -450,13 +470,16 @@ async function runLevel(
     // not a clear. The groups in play are reported too, so a quest can ask
     // for particular kana to have been practised.
     if (!learning) {
-      void recordQuestEvents([
+      // Awaited, not fired and forgotten: a quest finishing here can cross a
+      // level, and the burst that pays has to be in the balance shown below.
+      await recordQuestEvents([
         "kana-level",
         ...(missedAny ? [] : ["kana-level-perfect"]),
         ...game.groups.map((id) => `group-cleared:${id}`),
-      ]);
+      ]).catch(() => undefined);
     }
     await saveGame(game);
+    const purse = await payout();
     if (!isCurrent()) return;
     const next = level + 1 < LEVELS.length ? LEVELS[level + 1] : null;
 
@@ -466,6 +489,7 @@ async function runLevel(
         <div class="card-panel kana-quiz">
           <div class="big">🏆</div>
           <div class="kana-score">All seven levels clear</div>
+          ${purse}
           <div class="row-actions" style="justify-content:center;margin-top:12px">
             <button id="kana-again">Play again</button>
             <button id="kana-back" class="secondary">Change groups</button>
@@ -488,6 +512,7 @@ async function runLevel(
         <div class="kana-score">Level ${level} clear</div>
         <div class="glosses">${useLives ? `One heart restored: ${heartsHtml(game.health)}<br/>` : ""}
           Starting level ${level + 1}: ${next.name}…</div>
+        ${purse}
         <div class="row-actions" style="justify-content:center;margin-top:12px">
           <button id="kana-next">Continue now</button>
           <button id="kana-back" class="secondary">Stop here</button>
@@ -575,6 +600,7 @@ async function runLevel(
       settled = true;
       stopTimer();
       session?.answer(item.kana, { correct: true });
+      gotRight++;
       streak++;
       if (streak > bestStreak) {
         bestStreak = streak;

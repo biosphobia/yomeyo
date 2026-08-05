@@ -9,8 +9,14 @@ import { getMeta, onAccountChange, setMeta } from "./db.js";
  * the person; someone not signed in levels up the same way, in the local
  * database, exactly like their deck.
  *
- * Levels get steadily longer: the step from level n to n+1 costs
- * 50 + 25·(n−1) XP, so early levels come quickly and later ones are earned.
+ * Levels get exponentially longer: each one costs 15% more than the one
+ * before, starting at 50. Early levels still come in an evening; level 30
+ * is the work of months. That curve is also what makes the yennies a level
+ * pays worth having — the burst grows, but nothing like as fast as the XP
+ * behind it, so the rate falls the further anyone gets.
+ *
+ * The curve is gentler than the flat 50 + 25·(n−1) it replaced everywhere
+ * below level 17, so changing it never cost anybody a level they had.
  */
 
 const XP_KEY = "xpTotal";
@@ -18,9 +24,12 @@ const XP_KEY = "xpTotal";
 export const XP_PER_QUEST = 20;
 export const XP_DAY_BONUS = 30;
 
+const XP_BASE = 50;
+const XP_GROWTH = 1.15;
+
 /** XP needed to go from `level` to the next. */
 export function xpToNext(level: number): number {
-  return 50 + (level - 1) * 25;
+  return Math.round(XP_BASE * XP_GROWTH ** (level - 1));
 }
 
 export interface LevelState {
@@ -56,10 +65,26 @@ export async function levelState(): Promise<LevelState> {
   return levelFromXp(await totalXp());
 }
 
-/** Bank XP; returns the state before and after, so callers can spot a level-up. */
-export async function addXp(amount: number): Promise<{ before: LevelState; after: LevelState }> {
+/**
+ * Bank XP; returns the state before and after, so callers can spot a level-up.
+ *
+ * Any level crossed pays its yennies here rather than at each call site, so
+ * the burst cannot be forgotten by whoever adds the next source of XP. It is
+ * banked silently: where a balance is shown is the caller's business.
+ */
+export async function addXp(
+  amount: number,
+): Promise<{ before: LevelState; after: LevelState; yennies: number }> {
   const before = levelFromXp(await totalXp());
   cached = before.total + Math.max(0, Math.floor(amount));
   await setMeta(XP_KEY, cached);
-  return { before, after: levelFromXp(cached) };
+  const after = levelFromXp(cached);
+
+  let earned = 0;
+  if (after.level > before.level) {
+    const { earnYennies, rewardBetween } = await import("./yennies.js");
+    earned = rewardBetween(before.level, after.level);
+    await earnYennies(earned);
+  }
+  return { before, after, yennies: earned };
 }

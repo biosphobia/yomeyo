@@ -905,6 +905,51 @@ button.gram-swap-line:hover {
   text-align: center;
 }
 
+/* ---------- yennies ---------- */
+
+/*
+ * What a run paid, and the balance after it. Shown on the screen that ends
+ * a run and nowhere during one — a number climbing beside the questions is
+ * a reason to keep tapping, which is not the reason to be here.
+ */
+.yen-line {
+  margin-top: 12px;
+  font-size: 0.95rem;
+  color: var(--warn);
+}
+
+.yen-line b {
+  font-size: 1.1rem;
+}
+
+.purse-panel {
+  text-align: center;
+}
+
+.purse-amount {
+  font-size: 2.2rem;
+  font-weight: 700;
+  color: var(--warn);
+}
+
+.purse-source {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #ffffff0d;
+  font-size: 0.95rem;
+}
+
+.purse-source:last-of-type {
+  border-bottom: none;
+}
+
+.purse-rate {
+  color: var(--warn);
+  white-space: nowrap;
+}
+
 /* ---------- parse ---------- */
 
 /*

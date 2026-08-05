@@ -16,6 +16,7 @@ import {
 } from "./grammar-data.js";
 import { generateSentences } from "./grammar-ai.js";
 import { unlockAll, unlockAllNow } from "./unlock.js";
+import { PER_CORRECT, earnYennies, formatYennies, yennies } from "./yennies.js";
 import { renderParse } from "./parse.js";
 import { carRow, chunkHtml, romajiOf, spoken, splitChunk, wordBlock } from "./grammar-draw.js";
 import { N5_POINTS } from "./grammar-jlpt-n5.js";
@@ -301,6 +302,12 @@ async function runUnit(
   const finish = async (): Promise<void> => {
     progress.unlocked = Math.max(progress.unlocked, unitIndex + 1);
     await setMeta(GAME_KEY, progress);
+    // Banked and shown once, here, and nowhere during the drills.
+    const earned = gotRight * PER_CORRECT;
+    const balance = earned > 0 ? await earnYennies(earned) : await yennies();
+    const purse = `<div class="yen-line">${
+      earned > 0 ? `<b>+${earned.toLocaleString()}</b> · ` : ""
+    }${formatYennies(balance)}</div>`;
     if (!isCurrent()) return;
     const next = unitIndex + 1 < GRAMMAR_UNITS.length ? GRAMMAR_UNITS[unitIndex + 1] : null;
     body.innerHTML = `
@@ -308,6 +315,7 @@ async function runUnit(
         <div class="big">🎉</div>
         <div class="kana-score">${escapeHtml(unit.title)} clear</div>
         ${next ? `<div class="glosses">Next: ${escapeHtml(next.title)}</div>` : `<div class="glosses">That's every unit so far.</div>`}
+        ${purse}
         <div class="row-actions" style="justify-content:center;margin-top:12px">
           ${next ? `<button id="gram-next">Continue</button>` : ""}
           <button id="gram-back" class="secondary">Back to units</button>
@@ -323,6 +331,8 @@ async function runUnit(
   // the window so a finger leaving the tray is still heard — leaves its
   // undo here, and the next question runs it before drawing.
   let cleanups: (() => void)[] = [];
+  /** Right answers this run, which is what the run pays out on. */
+  let gotRight = 0;
 
   const draw = (): void => {
     for (const undo of cleanups) undo();
@@ -388,6 +398,7 @@ async function runUnit(
       extra.innerHTML = task.sentence.lit
         ? `<div class="gram-lit">literally: ${escapeHtml(task.sentence.lit)}</div>`
         : "";
+      if (!missed) gotRight++;
       feedback.innerHTML = `${note}<div class="glosses">Enter (or tap) to continue</div>`;
       void showReaction(body.querySelector("#gram-cheer"), missed ? "wrong" : "correct");
       void speak(spoken(task.sentence), { rate: 0.85 }).catch(() => undefined);
@@ -694,6 +705,7 @@ async function runUnit(
           feedback.innerHTML = got
             ? `<span class="ok-text">✓</span><div class="glosses">Enter (or tap) to continue</div>`
             : `<span class="err-text">✗ it's the other one</span><div class="glosses">Enter (or tap) to continue</div>`;
+          if (got) gotRight++;
           void showReaction(body.querySelector("#gram-cheer"), got ? "correct" : "wrong");
           void speak(want.jp.replace(/\s/g, ""), { rate: 0.85 }).catch(() => undefined);
           const panel = body.querySelector<HTMLDivElement>(".gram-quiz")!;
