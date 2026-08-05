@@ -79,6 +79,14 @@ that have been pulled the more varied the answering gets.
 a path like `../feedback/correct.gif`, or a full `https://` URL. Any size
 works: reactions are drawn in a box of their own.
 
+## Admin pulls
+
+Whoever holds the admin seat and has **Unlock every level on this device**
+switched on in Settings also opens crates for free — the button reads
+"free", works at any balance, and takes nothing, so an admin's yennies stay
+whatever they actually earned. A free pull refunds nothing on a duplicate,
+because it cost nothing. This is per-device, like the level key.
+
 ## The cutscene
 
 `apps/web/public/gacha/models/yuuri.glb` and `chito.glb`. Replacing either is
@@ -96,8 +104,33 @@ binds by joint name and these rigs match. A clip shorter than 0.1s is taken
 to be a pose rather than a movement and ignored.
 
 Everything else in the shot — the ruins, the snow, the fog, the crate — is
-built in code in `apps/web/src/gacha-scene.ts`. The timings are the `BEATS`
-object at the top of that file.
+built in code in `apps/web/src/gacha-scene.ts`.
+
+### The five films
+
+One is drawn at random each time, and its name is captioned in the corner:
+
+| | |
+| --- | --- |
+| **Unscheduled delivery** | They walk out of the fog. A crate falls out of the sky onto one of them. The other comes over and pokes it. |
+| **Percussive maintenance** | A crate is already here, half buried. Two kicks do nothing. The third launches it out of frame, and it comes back down flat. |
+| **A disagreement** | Both take a side and pull. It does not move. They give up and sit in the snow, at which point it opens by itself. |
+| **Right of way** | Something rolls in from the left at speed, bowls straight through both of them, hits a ruin off-screen, and rolls back. |
+| **Adverse weather** | The sky fills with crates. They dodge, badly. All of them sink into the snow except one, which lands gently. |
+
+A scenario is an entry in `SCENARIOS`: an id, a name, a length, and a
+`run(t, dt, stage)` called every frame. The stage hands it the cast, the
+crate and its lid, nine spare crates, the sound kit, and `once(key, at, fn)`
+for anything that should happen exactly one time. Camera shake is automatic
+on any beat whose key mentions an impact.
+
+### Sound
+
+`apps/web/src/gacha-audio.ts`. Nothing is a recording: wind is filtered
+noise with a slow wander in the filter, a footstep is a very short noise
+burst, a falling crate is a sine sliding down, an impact is that plus a
+thump. It is built when the crate is opened — which is a click, so autoplay
+rules are satisfied — and every call is a no-op if the browser refuses.
 
 ## What is not configurable, on purpose
 

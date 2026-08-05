@@ -4,6 +4,7 @@ import { earnYennies, formatYennies, levelReward, spendYennies, yennies } from "
 import { addOwned, equipSkin, equippedSkin, owned } from "./gacha-collection.js";
 import { drawPrize, prizeImageUrl, prizeTable, rarityOdds, type Prize, type PrizeTable } from "./gacha-data.js";
 import { applySkin } from "./skins.js";
+import { unlockAll, unlockAllNow } from "./unlock.js";
 
 /**
  * The Gacha tab: what yennies are for.
@@ -26,10 +27,15 @@ export async function renderGacha(main: HTMLElement, isCurrent: () => boolean = 
     prizeTable(),
     owned(),
     equippedSkin(),
+    unlockAll(),
   ]);
   if (!isCurrent()) return;
 
-  const affordable = balance >= table.cost;
+  // The admin's key opens crates as well as levels: testing a prize table
+  // should not mean grinding for it first. On that device only, and it takes
+  // nothing — so an admin's balance is whatever they actually earned.
+  const free = unlockAllNow();
+  const affordable = free || balance >= table.cost;
   main.innerHTML = `
     <h1>Gacha</h1>
 
@@ -38,15 +44,17 @@ export async function renderGacha(main: HTMLElement, isCurrent: () => boolean = 
       <div class="glosses">Yennies</div>
       <div class="row-actions" style="justify-content:center;margin-top:14px">
         <button id="gacha-open" ${affordable && table.prizes.length > 0 ? "" : "disabled"}>
-          Open a crate · ${table.cost.toLocaleString()} ¥
+          Open a crate · ${free ? "free" : `${table.cost.toLocaleString()} ¥`}
         </button>
       </div>
       ${
         table.prizes.length === 0
           ? `<div class="msg">No prizes are configured.</div>`
-          : affordable
-            ? ""
-            : `<div class="msg">${(table.cost - balance).toLocaleString()} ¥ to go.</div>`
+          : free
+            ? `<div class="msg">Admin: pulls are free and cost you nothing.</div>`
+            : affordable
+              ? ""
+              : `<div class="msg">${(table.cost - balance).toLocaleString()} ¥ to go.</div>`
       }
     </div>
 
@@ -149,26 +157,29 @@ function prizeFace(prize: Prize): string {
 // ---------------- opening one ----------------
 
 async function pull(main: HTMLElement, table: PrizeTable, isCurrent: () => boolean): Promise<void> {
-  const paid = await spendYennies(table.cost);
-  if (!paid) {
+  const free = unlockAllNow();
+  if (!free && !(await spendYennies(table.cost))) {
     toast("Not enough yennies.", "error");
     return;
   }
   // Decided here, before anything is drawn. Nothing below can change it.
   const prize = drawPrize(table);
   if (!prize) {
-    await earnYennies(table.cost);
+    if (!free) await earnYennies(table.cost);
     toast("No prizes are configured.", "error");
     return;
   }
   const isNew = await addOwned(prize.id);
-  const refund = isNew ? 0 : Math.round(table.cost * table.duplicateRefund);
+  // A free pull refunds nothing, because it took nothing.
+  const refund = isNew || free ? 0 : Math.round(table.cost * table.duplicateRefund);
   if (refund > 0) await earnYennies(refund);
 
   const stage = main.querySelector<HTMLDivElement>("#gacha-stage")!;
   stage.innerHTML = `
     <div class="card-panel gacha-stage">
-      <div class="scene" id="gacha-scene"></div>
+      <div class="scene" id="gacha-scene">
+        <div class="scene-caption" id="scene-caption"></div>
+      </div>
       <div id="gacha-roll"></div>
     </div>
   `;
@@ -179,6 +190,10 @@ async function pull(main: HTMLElement, table: PrizeTable, isCurrent: () => boole
   const { playCutscene } = await import("./gacha-scene.js");
   const cutscene = playCutscene(sceneBox);
   sceneBox.addEventListener("click", cutscene.stop);
+  void cutscene.name.then((title) => {
+    const caption = stage.querySelector("#scene-caption");
+    if (caption && title) caption.textContent = title;
+  });
   await cutscene.done;
   if (!isCurrent() || !stage.isConnected) {
     cutscene.stop();
@@ -213,7 +228,7 @@ async function pull(main: HTMLElement, table: PrizeTable, isCurrent: () => boole
   `;
   stage.querySelector("#gacha-again")!.addEventListener("click", async () => {
     const balance = await yennies();
-    if (balance < table.cost) {
+    if (!unlockAllNow() && balance < table.cost) {
       toast("Not enough yennies.", "error");
       return;
     }

@@ -914,10 +914,29 @@ button.gram-swap-line:hover {
 
 /* The cutscene. Sized by aspect so it is the same shot on every screen. */
 .gacha-stage .scene {
+  position: relative;
   width: 100%;
   aspect-ratio: 16 / 10;
   background: #b9c2cc;
   cursor: pointer;
+}
+
+/* Which of the films this one is, and that tapping stops it. */
+.scene-caption {
+  position: absolute;
+  left: 12px;
+  bottom: 10px;
+  z-index: 2;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  color: #ffffffdd;
+  text-shadow: 0 1px 6px #00000099;
+  pointer-events: none;
+}
+
+.scene-caption:not(:empty)::after {
+  content: " · tap to skip";
+  opacity: 0.7;
 }
 
 .gacha-stage .scene canvas {
