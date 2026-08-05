@@ -65,6 +65,15 @@
       "text": "correct, obviously"
     },
     {
+      "id": "gif-nyaa",
+      "type": "gif",
+      "name": "Nyaa",
+      "rarity": "common",
+      "on": "correct",
+      "image": "gifs/nyaa.gif",
+      "text": "nyaa~"
+    },
+    {
       "id": "gif-plays",
       "type": "gif",
       "name": "Plays with it",
