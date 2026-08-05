@@ -43,6 +43,14 @@ interface GameState {
 }
 
 const MAX_HEALTH = 5;
+
+/**
+ * Where the ladder goes back to once it has been cleared.
+ *
+ * Level 1, not 0: anybody who has just finished all seven does not need the
+ * tutorial that only shows each kana with its sound.
+ */
+const RESTART_AT = 1;
 const LEVELS = [
   { name: "Learn", detail: "Meet each kana once, with its sound." },
   { name: "Multiple choice", detail: "Three options; every kana at least twice." },
@@ -251,7 +259,16 @@ function renderSelection(
     startButton.disabled = chosen.size === 0;
     const resuming = game !== null && sameGroups(game.groups, chosen) && game.unlocked > 0;
     startButton.textContent = resuming ? "Continue" : "Start";
-    const startAt = resuming && game ? Math.min(game.unlocked, LEVELS.length - 1) : skipLearn ? 1 : 0;
+    // A game whose ladder is already finished starts over. Without this a
+    // save written before the rollback existed — or any future way of getting
+    // past the end — parks on the last level and never leaves it.
+    const startAt = resuming && game
+      ? game.unlocked >= LEVELS.length
+        ? RESTART_AT
+        : game.unlocked
+      : skipLearn
+        ? 1
+        : 0;
     note.textContent =
       chosen.size === 0
         ? "Pick at least one group."
@@ -286,8 +303,11 @@ function renderSelection(
         ? { ...game, skipLearn }
         : { groups: [...chosen].sort(), unlocked: 0, health: MAX_HEALTH, skipLearn };
     if (skipLearn) next.unlocked = Math.max(next.unlocked, 1);
+    // Same guard as the note on the selection screen: a finished ladder
+    // starts over rather than clamping onto its last rung.
+    if (next.unlocked >= LEVELS.length) next.unlocked = RESTART_AT;
     await saveGame(next);
-    void runLevel(body, next, Math.min(next.unlocked, LEVELS.length - 1), main, isCurrent);
+    void runLevel(body, next, next.unlocked, main, isCurrent);
   });
 
   refresh();
@@ -392,15 +412,26 @@ async function runLevel(
     clearTimeout(slow);
     if (left || !isCurrent() || !body.isConnected) return;
     if (words === null || words.length < 5) {
+      // The other way this used to strand somebody: a pool too small for the
+      // word levels left the game unlocked at 5 or 6, so Continue landed on
+      // this card every single time with nothing here to leave by except
+      // changing the pool. There is a way back down the ladder now.
       body.innerHTML = `
         <div class="card-panel kana-quiz">
           <div class="big">🔍</div>
           <div>Not enough short words can be written with only these kana.</div>
-          <div class="glosses" style="margin-top:8px">Add more groups.</div>
+          <div class="glosses" style="margin-top:8px">Add more groups, or go back and play the kana levels again.</div>
           <div class="row-actions" style="justify-content:center;margin-top:12px">
+            <button id="kana-restart">Start from level ${RESTART_AT}</button>
             <button id="kana-back" class="secondary">Change groups</button>
           </div>
         </div>`;
+      body.querySelector("#kana-restart")!.addEventListener("click", async () => {
+        game.unlocked = RESTART_AT;
+        game.health = MAX_HEALTH;
+        await saveGame(game);
+        void runLevel(body, game, RESTART_AT, main, isCurrent);
+      });
       body.querySelector("#kana-back")!.addEventListener("click", () => renderSelection(body, game, main, isCurrent));
       return;
     }
@@ -484,6 +515,12 @@ async function runLevel(
     stopTimer();
     session?.end("cleared");
     game.unlocked = Math.max(game.unlocked, level + 1);
+    // Clearing the last level rolls the ladder back here, not in the button
+    // on the trophy screen. Leaving that screen any other way — Change
+    // groups, another tab, closing the app — used to save "unlocked: 7",
+    // which the selection screen clamped to the top level, so Continue
+    // replayed level 6 for ever.
+    if (game.unlocked >= LEVELS.length) game.unlocked = RESTART_AT;
     if (useLives) game.health = Math.min(MAX_HEALTH, health + 1);
     // Levels count towards the day's quests; the learn level is a stroll,
     // not a clear. The groups in play are reported too, so a quest can ask
@@ -515,10 +552,9 @@ async function runLevel(
           </div>
         </div>`;
       body.querySelector("#kana-again")!.addEventListener("click", async () => {
-        game.unlocked = game.skipLearn ? 1 : 0;
         game.health = MAX_HEALTH;
         await saveGame(game);
-        void runLevel(body, game, game.unlocked, main, isCurrent);
+        void runLevel(body, game, RESTART_AT, main, isCurrent);
       });
       body.querySelector("#kana-back")!.addEventListener("click", () => renderSelection(body, game, main, isCurrent));
       return;
