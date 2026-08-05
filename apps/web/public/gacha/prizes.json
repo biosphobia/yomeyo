@@ -19,35 +19,46 @@
   "_rarities": "Only used when draw is 'rarity'. Weights are relative, not percentages — they need not add to 100.",
 
   "cutscenes": {
-    "airdrop": "Unscheduled delivery",
-    "kick": "Percussive maintenance",
-    "bowling": "Right of way",
-    "hail": "Adverse weather",
-    "order": "Table service",
-    "soak": "Something in the water",
-    "tank": "Feeding time"
+    "green": {
+      "title": "For an amazing reason",
+      "lines": ["chichan look", "why are you green....", "for an amazing reason", "that's not a reason"]
+    },
+    "hungry": {
+      "title": "Rations",
+      "lines": ["chichan. i'm hungry", "you ate the last one", "that was ages ago", "(smack)", "...food?"]
+    },
+    "airdrop": {
+      "title": "Unscheduled delivery",
+      "lines": ["did you hear something", "no", "it's on top of you"]
+    },
+    "kick": {
+      "title": "Percussive maintenance",
+      "lines": ["it's stuck", "don't—", "where'd it go", "move."]
+    },
+    "bowling": {
+      "title": "Right of way",
+      "lines": ["something's coming", "ow", "it came back"]
+    },
+    "hail": {
+      "title": "Adverse weather",
+      "lines": ["run", "which way", "...that one was polite"]
+    },
+    "order": {
+      "title": "Table service",
+      "lines": ["is anyone here", "nobody's been here for years", "then who's that", "don't ask"]
+    },
+    "soak": {
+      "title": "Something in the water",
+      "lines": ["this was a good idea", "something touched my foot", "wasn't me", "i know. that's the problem"]
+    },
+    "tank": {
+      "title": "Feeding time",
+      "lines": ["they're still alive", "somebody's feeding them", "can we eat them", "no—", "(the tank disagrees)"]
+    }
   },
-  "_cutscenes": "What each cutscene is captioned. The keys are the scenario ids in gacha-scene.ts and cannot be invented here, but every name can be rewritten. Leave one out and it falls back to the name in the code.",
+  "_cutscenes": "Each cutscene's caption and its dialogue. The keys are the scenario ids in gacha-scene.ts and cannot be invented here, but every title and every line can be rewritten. Lines are in the order they are spoken; who says each one and when is set in the code. Leave a line blank or drop it and the one written in the code is used.",
 
   "prizes": [
-    {
-      "id": "gif-default-correct",
-      "type": "gif",
-      "name": "Good job",
-      "rarity": "common",
-      "on": "correct",
-      "image": "../feedback/correct.gif",
-      "text": "good job!!"
-    },
-    {
-      "id": "gif-default-wrong",
-      "type": "gif",
-      "name": "Nice try",
-      "rarity": "common",
-      "on": "wrong",
-      "image": "../feedback/wrong.gif",
-      "text": "nice try!"
-    },
     {
       "id": "gif-rubrub",
       "type": "gif",

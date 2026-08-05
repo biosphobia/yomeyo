@@ -3,6 +3,7 @@ import { toast } from "./toast.js";
 import { earnYennies, formatYennies, levelReward, spendYennies, yennies } from "./yennies.js";
 import { addOwned, equipSkin, equippedSkin, owned } from "./gacha-collection.js";
 import {
+  cutsceneLines,
   cutsceneTitle,
   drawPrize,
   prizeImageUrl,
@@ -220,7 +221,13 @@ async function pull(main: HTMLElement, table: PrizeTable, isCurrent: () => boole
 
   let rolled: Promise<void> = Promise.resolve();
   const cutscene = playCutscene(sceneBox, {
-    onOpen: () => {
+    // Every word on screen comes from the prize file when it says so.
+    lines: cutsceneLines(table),
+    onOpen: (origin) => {
+      // The strip unrolls out of wherever the crate ended up on screen,
+      // rather than appearing from the bottom of an unrelated box.
+      rollBox.style.setProperty("--from-x", `${(origin.x * 100).toFixed(1)}%`);
+      rollBox.style.setProperty("--from-y", `${(origin.y * 100).toFixed(1)}%`);
       rollBox.classList.add("over-scene");
       rolled = runRoll(rollBox, prize, table);
     },

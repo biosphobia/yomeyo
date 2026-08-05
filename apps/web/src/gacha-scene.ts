@@ -1,25 +1,28 @@
 import { assetUrl } from "./store.js";
 import { createSfx, type Sfx } from "./gacha-audio.js";
 import { buildLocation, type LocationId } from "./gacha-locations.js";
+import { createDialogue, type Line } from "./gacha-dialogue.js";
 
 /**
  * The cutscene a crate opening happens inside.
  *
- * A few places that used to be somewhere, two figures, and a supply crate
- * that arrives by some means neither of them deserved. One scenario is drawn
- * at random, so opening forty crates is not watching the same film forty
- * times, and they do not all begin the same way: some walk in out of the
- * fog, some are already sitting at a counter, some are already in the bath.
+ * A few places that used to be somewhere, two figures who have been walking
+ * a long time, and a supply crate that arrives by some means neither of them
+ * deserved. One scenario is drawn at random, so opening forty crates is not
+ * watching the same film forty times, and they do not all begin the same
+ * way: some walk in out of the fog, some are already sat at a counter, some
+ * are already in the bath.
  *
- * The pull happens here rather than afterwards: when the lid comes off the
- * scene says so, and the strip rolls over the top of it while the film keeps
- * playing underneath.
+ * Each scenario is a timeline of three things: what moves, where the camera
+ * is, and who says what. The camera is a list of shots — cuts, pans, pushes,
+ * a close-up on somebody's face — and the lines are drawn over the picture
+ * in chunky pixels and can all be rewritten on GitHub.
  *
- * Everything except the two characters is built in code — see
- * `gacha-locations.ts` — so the whole thing costs two small model files and
- * nothing else. three.js is large, so it is fetched when the Gacha tab opens
- * rather than when the button is pressed. If any of it fails, `done`
- * resolves at once and the roll happens without a film.
+ * The pull happens inside the film. When the crate opens, the strip unrolls
+ * out of it while the scene keeps playing underneath.
+ *
+ * Everything except the two characters is built in code, so the whole thing
+ * costs two small model files and nothing else.
  */
 
 const MODELS = ["gacha/models/yuuri.glb", "gacha/models/chito.glb"];
@@ -31,17 +34,22 @@ const MODELS = ["gacha/models/yuuri.glb", "gacha/models/chito.glb"];
  */
 const FACING = 0;
 
+type Vec3 = [number, number, number];
+type Where = Vec3 | ((s: Stage, t: number) => Vec3);
+
 export interface CutsceneOptions {
-  /** Fired the moment the lid comes off, for the roll to start over the top. */
-  onOpen?: () => void;
+  /**
+   * Fired when the crate opens, with where it is on screen as a fraction of
+   * the picture — so the roll can unroll out of it rather than appear.
+   */
+  onOpen?: (origin: { x: number; y: number }) => void;
+  /** Lines from the prize file, which win over the ones written here. */
+  lines?: Record<string, string>;
 }
 
 export interface Cutscene {
-  /** Resolves when the film has run its course. */
   done: Promise<void>;
-  /** Tear it down. For finishing the pull, not for skipping the film. */
   stop: () => void;
-  /** Which scenario was drawn, so the caption can name it. */
   id: Promise<string>;
 }
 
@@ -49,39 +57,79 @@ export interface Cutscene {
 
 interface Walker {
   root: any;
+  model: any;
   mixer: any;
   bones: Record<string, any>;
+  /** Cloned so tinting one of them cannot bleed into the other. */
+  materials: any[];
+  baseColours: any[];
   homeX: number;
 }
 
 interface Stage {
+  THREE: any;
   sfx: Sfx;
-  /** Whoever loaded, in file order. May be shorter than two. */
+  /** yuuri first, chito second — whoever loaded. May be shorter than two. */
   cast: Walker[];
   crate: any;
   lid: any;
   spares: any[];
   once: (key: string, at: number, fn: () => void) => void;
-  /** Set true on any frame the walk cycle should be running. */
   walking: boolean;
-  /** Where the camera looks. */
-  look: { x: number; y: number; z: number };
-  /** How far the camera has pushed in, 0..1, when a scenario wants to say. */
-  dolly: number | null;
+  /** Set by a scenario when it wants the camera somewhere specific. */
+  shot: { from: Vec3; look: Vec3; fov: number } | null;
+}
+
+export interface Shot {
+  at: number;
+  from: Where;
+  look: Where;
+  /** Where it ends up, if the shot moves. */
+  to?: Where;
+  lookTo?: Where;
+  fov?: number;
+  fovTo?: number;
+  /** Seconds to blend out of the previous shot. 0, the default, is a cut. */
+  blend?: number;
+  /** Handheld, in metres. */
+  shake?: number;
 }
 
 export interface Scenario {
   id: string;
   location: LocationId;
   seconds: number;
-  /** When the lid comes off, so the roll can be started against it. */
+  /** When the crate opens, so the roll can be started against it. */
   opensAt: number;
+  shots: Shot[];
+  lines: Line[];
   run: (t: number, dt: number, s: Stage) => void;
 }
 
 const clamp01 = (t: number): number => (t < 0 ? 0 : t > 1 ? 1 : t);
 const smooth = (t: number): number => t * t * (3 - 2 * t);
 const spring = (t: number): number => (t >= 1 ? 1 : 1 - Math.pow(2, -9 * t) * Math.cos(t * 13));
+const mix = (a: number, b: number, t: number): number => a + (b - a) * t;
+const mix3 = (a: Vec3, b: Vec3, t: number): Vec3 => [mix(a[0], b[0], t), mix(a[1], b[1], t), mix(a[2], b[2], t)];
+
+/** Roughly where somebody's face is, for a close-up. */
+function head(walker: Walker | undefined, forward = 0.9): Where {
+  return (s: Stage): Vec3 => {
+    if (!walker) return [0, 1.2, 0];
+    const p = walker.root.position;
+    void s;
+    return [p.x, p.y + 1.28, p.z + forward];
+  };
+}
+
+/** Where somebody is standing, at chest height. */
+function at(walker: Walker | undefined, dy = 1.0): Where {
+  return (): Vec3 => {
+    if (!walker) return [0, dy, 0];
+    const p = walker.root.position;
+    return [p.x, p.y + dy, p.z];
+  };
+}
 
 /**
  * Bend a character into a shape the one walk cycle cannot make.
@@ -106,7 +154,6 @@ function pose(walker: Walker | undefined, name: string, amount: number, t = 0): 
       set(b.Spine, 0.12);
       break;
     case "soak":
-      // Sunk to the shoulders, arms out along the rim.
       set(b.LeftUpLeg, -1.35);
       set(b.RightUpLeg, -1.35);
       set(b.LeftLeg, 1.2);
@@ -119,10 +166,39 @@ function pose(walker: Walker | undefined, name: string, amount: number, t = 0): 
       set(b.RightArm, 0, 0, 2.1 + Math.sin(t * 9) * 0.35);
       set(b.RightForeArm, 0, 0, 0.5);
       break;
+    case "point":
+      // Look at that. Whatever that is.
+      set(b.RightArm, -1.7, 0, 0.5);
+      set(b.RightForeArm, -0.2);
+      set(b.Spine, 0, 0.2);
+      break;
     case "reach":
       set(b.LeftArm, -1.5, 0, -0.35);
       set(b.RightArm, -1.5, 0, 0.35);
       set(b.Spine, -0.2);
+      break;
+    case "hungry":
+      // Both hands on an empty stomach, folded over it.
+      set(b.LeftArm, -0.5, 0, -0.9);
+      set(b.RightArm, -0.5, 0, 0.9);
+      set(b.LeftForeArm, -1.3);
+      set(b.RightForeArm, -1.3);
+      set(b.Spine, 0.35);
+      set(b.Head, 0.3);
+      break;
+    case "swing":
+      // The wind-up and the follow-through of a flat hand.
+      set(b.RightArm, -2.4, 0, 0.6);
+      set(b.RightForeArm, -0.8);
+      set(b.Spine, 0, -0.35);
+      break;
+    case "hurt":
+      // Both hands on the back of the head, regretting everything.
+      set(b.LeftArm, -2.3, 0, -0.5);
+      set(b.RightArm, -2.3, 0, 0.5);
+      set(b.LeftForeArm, -1.9);
+      set(b.RightForeArm, -1.9);
+      set(b.Spine, 0.2);
       break;
     case "panic":
       set(b.LeftArm, 0, 0, -2.3 + Math.sin(t * 14) * 0.6);
@@ -140,7 +216,29 @@ function pose(walker: Walker | undefined, name: string, amount: number, t = 0): 
   }
 }
 
-/** Face the camera, optionally turned by `turn` radians. */
+/**
+ * Wash a character in a colour.
+ *
+ * Their materials are cloned per pull, so tinting one of them here cannot
+ * follow the model into the next crate or across into the other character.
+ */
+function tint(walker: Walker | undefined, THREE: any, colour: number, amount: number): void {
+  if (!walker) return;
+  const a = clamp01(amount);
+  const target = new THREE.Color(colour);
+  for (const material of walker.materials) {
+    if (!material) continue;
+    // Through `emissive` rather than `color`: these models are lit almost
+    // entirely by their own texture, and multiplying that by a colour barely
+    // moves it. Emissive is added on top, so it actually shows.
+    if (material.emissive) {
+      material.emissive.copy(target);
+      material.emissiveIntensity = a * 0.85;
+    }
+    if (material.color) material.color.copy(walker.baseColours[0]).lerp(target, a * 0.6);
+  }
+}
+
 function face(walker: Walker | undefined, turn = 0): void {
   if (walker) walker.root.rotation.y = FACING + turn;
 }
@@ -161,7 +259,6 @@ function walkIn(s: Stage, t: number, seconds: number, from = -26): number {
   return walk;
 }
 
-/** Put them somewhere and leave them there. */
 function place(s: Stage, spots: [number, number][], turn = 0, y = 0): void {
   s.cast.forEach((person, i) => {
     const spot = spots[i] ?? spots[0];
@@ -182,21 +279,195 @@ function popLid(s: Stage, p: number): void {
   s.lid.rotation.x = open * 0.8;
 }
 
+/**
+ * The gag, in one call: a flat hand to the back of a head.
+ *
+ * `p` runs 0 to 1 across the whole thing — wind-up, contact at a third of
+ * the way through, then one of them holding her head and the other entirely
+ * unrepentant.
+ */
+function smackGag(s: Stage, hitter: Walker | undefined, victim: Walker | undefined, p: number): void {
+  const swing = clamp01(p / 0.34);
+  const after = clamp01((p - 0.34) / 0.66);
+  pose(hitter, "swing", p < 0.34 ? swing : 1 - after * 0.85);
+  if (victim) {
+    if (p < 0.34) {
+      pose(victim, "clear", 1);
+    } else {
+      pose(victim, "hurt", clamp01(after * 3));
+      // The head snaps forward and comes back.
+      victim.root.rotation.x = -Math.sin(clamp01(after * 2.4) * Math.PI) * 0.5;
+    }
+  }
+}
+
 // ---------------- the scenarios ----------------
 
 export const SCENARIOS: Scenario[] = [
   {
+    id: "green",
+    location: "city",
+    seconds: 19,
+    opensAt: 16.4,
+    shots: [
+      // Wide, both of them, walking.
+      { at: 0, from: [0, 1.55, 7.2], look: [0, 0.95, -1], to: [0, 1.5, 5.4], lookTo: [0, 0.95, -0.4] },
+      // Cut to chito, who has been asked to look at something.
+      { at: 6.2, from: [1.5, 1.35, 1.8], look: (s) => posOf(s.cast[1], 1.2), fov: 30 },
+      // Whip round to yuuri, who is green.
+      { at: 8.0, from: [-2.4, 1.5, 2.6], look: (s) => posOf(s.cast[0], 1.1), to: [-1.1, 1.3, 1.5], fov: 34, blend: 0.5 },
+      // In. Further in.
+      { at: 10.4, from: head(undefined, 2.2), look: (s) => posOf(s.cast[0], 1.28), fov: 34, fovTo: 9, to: head(undefined, 0.62), shake: 0.03 },
+      // Back out, in time to see what happens to her.
+      { at: 14.2, from: [0, 2.2, 5.2], look: [0, 1.0, -0.4], to: [0, 1.7, 4.2], lookTo: [0, 0.7, -0.4] },
+      { at: 16.4, from: [0, 1.5, 3.6], look: [0, 0.6, -0.4], to: [0, 1.35, 3.0], lookTo: [0, 0.5, -0.4] },
+    ],
+    lines: [
+      { at: 5.4, seconds: 2.4, who: "Yuuri", text: "Chi-chan, look" },
+      { at: 8.0, seconds: 2.4, who: "Chito", text: "...why are you green" },
+      { at: 10.8, seconds: 3.2, who: "Yuuri", text: "For an amazing reason", loud: true },
+      { at: 14.6, seconds: 1.6, who: "Chito", text: "That's not a reason" },
+    ],
+    run(t, _dt, s) {
+      const [yuuri, chito] = s.cast;
+      walkIn(s, t, 5.6);
+      if (t >= 5.6) {
+        place(s, [
+          [-0.7, -0.3],
+          [0.7, -0.5],
+        ]);
+      }
+      // She has been green for some time and is only now mentioning it.
+      tint(yuuri, s.THREE, 0x3ddc55, clamp01((t - 4.6) / 1.2));
+      if (t >= 5.2 && t < 8.0) pose(yuuri, "point", clamp01((t - 5.2) / 0.4));
+      s.once("turn", 8.0, () => {
+        face(chito, -0.5);
+        s.sfx.creak();
+      });
+      if (t >= 8.4 && t < 10.4) pose(chito, "reach", clamp01((t - 8.4) / 0.5) * 0.4);
+
+      // The zoom, and the noise that comes with it.
+      s.once("menace", 10.4, () => s.sfx.menace(3.6));
+      if (t >= 10.4 && t < 14.2) {
+        pose(yuuri, "clear", 1);
+        face(yuuri, Math.sin(t * 1.4) * 0.04);
+        // Deepening green, and she leans in as the camera does.
+        tint(yuuri, s.THREE, 0x1f9c33, clamp01((t - 10.4) / 2.2));
+        yuuri?.root.position.setZ(-0.3 + smooth(clamp01((t - 10.4) / 3)) * 0.5);
+      }
+
+      // The reason turns out to be gravity.
+      s.once("whistle", 14.2, () => s.sfx.falling(1.2));
+      if (t >= 14.2 && yuuri) {
+        const fall = clamp01((t - 14.2) / 1.2);
+        showCrate(s, yuuri.root.position.x, 13 - 12.64 * fall * fall, yuuri.root.position.z);
+        s.crate.rotation.y = fall * 4;
+      }
+      s.once("impact", 15.4, () => {
+        s.sfx.thud();
+        s.sfx.clatter();
+      });
+      if (t >= 15.4 && yuuri) {
+        const down = clamp01((t - 15.4) / 0.35);
+        pose(yuuri, "flat", down);
+        yuuri.root.rotation.x = -smooth(down) * 1.5;
+        tint(yuuri, s.THREE, 0x1f9c33, 1 - smooth(down) * 0.5);
+        face(chito, smooth(down) * 0.6);
+      }
+      s.once("pop", 16.4, () => s.sfx.open());
+      if (t >= 16.4) popLid(s, (t - 16.4) / 1.2);
+    },
+  },
+
+  {
+    id: "hungry",
+    location: "city",
+    seconds: 17,
+    opensAt: 14.6,
+    shots: [
+      { at: 0, from: [0, 1.55, 7.0], look: [0, 0.95, -1], to: [0, 1.5, 5.6], lookTo: [0, 0.95, -0.4] },
+      // Down at stomach height, which is where the problem is.
+      { at: 4.4, from: [-1.8, 0.75, 2.2], look: (s) => posOf(s.cast[0], 0.75), fov: 32 },
+      { at: 7.0, from: [0.4, 1.45, 2.6], look: (s) => posOf(s.cast[1], 1.15), fov: 30 },
+      // Wide again for the smack, because it deserves to be seen in full.
+      { at: 9.0, from: [0, 1.4, 4.2], look: [0, 1.0, -0.4], shake: 0.02 },
+      { at: 12.4, from: [0, 2.6, 4.6], look: [0, 0.9, -0.4], to: [0, 1.6, 3.4], lookTo: [0, 0.8, -0.4] },
+    ],
+    lines: [
+      { at: 4.6, seconds: 2.2, who: "Yuuri", text: "Chi-chan. I'm hungry" },
+      { at: 7.0, seconds: 1.9, who: "Chito", text: "You ate the last ration" },
+      { at: 9.2, seconds: 2.0, who: "Yuuri", text: "That was ages ago" },
+      { at: 11.4, seconds: 1.4, who: "", text: "(smack)" },
+      { at: 13.0, seconds: 2.2, who: "Yuuri", text: "...food?", loud: true },
+    ],
+    run(t, _dt, s) {
+      const [yuuri, chito] = s.cast;
+      walkIn(s, t, 4.4);
+      if (t >= 4.4) {
+        place(s, [
+          [-0.7, -0.2],
+          [0.7, -0.5],
+        ]);
+      }
+      s.once("growl", 4.4, () => s.sfx.growl());
+      s.once("growl2", 8.8, () => s.sfx.growl());
+      if (t >= 4.4 && t < 9.6) pose(yuuri, "hungry", clamp01((t - 4.4) / 0.6));
+      if (t >= 7.0 && t < 9.4) face(chito, -0.45);
+
+      // The smack.
+      s.once("smack", 11.4, () => s.sfx.smack());
+      if (t >= 10.8 && t < 13.4) {
+        smackGag(s, chito, yuuri, clamp01((t - 10.8) / 2.6));
+        face(chito, -0.5);
+      }
+
+      // And then, because the world is like this, a crate.
+      s.once("whistle", 12.6, () => s.sfx.falling(1.0));
+      if (t >= 12.6 && t < 13.6) {
+        const fall = clamp01((t - 12.6) / 1.0);
+        showCrate(s, 0, 11 - 10.64 * fall * fall, -1.1);
+        s.crate.rotation.y = fall * 3;
+      }
+      s.once("land", 13.6, () => {
+        s.sfx.thud();
+        s.sfx.clatter();
+      });
+      if (t >= 13.6) {
+        showCrate(s, 0, 0.36 * spring(clamp01((t - 13.6) / 0.8)), -1.1);
+        s.crate.rotation.set(0, 0.3, 0);
+        pose(yuuri, "reach", clamp01((t - 13.9) / 0.4));
+        face(yuuri, -0.2);
+        face(chito, 0.2);
+      }
+      s.once("pop", 14.6, () => s.sfx.open());
+      if (t >= 14.6) popLid(s, (t - 14.6) / 1.2);
+    },
+  },
+
+  {
     id: "airdrop",
     location: "city",
-    seconds: 12,
-    opensAt: 10.6,
+    seconds: 13,
+    opensAt: 11.2,
+    shots: [
+      { at: 0, from: [0, 1.55, 7.2], look: [0, 0.95, -1], to: [0, 1.5, 5.6], lookTo: [0, 0.95, -0.4] },
+      // Looking up at the sky a moment before either of them does.
+      { at: 6.6, from: [0.9, 0.6, 3.2], look: [0, 6, -2], fov: 46 },
+      { at: 8.0, from: [0, 1.8, 4.6], look: [0, 1.0, -0.4], shake: 0.03 },
+      { at: 9.4, from: [-1.6, 1.1, 2.4], look: [0, 0.5, -0.4], to: [-0.9, 1.0, 1.9] },
+    ],
+    lines: [
+      { at: 5.6, seconds: 1.8, who: "Chito", text: "Did you hear something" },
+      { at: 8.6, seconds: 1.8, who: "Yuuri", text: "no" },
+      { at: 10.6, seconds: 1.8, who: "Chito", text: "It's on top of you" },
+    ],
     run(t, _dt, s) {
       const [victim, other] = s.cast;
       walkIn(s, t, 5.4);
       s.once("look", 5.9, () => face(other, -0.4));
-      s.once("whistle", 6.8, () => s.sfx.falling(1.4));
-      if (t >= 6.8 && victim) {
-        const fall = clamp01((t - 6.8) / 1.4);
+      s.once("whistle", 6.9, () => s.sfx.falling(1.3));
+      if (t >= 6.9 && victim) {
+        const fall = clamp01((t - 6.9) / 1.3);
         showCrate(s, victim.root.position.x, 13 - 12.6 * fall * fall, victim.root.position.z);
         s.crate.rotation.y = fall * 4;
       }
@@ -207,31 +478,46 @@ export const SCENARIOS: Scenario[] = [
         victim.root.rotation.x = -smooth(down) * 1.5;
         face(other, smooth(down) * 0.7);
       }
-      if (t >= 8.9 && other && victim) {
-        const over = clamp01((t - 8.9) / 1.3);
+      if (t >= 9.0 && other && victim) {
+        const over = clamp01((t - 9.0) / 1.3);
         other.root.position.x = other.homeX + (victim.root.position.x + 0.8 - other.homeX) * smooth(over);
         s.walking = over < 1;
-        if (over >= 1) pose(other, "reach", clamp01((t - 10.2) / 0.4));
+        if (over >= 1) pose(other, "reach", clamp01((t - 10.4) / 0.4));
       }
-      s.once("poke", 10.2, () => s.sfx.creak());
-      s.once("pop", 10.6, () => s.sfx.open());
-      if (t >= 10.6) popLid(s, (t - 10.6) / 1.2);
+      s.once("poke", 10.6, () => s.sfx.creak());
+      s.once("pop", 11.2, () => s.sfx.open());
+      if (t >= 11.2) popLid(s, (t - 11.2) / 1.2);
     },
   },
 
   {
     id: "kick",
     location: "city",
-    seconds: 13,
-    opensAt: 11.4,
+    seconds: 14,
+    opensAt: 12.2,
+    shots: [
+      { at: 0, from: [0, 1.55, 7.0], look: [0, 0.95, -1], to: [0, 1.5, 5.2], lookTo: [0, 0.9, -1] },
+      // Low and close on the crate for the kicking.
+      { at: 5.0, from: [-1.9, 0.5, 1.4], look: [0, 0.4, -1.2], fov: 40 },
+      // Straight up, following it out of frame.
+      { at: 8.4, from: [1.2, 0.9, 2.6], look: [0, 8, -1.2], fov: 44 },
+      { at: 10.6, from: [0, 1.9, 4.4], look: [0, 0.9, -1.2], shake: 0.03 },
+      { at: 12.2, from: [0, 1.2, 3.0], look: [0, 0.55, -1.2], to: [0, 1.1, 2.5] },
+    ],
+    lines: [
+      { at: 5.2, seconds: 1.8, who: "Yuuri", text: "It's stuck" },
+      { at: 7.4, seconds: 1.6, who: "Chito", text: "Don't—" },
+      { at: 9.0, seconds: 2.0, who: "Yuuri", text: "where'd it go" },
+      { at: 11.0, seconds: 1.6, who: "Chito", text: "Move." , loud: true },
+    ],
     run(t, _dt, s) {
       const [kicker, other] = s.cast;
       walkIn(s, t, 4.6);
       showCrate(s, 0, 0.3, -1.2);
       const kicks = [
-        { at: 5.4, who: kicker },
-        { at: 6.6, who: other },
-        { at: 7.8, who: kicker },
+        { at: 5.6, who: kicker },
+        { at: 6.8, who: other },
+        { at: 8.2, who: kicker },
       ];
       kicks.forEach((kick, i) => {
         s.once(`kick${i}`, kick.at, () => (i < 2 ? s.sfx.thud() : s.sfx.boing()));
@@ -241,38 +527,47 @@ export const SCENARIOS: Scenario[] = [
           kick.who.root.position.z = (kick.who === kicker ? -0.2 : -0.55) - lean * 0.45;
         }
       });
-      if (t >= 7.8 && t < 10.2) {
-        const up = (t - 7.8) / 2.4;
-        showCrate(s, 0, 0.3 + Math.sin(up * Math.PI) * 22, -1.2);
+      if (t >= 8.2 && t < 11.0) {
+        const up = (t - 8.2) / 2.8;
+        showCrate(s, 0, 0.3 + Math.sin(up * Math.PI) * 24, -1.2);
         s.crate.rotation.set(up * 9, up * 6, up * 4);
       }
-      s.once("gone", 8.5, () => s.sfx.whoosh());
-      // Both of them look up and wait, which is the funny part.
-      if (t >= 8.6 && t < 10.2) {
-        for (const who of s.cast) pose(who, "clear", 1);
-        s.look.y = 4.5;
-      }
-      s.once("coming", 9.6, () => s.sfx.falling(0.6));
-      s.once("land", 10.2, () => {
+      s.once("gone", 8.9, () => s.sfx.whoosh());
+      if (t >= 9.0 && t < 11.0) for (const who of s.cast) pose(who, "clear", 1);
+      s.once("coming", 10.4, () => s.sfx.falling(0.6));
+      s.once("land", 11.0, () => {
         s.sfx.thud();
         s.sfx.clatter();
       });
-      if (t >= 10.2) {
-        showCrate(s, 0, 0.36 * spring(clamp01((t - 10.2) / 0.9)), -1.2);
+      if (t >= 11.0) {
+        showCrate(s, 0, 0.36 * spring(clamp01((t - 11.0) / 0.9)), -1.2);
         s.crate.rotation.set(0, 0, 0);
         face(kicker, -0.3);
         face(other, 0.3);
       }
-      s.once("pop", 11.4, () => s.sfx.open());
-      if (t >= 11.4) popLid(s, (t - 11.4) / 1.2);
+      s.once("pop", 12.2, () => s.sfx.open());
+      if (t >= 12.2) popLid(s, (t - 12.2) / 1.2);
     },
   },
 
   {
     id: "bowling",
     location: "city",
-    seconds: 12.5,
-    opensAt: 10.9,
+    seconds: 13,
+    opensAt: 11.3,
+    shots: [
+      { at: 0, from: [0, 1.55, 7.0], look: [0, 0.95, -1], to: [0, 1.5, 5.6], lookTo: [0, 0.95, -0.6] },
+      // Side on, so it arrives from off the edge of the frame.
+      { at: 4.9, from: [3.4, 1.0, 3.2], look: [-1, 0.7, -0.6], fov: 42 },
+      { at: 6.2, from: [0, 1.6, 4.2], look: [0, 0.7, -0.6], shake: 0.05 },
+      { at: 7.6, from: [-2.6, 2.2, 3.0], look: [1, 0.6, -0.6] },
+      { at: 9.8, from: [0, 1.3, 3.6], look: [0, 0.6, -0.6], to: [0, 1.2, 3.0] },
+    ],
+    lines: [
+      { at: 5.0, seconds: 1.5, who: "Chito", text: "Something's coming" },
+      { at: 6.6, seconds: 1.6, who: "Yuuri", text: "ow" },
+      { at: 10.0, seconds: 2.0, who: "Chito", text: "It came back" },
+    ],
     run(t, _dt, s) {
       const [a, b] = s.cast;
       walkIn(s, t, 4.6);
@@ -317,26 +612,38 @@ export const SCENARIOS: Scenario[] = [
           pose(who, "flat", 1 - smooth(up));
         }
       }
-      s.once("pop", 10.9, () => s.sfx.open());
-      if (t >= 10.9) popLid(s, (t - 10.9) / 1.2);
+      s.once("pop", 11.3, () => s.sfx.open());
+      if (t >= 11.3) popLid(s, (t - 11.3) / 1.2);
     },
   },
 
   {
     id: "hail",
     location: "city",
-    seconds: 13,
-    opensAt: 11.4,
+    seconds: 14,
+    opensAt: 12.2,
+    shots: [
+      { at: 0, from: [0, 1.55, 7.0], look: [0, 0.95, -1], to: [0, 1.5, 5.6], lookTo: [0, 0.95, -0.6] },
+      { at: 4.6, from: [0, 0.7, 3.0], look: [0, 9, -2], fov: 48 },
+      { at: 6.0, from: [-3.2, 1.6, 3.4], look: [0.6, 0.9, -1], shake: 0.05 },
+      { at: 8.6, from: [3.0, 1.4, 3.0], look: [-0.6, 0.9, -1], shake: 0.05 },
+      { at: 11.0, from: [0, 1.8, 4.4], look: [0, 0.8, -1], to: [0, 1.3, 3.2] },
+    ],
+    lines: [
+      { at: 4.8, seconds: 1.6, who: "Chito", text: "Run" },
+      { at: 6.6, seconds: 1.6, who: "Yuuri", text: "which way", loud: true },
+      { at: 11.4, seconds: 2.0, who: "Chito", text: "...that one was polite" },
+    ],
     run(t, _dt, s) {
       const [a, b] = s.cast;
       walkIn(s, t, 4.2);
       for (let i = 0; i < s.spares.length; i++) {
-        const at = 4.8 + i * 0.34;
+        const at2 = 4.8 + i * 0.34;
         const one = s.spares[i];
-        s.once(`hail${i}`, at, () => s.sfx.falling(0.5));
-        s.once(`hit${i}`, at + 0.5, () => s.sfx.thud());
-        if (t >= at) {
-          const fall = clamp01((t - at) / 0.5);
+        s.once(`hail${i}`, at2, () => s.sfx.falling(0.5));
+        s.once(`hit${i}`, at2 + 0.5, () => s.sfx.thud());
+        if (t >= at2) {
+          const fall = clamp01((t - at2) / 0.5);
           one.visible = true;
           one.position.set(
             (i % 2 === 0 ? -1 : 1) * (1.5 + (i % 3) * 0.9),
@@ -344,11 +651,11 @@ export const SCENARIOS: Scenario[] = [
             -2.4 + (i % 4) * 0.7,
           );
           one.rotation.set(fall * 5, fall * 3 + i, 0);
-          if (t > at + 1.2) one.position.y = 0.34 - Math.min(0.8, (t - at - 1.2) * 0.9);
-          if (t > at + 2.1) one.visible = false;
+          if (t > at2 + 1.2) one.position.y = 0.34 - Math.min(0.8, (t - at2 - 1.2) * 0.9);
+          if (t > at2 + 2.1) one.visible = false;
         }
       }
-      if (t >= 4.6 && t < 10.4) {
+      if (t >= 4.6 && t < 11.2) {
         const panic = t - 4.6;
         s.walking = true;
         if (a) {
@@ -362,17 +669,17 @@ export const SCENARIOS: Scenario[] = [
           pose(b, "panic", 1, panic + 0.8);
         }
       }
-      s.once("last", 10.5, () => s.sfx.falling(0.9));
-      if (t >= 10.5 && t < 11.4) {
-        const fall = clamp01((t - 10.5) / 0.9);
+      s.once("last", 11.3, () => s.sfx.falling(0.9));
+      if (t >= 11.3 && t < 12.2) {
+        const fall = clamp01((t - 11.3) / 0.9);
         showCrate(s, 0, 9 - 8.64 * smooth(fall), -1.0);
         s.crate.rotation.y = fall * 2;
       }
-      s.once("gentle", 11.4, () => {
+      s.once("gentle", 12.2, () => {
         s.sfx.creak();
         s.sfx.open();
       });
-      if (t >= 11.4) {
+      if (t >= 12.2) {
         showCrate(s, 0, 0.36, -1.0);
         s.crate.rotation.set(0, 0, 0);
         for (const who of s.cast) pose(who, "clear", 1);
@@ -380,7 +687,7 @@ export const SCENARIOS: Scenario[] = [
           [-0.75, -0.2],
           [0.75, -0.2],
         ]);
-        popLid(s, (t - 11.4) / 1.2);
+        popLid(s, (t - 12.2) / 1.2);
       }
     },
   },
@@ -388,11 +695,24 @@ export const SCENARIOS: Scenario[] = [
   {
     id: "order",
     location: "cafe",
-    seconds: 12,
-    opensAt: 10.4,
+    seconds: 13,
+    opensAt: 11.2,
+    shots: [
+      // Along the counter, so the length of it does the work.
+      { at: 0, from: [-3.6, 1.5, -0.4], look: [1.2, 1.2, -2.6], fov: 34, to: [-2.4, 1.45, -0.9] },
+      { at: 3.0, from: [0, 1.5, 0.6], look: [0, 1.15, -2.8], to: [0, 1.4, -0.4] },
+      // Down on the bell, which is doing nothing.
+      { at: 5.6, from: [-0.9, 1.35, -1.2], look: [-0.6, 1.05, -2.6], fov: 28 },
+      { at: 7.4, from: [-4.4, 1.6, -1.6], look: [0, 1.4, -3.3], fov: 32, to: [-2.2, 1.55, -1.4] },
+      { at: 9.8, from: [0, 1.55, -0.2], look: [0, 1.45, -3.3], to: [0, 1.5, -1.0] },
+    ],
+    lines: [
+      { at: 2.6, seconds: 2.2, who: "Yuuri", text: "Is anyone here" },
+      { at: 5.2, seconds: 2.0, who: "Chito", text: "Nobody's been here for years" },
+      { at: 7.6, seconds: 2.0, who: "Yuuri", text: "Then who's that" },
+      { at: 11.0, seconds: 2.0, who: "Chito", text: "Don't ask" },
+    ],
     run(t, _dt, s) {
-      // Opens already sat at the counter, waiting for service that stopped
-      // some years ago.
       const [a, b] = s.cast;
       place(
         s,
@@ -405,46 +725,54 @@ export const SCENARIOS: Scenario[] = [
       );
       pose(a, "sit", 1);
       pose(b, "sit", 1);
-      s.look = { x: 0, y: 1.15, z: -2.6 };
-      s.dolly = clamp01((t - 1) / 6) * 0.5;
-
-      // One of them rings the bell. Nothing. Rings it again.
-      [3.2, 4.4, 5.6].forEach((at, i) => {
-        s.once(`bell${i}`, at, () => s.sfx.clatter());
-        if (a && t >= at && t < at + 0.3) pose(a, "reach", Math.sin(((t - at) / 0.3) * Math.PI));
+      [3.4, 4.6, 5.8].forEach((at2, i) => {
+        s.once(`bell${i}`, at2, () => s.sfx.bell());
+        if (a && t >= at2 && t < at2 + 0.3) pose(a, "reach", Math.sin(((t - at2) / 0.3) * Math.PI));
       });
-      s.once("sigh", 6.4, () => s.sfx.creak());
-      if (b && t >= 6.4 && t < 7.6) pose(b, "wave", clamp01((t - 6.4) / 0.5), t);
+      s.once("sigh", 6.6, () => s.sfx.creak());
+      if (b && t >= 6.6 && t < 7.6) pose(b, "wave", clamp01((t - 6.6) / 0.5), t);
 
-      // Then something slides down the counter, the way a drink would.
-      s.once("slide", 7.6, () => s.sfx.whoosh());
-      if (t >= 7.6 && t < 9.6) {
-        const slide = clamp01((t - 7.6) / 2);
+      s.once("slide", 7.8, () => s.sfx.whoosh());
+      if (t >= 7.8 && t < 10.2) {
+        const slide = clamp01((t - 7.8) / 2.4);
         showCrate(s, -4.6 + 4.6 * smooth(slide), 1.55, -3.3);
         s.crate.rotation.y = slide * 0.6;
       }
-      s.once("arrive", 9.6, () => {
+      s.once("arrive", 10.2, () => {
         s.sfx.thud();
         s.sfx.clatter();
       });
-      if (t >= 9.6) {
+      if (t >= 10.2) {
         showCrate(s, 0, 1.55, -3.3);
         s.crate.rotation.y = 0.6;
         pose(a, "sit", 1);
         pose(b, "sit", 1);
       }
-      s.once("pop", 10.4, () => s.sfx.open());
-      if (t >= 10.4) popLid(s, (t - 10.4) / 1.2);
+      s.once("pop", 11.2, () => s.sfx.open());
+      if (t >= 11.2) popLid(s, (t - 11.2) / 1.2);
     },
   },
 
   {
     id: "soak",
     location: "bath",
-    seconds: 12.5,
-    opensAt: 10.8,
+    seconds: 13.5,
+    opensAt: 11.6,
+    shots: [
+      { at: 0, from: [0, 1.6, 4.4], look: [0, 0.5, -1], fov: 36, to: [0, 1.2, 3.4] },
+      // Just above the water, which is where the trouble is.
+      { at: 4.6, from: [-1.9, 0.55, 1.4], look: [0.4, 0.4, -1], fov: 34 },
+      { at: 7.0, from: [0, 0.45, 2.4], look: [0, 0.45, -1], to: [0, 0.6, 1.6], shake: 0.02 },
+      { at: 9.0, from: [2.2, 1.5, 2.2], look: [0, 0.6, -1] },
+      { at: 11.0, from: [0, 1.2, 3.0], look: [0, 0.55, -1], to: [0, 1.05, 2.4] },
+    ],
+    lines: [
+      { at: 1.6, seconds: 2.2, who: "Yuuri", text: "This was a good idea" },
+      { at: 4.8, seconds: 2.0, who: "Chito", text: "Something touched my foot" },
+      { at: 7.2, seconds: 1.6, who: "Yuuri", text: "wasn't me" },
+      { at: 9.2, seconds: 2.0, who: "Chito", text: "I know. That's the problem" },
+    ],
     run(t, _dt, s) {
-      // Opens already in the water, up to the shoulders.
       const [a, b] = s.cast;
       place(
         s,
@@ -457,43 +785,53 @@ export const SCENARIOS: Scenario[] = [
       );
       pose(a, "soak", 1, t);
       pose(b, "soak", 1, t + 1.4);
-      s.look = { x: 0, y: 0.75, z: -1 };
-      s.dolly = clamp01((t - 0.5) / 7) * 0.45;
-
-      // Something is under the water, and it is coming up.
-      s.once("bubble", 5.2, () => s.sfx.creak());
-      s.once("bubble2", 6.4, () => s.sfx.clatter());
-      if (t >= 5.2 && t < 8.2) {
-        const rise = clamp01((t - 5.2) / 3);
+      s.once("bubble", 5.4, () => s.sfx.creak());
+      s.once("bubble2", 6.6, () => s.sfx.clatter());
+      if (t >= 5.4 && t < 8.6) {
+        const rise = clamp01((t - 5.4) / 3.2);
         showCrate(s, 0, -1.2 + 1.6 * smooth(rise), -1);
         s.crate.rotation.y = rise * 1.2;
         s.crate.rotation.z = Math.sin(t * 3) * 0.06 * rise;
       }
-      s.once("surface", 8.2, () => {
-        s.sfx.whoosh();
+      s.once("surface", 8.6, () => {
+        s.sfx.splash();
         s.sfx.thud();
       });
-      if (t >= 8.2) {
-        // Bobbing, like a very large duck.
-        showCrate(s, 0, 0.4 + Math.sin((t - 8.2) * 3.2) * 0.06, -1);
+      if (t >= 8.6) {
+        showCrate(s, 0, 0.4 + Math.sin((t - 8.6) * 3.2) * 0.06, -1);
         s.crate.rotation.z = Math.sin(t * 2.4) * 0.05;
-        // Both of them lean away from it, then back.
-        const lean = Math.sin(clamp01((t - 8.2) / 1.4) * Math.PI) * 0.5;
+        const lean = Math.sin(clamp01((t - 8.6) / 1.4) * Math.PI) * 0.5;
         if (a) a.root.position.x = -0.9 - lean;
         if (b) b.root.position.x = 0.9 + lean;
       }
-      s.once("pop", 10.8, () => s.sfx.open());
-      if (t >= 10.8) popLid(s, (t - 10.8) / 1.2);
+      s.once("pop", 11.6, () => s.sfx.open());
+      if (t >= 11.6) popLid(s, (t - 11.6) / 1.2);
     },
   },
 
   {
     id: "tank",
     location: "aquarium",
-    seconds: 13,
-    opensAt: 11.2,
+    seconds: 14,
+    opensAt: 12.0,
+    shots: [
+      // Behind them, so the tank fills the frame over their shoulders.
+      { at: 0, from: [0, 1.9, 1.4], look: [0, 2.6, -7], fov: 40, to: [0, 1.8, -0.4] },
+      { at: 3.6, from: [-3.4, 2.8, -2.0], look: [1, 3.0, -7.2], fov: 32, to: [-1.6, 2.6, -2.4] },
+      // Their faces, lit blue.
+      { at: 6.2, from: [0, 1.5, -5.4], look: [0, 1.35, -3.4], fov: 30 },
+      { at: 8.0, from: [2.6, 2.2, -1.4], look: [-0.6, 2.0, -6.4], shake: 0.04 },
+      { at: 9.6, from: [0, 1.6, 1.6], look: [0, 0.9, -3.4], to: [0, 1.3, 0.4], shake: 0.02 },
+      { at: 12.0, from: [0, 1.2, -0.6], look: [0, 0.55, -3.4], to: [0, 1.1, -1.2] },
+    ],
+    lines: [
+      { at: 1.4, seconds: 2.2, who: "Yuuri", text: "They're still alive" },
+      { at: 4.0, seconds: 2.0, who: "Chito", text: "Somebody's feeding them" },
+      { at: 6.4, seconds: 1.6, who: "Yuuri", text: "can we eat them" },
+      { at: 8.2, seconds: 1.8, who: "Chito", text: "No—", loud: true },
+      { at: 10.0, seconds: 2.0, who: "", text: "(the tank disagrees)" },
+    ],
     run(t, _dt, s) {
-      // Opens stood at the glass, watching the fish.
       const [a, b] = s.cast;
       place(
         s,
@@ -503,47 +841,48 @@ export const SCENARIOS: Scenario[] = [
         ],
         0,
       );
-      // Facing the tank rather than the camera, until it gives them a reason.
       for (const who of s.cast) if (who) who.root.rotation.y = FACING + Math.PI;
-      s.look = { x: 0, y: 2.2, z: -6.5 };
-      s.dolly = clamp01((t - 0.6) / 6.5) * 0.4;
-
-      // A crate drifts past inside the tank, among the fish, as though it
-      // lives there.
-      if (t >= 2.4 && t < 7.4) {
-        const swim = (t - 2.4) / 5;
+      if (t >= 2.4 && t < 8.0) {
+        const swim = (t - 2.4) / 5.6;
         showCrate(s, -7 + 14 * swim, 3.2 + Math.sin(swim * 6) * 0.5, -7.4);
         s.crate.rotation.set(Math.sin(swim * 5) * 0.2, swim * 2, Math.sin(swim * 4) * 0.15);
       }
-      s.once("notice", 4.2, () => s.sfx.creak());
-      if (t >= 4.2 && t < 6) pose(a, "reach", clamp01((t - 4.2) / 0.6));
-
-      // It leaves through the glass.
-      s.once("crack", 7.4, () => {
+      s.once("notice", 4.4, () => s.sfx.creak());
+      if (t >= 6.2 && t < 8.0) pose(a, "point", clamp01((t - 6.2) / 0.5));
+      s.once("crack", 8.0, () => {
         s.sfx.thud();
         s.sfx.clatter();
       });
-      if (t >= 7.4 && t < 9.2) {
-        const out = clamp01((t - 7.4) / 1.8);
+      if (t >= 8.0 && t < 9.8) {
+        const out = clamp01((t - 8.0) / 1.8);
         showCrate(s, 7 - 7 * smooth(out), 3.2 - 2.84 * smooth(out), -7.4 + 4 * smooth(out));
         s.crate.rotation.set(out * 3, out * 4, 0);
-        for (const who of s.cast) pose(who, "panic", clamp01((t - 7.4) / 0.4), t);
+        for (const who of s.cast) pose(who, "panic", clamp01((t - 8.0) / 0.4), t);
       }
-      s.once("beached", 9.2, () => s.sfx.thud());
-      if (t >= 9.2) {
-        showCrate(s, 0, 0.36 * spring(clamp01((t - 9.2) / 0.8)), -3.4);
+      s.once("beached", 9.8, () => {
+        s.sfx.splash();
+        s.sfx.thud();
+      });
+      if (t >= 9.8) {
+        showCrate(s, 0, 0.36 * spring(clamp01((t - 9.8) / 0.8)), -3.4);
         s.crate.rotation.set(0, 0.4, 0);
         for (const who of s.cast) pose(who, "clear", 1);
-        // They turn round to look at what the sea has brought them.
-        const turn = clamp01((t - 9.4) / 0.9);
+        const turn = clamp01((t - 10.0) / 0.9);
         if (a) a.root.rotation.y = FACING + Math.PI * (1 - smooth(turn)) + 0.25 * smooth(turn);
         if (b) b.root.rotation.y = FACING + Math.PI * (1 - smooth(turn)) - 0.25 * smooth(turn);
       }
-      s.once("pop", 11.2, () => s.sfx.open());
-      if (t >= 11.2) popLid(s, (t - 11.2) / 1.2);
+      s.once("pop", 12.0, () => s.sfx.open());
+      if (t >= 12.0) popLid(s, (t - 12.0) / 1.2);
     },
   },
 ];
+
+/** Where somebody is, plus a height — used by the shot definitions. */
+function posOf(walker: Walker | undefined, dy: number): Vec3 {
+  if (!walker) return [0, dy, 0];
+  const p = walker.root.position;
+  return [p.x, p.y + dy, p.z];
+}
 
 // ---------------- loading, before anybody presses the button ----------------
 
@@ -590,7 +929,6 @@ export function playCutscene(host: HTMLElement, options: CutsceneOptions = {}): 
       finish();
       teardown?.();
     };
-
     void build(host, finish, tellId, options).then((undo) => {
       teardown = undo;
     });
@@ -625,6 +963,14 @@ async function build(
     tellId(scenario.id);
     const location = buildLocation(scenario.location, THREE, scene);
 
+    // Whatever the prize file says wins over the line written here, so every
+    // word on screen can be changed on GitHub.
+    const said: Line[] = scenario.lines.map((line, i) => {
+      const override = options.lines?.[`${scenario.id}.${i}`];
+      return typeof override === "string" && override.trim() ? { ...line, text: override.trim() } : line;
+    });
+    const dialogue = createDialogue(host, said);
+
     // ---- crates ----
     const makeCrate = (): any => {
       const group = new THREE.Group();
@@ -657,9 +1003,6 @@ async function build(
     const spares = Array.from({ length: 9 }, makeCrate);
 
     // ---- the cast ----
-    //
-    // Cloned from the warmed-up models, so a second pull neither re-downloads
-    // them nor shares one scene graph with the first.
     const clips = models.flatMap((gltf: any) => gltf?.animations ?? []);
     const walkClip = clips.filter((c: any) => c.duration > 0.1).sort((a: any, b: any) => b.duration - a.duration)[0];
 
@@ -671,8 +1014,6 @@ async function build(
       // them reports a model a hundredth of its real size — which then gets
       // scaled up by the same factor until the camera is inside its head.
       model.updateMatrixWorld(true);
-      // Exports arrive at wildly different scales and origins; normalise on
-      // the measured box so a replacement model needs no code change.
       const bounds = new THREE.Box3().setFromObject(model);
       const height = Math.max(0.001, bounds.max.y - bounds.min.y);
       const scale = 1.5 / height;
@@ -682,12 +1023,25 @@ async function build(
       // whatever the exporter thought the origin was — and a fall pivots
       // around the feet instead of around the navel.
       model.position.y = -bounds.min.y * scale;
+
+      // Materials are shared with the cached model, so they are cloned here:
+      // tinting somebody green must not follow them into the next crate.
+      const materials: any[] = [];
+      const baseColours: any[] = [];
       model.traverse((node: any) => {
-        if (node.isMesh) {
-          node.castShadow = true;
-          node.receiveShadow = true;
+        if (!node.isMesh) return;
+        node.castShadow = true;
+        node.receiveShadow = true;
+        const copy = Array.isArray(node.material)
+          ? node.material.map((m: any) => m.clone())
+          : node.material.clone();
+        node.material = copy;
+        for (const m of Array.isArray(copy) ? copy : [copy]) {
+          materials.push(m);
+          baseColours.push(m.color?.clone?.() ?? new THREE.Color(0xffffff));
         }
       });
+
       const root = new THREE.Group();
       root.add(model);
       root.rotation.y = FACING;
@@ -702,11 +1056,9 @@ async function build(
       if (walkClip) {
         const action = mixer.clipAction(walkClip);
         action.play();
-        // Out of step, or two people walking together look like one person
-        // rendered twice.
         action.time = i * walkClip.duration * 0.5;
       }
-      cast.push({ root, mixer, bones, homeX: i === 0 ? -0.62 : 0.62 });
+      cast.push({ root, model, mixer, bones, materials, baseColours, homeX: i === 0 ? -0.62 : 0.62 });
     });
 
     let elapsed = 0;
@@ -715,19 +1067,21 @@ async function build(
     const fired = new Set<string>();
 
     const stage: Stage = {
+      THREE,
       sfx,
       cast,
       crate,
       lid,
       spares,
       walking: false,
-      look: { x: 0, y: location.focusY, z: 0 },
-      dolly: null,
-      once: (key, at, fn) => {
-        if (fired.has(key) || elapsed < at) return;
+      shot: null,
+      once: (key, at2, fn) => {
+        if (fired.has(key) || elapsed < at2) return;
         fired.add(key);
         fn();
-        if (/impact|land|strike|crash|settle|hit|kick|gone|arrive|beached|surface/.test(key)) shakes.push(elapsed);
+        if (/impact|land|strike|crash|settle|hit|kick|gone|arrive|beached|surface|smack/.test(key)) {
+          shakes.push(elapsed);
+        }
       },
     };
 
@@ -735,13 +1089,51 @@ async function build(
     sfx.wind(true);
     let announced = false;
 
-    const shake = (now: number): number => {
+    const bump = (now: number): number => {
       let offset = 0;
-      for (const at of shakes) {
-        const since = now - at;
+      for (const at2 of shakes) {
+        const since = now - at2;
         if (since >= 0 && since < 0.45) offset += Math.sin(since * 62) * 0.1 * (1 - since / 0.45);
       }
       return offset;
+    };
+
+    const resolve = (where: Where, t: number): Vec3 =>
+      typeof where === "function" ? where(stage, t) : where;
+
+    /** The camera for this instant: which shot, how far into it, and blends. */
+    const aim = (t: number): { pos: Vec3; look: Vec3; fov: number; shake: number } => {
+      const shots = scenario.shots;
+      let index = 0;
+      for (let i = 0; i < shots.length; i++) if (t >= shots[i].at) index = i;
+      const shot = shots[index];
+      const ends = shots[index + 1]?.at ?? scenario.seconds;
+      const p = clamp01((t - shot.at) / Math.max(0.001, ends - shot.at));
+
+      const from = resolve(shot.from, t);
+      const to = shot.to ? resolve(shot.to, t) : from;
+      const look = resolve(shot.look, t);
+      const lookTo = shot.lookTo ? resolve(shot.lookTo, t) : look;
+      const eased = smooth(p);
+      let pos = mix3(from, to, eased);
+      let aimAt = mix3(look, lookTo, eased);
+      const fov = mix(shot.fov ?? 38, shot.fovTo ?? shot.fov ?? 38, eased);
+
+      // A shot can ease out of the one before it instead of cutting.
+      const blend = shot.blend ?? 0;
+      if (blend > 0 && index > 0 && t - shot.at < blend) {
+        const previous = shots[index - 1];
+        const pEnds = shot.at;
+        const pp = clamp01((t - previous.at) / Math.max(0.001, pEnds - previous.at));
+        const pFrom = resolve(previous.from, t);
+        const pTo = previous.to ? resolve(previous.to, t) : pFrom;
+        const pLook = resolve(previous.look, t);
+        const pLookTo = previous.lookTo ? resolve(previous.lookTo, t) : pLook;
+        const k = smooth(clamp01((t - shot.at) / blend));
+        pos = mix3(mix3(pFrom, pTo, smooth(pp)), pos, k);
+        aimAt = mix3(mix3(pLook, pLookTo, smooth(pp)), aimAt, k);
+      }
+      return { pos, look: aimAt, fov, shake: shot.shake ?? 0 };
     };
 
     const tick = (): void => {
@@ -750,26 +1142,38 @@ async function build(
       elapsed += dt;
       location.ambient(dt, elapsed);
 
-      // The scenario owns these every frame, so they are reset before asking.
       stage.walking = false;
-      stage.look = { x: 0, y: location.focusY, z: 0 };
-      stage.dolly = null;
-      scenario.run(Math.min(elapsed, scenario.seconds), dt, stage);
+      const t = Math.min(elapsed, scenario.seconds);
+      scenario.run(t, dt, stage);
       for (const person of cast) if (stage.walking) person.mixer.update(dt);
 
-      // The pull starts against the film rather than after it.
+      const { pos, look, fov, shake } = aim(t);
+      const wobble = shake > 0 ? shake : 0;
+      camera.position.set(
+        pos[0] + bump(elapsed) + Math.sin(elapsed * 11) * wobble,
+        pos[1] + Math.sin(elapsed * 8.3) * wobble,
+        pos[2],
+      );
+      if (Math.abs(camera.fov - fov) > 0.01) {
+        camera.fov = fov;
+        camera.updateProjectionMatrix();
+      }
+      camera.lookAt(look[0], look[1], look[2]);
+
+      dialogue.update(t);
+      renderer.render(scene, camera);
+
+      // The pull starts against the film rather than after it, and unrolls
+      // from wherever the crate happens to be on screen.
       if (!announced && elapsed >= scenario.opensAt) {
         announced = true;
-        options.onOpen?.();
+        const point = crate.position.clone().project(camera);
+        options.onOpen?.({
+          x: clamp01((point.x + 1) / 2),
+          y: clamp01((1 - point.y) / 2),
+        });
       }
 
-      const push = stage.dolly ?? smooth(clamp01(elapsed / scenario.seconds)) * 0.34;
-      camera.position.set(shake(elapsed), 1.55 - push * 0.7, 6.4 - push * 6.4);
-      camera.lookAt(stage.look.x, stage.look.y, stage.look.z);
-
-      renderer.render(scene, camera);
-      // The film finishes but the picture stays: the roll is over the top of
-      // it, and tearing the canvas down mid-roll would be a black hole.
       if (elapsed >= scenario.seconds) finish();
     };
     tick();
@@ -786,6 +1190,7 @@ async function build(
       cancelAnimationFrame(frame);
       removeEventListener("resize", onResize);
       sfx.stop();
+      dialogue.dispose();
       // dispose() frees three's own objects but leaves the WebGL context
       // alive, and a browser only allows a handful at once — so without this
       // the fifth crate opened in a sitting gets no picture at all.
@@ -800,9 +1205,8 @@ async function build(
     };
     return cleanup;
   } catch {
-    // No WebGL, no models, no three — the pull still happens, without a film.
     sfx.stop();
-    options.onOpen?.();
+    options.onOpen?.({ x: 0.5, y: 0.5 });
     finish();
     return cleanup;
   }

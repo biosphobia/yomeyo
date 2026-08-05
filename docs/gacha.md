@@ -138,26 +138,60 @@ to be a pose rather than a movement and ignored.
 Everything else in the shot — the ruins, the snow, the fog, the crate — is
 built in code in `apps/web/src/gacha-scene.ts`.
 
-### The seven films
+### The nine films
 
 One is drawn at random each time. They do not all begin the same way — some
 walk in out of the fog, some are already sitting, some are already in the
-water — and they run 12 to 13 seconds each.
+water — and they run 12 to 19 seconds.
 
 | | Where | |
 | --- | --- | --- |
-| **Unscheduled delivery** | city | A crate falls out of the sky onto one of them. The other comes over and pokes it. |
-| **Percussive maintenance** | city | Two kicks do nothing. The third launches it out of frame; they both stand looking up until it comes down flat. |
-| **Right of way** | city | Something rolls in from the left at speed, bowls straight through both of them, and comes back. |
-| **Adverse weather** | city | The sky fills with crates. They dodge, badly. All of them sink into the snow except one. |
-| **Table service** | cafe | Sat at a counter nobody has served at for years. They ring the bell three times. Something slides down the counter the way a drink would. |
-| **Something in the water** | bath | Up to the shoulders in the last hot water on earth. Something is under it, and it is rising. |
-| **Feeding time** | aquarium | Stood at the glass. A crate drifts past inside the tank among the fish, then leaves through the glass. |
+| **For an amazing reason** | city | Yuuri is green. Chito would like to know why. The answer arrives from above. |
+| **Rations** | city | Yuuri is hungry. Yuuri is always hungry. Chito settles it with a flat hand. |
+| **Unscheduled delivery** | city | A crate falls out of the sky onto one of them. |
+| **Percussive maintenance** | city | Two kicks do nothing. The third launches it out of frame. |
+| **Right of way** | city | Something rolls in at speed, bowls straight through both of them, and comes back. |
+| **Adverse weather** | city | The sky fills with crates. They dodge, badly. |
+| **Table service** | cafe | Sat at a counter nobody has served at for years. They ring the bell three times. |
+| **Something in the water** | bath | Up to the shoulders in the last hot water on earth. Something is rising. |
+| **Feeding time** | aquarium | A crate drifts past inside the tank among the fish, then leaves through the glass. |
 
-**The names are editable on GitHub** — the `cutscenes` block in
-`prizes.json` maps a scenario id to its caption. The ids are fixed by the
-code, but every name can be rewritten, and one left out falls back to the
-name in `gacha-scene.ts`.
+### Titles and dialogue, on GitHub
+
+The `cutscenes` block in `prizes.json` carries both:
+
+```json
+"green": {
+  "title": "For an amazing reason",
+  "lines": ["chichan look", "why are you green....", "for an amazing reason", "that's not a reason"]
+}
+```
+
+Lines are in the order they are spoken. Who says each one, when it appears
+and how long it stays are set in the code; the words are not. Drop a line or
+leave it blank and the one written in `gacha-scene.ts` is used. The keys are
+the scenario ids and cannot be invented here.
+
+The text is drawn to a small canvas and scaled up with
+`image-rendering: pixelated`, so the letters are proper blocks without a
+webfont to download. Lines type themselves out; a line marked `loud` is
+bigger, yellow and shakes.
+
+### Camera
+
+Each scenario carries a list of shots. A shot is a position, what it looks
+at, and optionally where it moves to — so cuts, pans, pushes and zooms are
+all the same thing with different fields:
+
+```ts
+{ at: 10.4, from: [...], look: (s) => posOf(s.cast[0], 1.28),
+  to: [...], fov: 34, fovTo: 9, shake: 0.03 }
+```
+
+`from`, `to`, `look` and `lookTo` take either a fixed point or a function of
+the stage, so a shot can follow somebody who is moving. `blend` eases out of
+the previous shot instead of cutting. `shake` is handheld, in metres. A jolt
+is added automatically on any beat whose key names an impact.
 
 ### The four places
 
@@ -173,18 +207,25 @@ time, so a location costs nothing to download:
 A location returns an `ambient(dt, t)` called every frame for whatever moves
 on its own, and the height the camera should look at.
 
-### Poses
+### Poses and gags
 
 The models came with one usable animation between them — a walk cycle — so
 everything else is posed procedurally against the rig's named joints in
-`pose()`: sit, soak, wave, reach, panic, flat. No extra clips and nothing
-more to download. Adding one is a case in that switch.
+`pose()`: sit, soak, wave, point, reach, hungry, swing, hurt, panic, flat.
+No extra clips and nothing more to download. Adding one is a case in that
+switch. `smackGag()` is the wind-up, the contact and the aftermath in one
+call.
+
+Tinting somebody a colour goes through `emissive` rather than `color`: these
+models are lit almost entirely by their own texture, and multiplying that by
+a colour barely moves it. Materials are cloned per pull, so turning one of
+them green cannot follow the model into the next crate.
 
 ### It does not skip
 
 There is no skip button on either half, and the pull happens inside the
-film: when the lid comes off, the strip rolls over the top of the picture
-while the scene keeps playing underneath. three.js and the models are
+film: when the crate opens, the scene reports where it is on screen and the
+strip unrolls out of it while the film keeps playing underneath. three.js and the models are
 fetched when the Gacha tab opens rather than when the button is pressed, so
 the film starts at once instead of after a wait on an empty box.
 

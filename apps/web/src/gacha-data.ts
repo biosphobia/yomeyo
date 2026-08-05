@@ -59,12 +59,17 @@ export interface PrizeTable {
   draw: DrawMode;
   rarities: Record<Rarity, RarityInfo>;
   prizes: Prize[];
-  /** Scenario id to the name shown under the picture, editable on GitHub. */
-  cutscenes: Record<string, string>;
+  /** Scenario id to its caption and its lines, editable on GitHub. */
+  cutscenes: Record<string, CutsceneEntry>;
 }
+
+/** A string is just the caption; an object can also rewrite what is said. */
+export type CutsceneEntry = string | { title?: string; lines?: string[] };
 
 /** What each cutscene is called when the file does not say. */
 const CUTSCENE_TITLES: Record<string, string> = {
+  green: "For an amazing reason",
+  hungry: "Rations",
   airdrop: "Unscheduled delivery",
   kick: "Percussive maintenance",
   bowling: "Right of way",
@@ -76,8 +81,25 @@ const CUTSCENE_TITLES: Record<string, string> = {
 
 /** The caption for a scenario: whatever the file says, or the default. */
 export function cutsceneTitle(table: PrizeTable, id: string): string {
-  const named = table.cutscenes?.[id];
+  const entry = table.cutscenes?.[id];
+  const named = typeof entry === "string" ? entry : entry?.title;
   return typeof named === "string" && named.trim() ? named.trim() : (CUTSCENE_TITLES[id] ?? "");
+}
+
+/**
+ * Every rewritten line, flattened to "scenario.index" so the scene can look
+ * one up without knowing anything about the file's shape. A line left blank
+ * or missing keeps the one written in the code.
+ */
+export function cutsceneLines(table: PrizeTable): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [id, entry] of Object.entries(table.cutscenes ?? {})) {
+    if (typeof entry === "string" || !Array.isArray(entry?.lines)) continue;
+    entry.lines.forEach((line, i) => {
+      if (typeof line === "string" && line.trim()) out[`${id}.${i}`] = line.trim();
+    });
+  }
+  return out;
 }
 
 const FALLBACK: PrizeTable = {
@@ -142,7 +164,9 @@ export function prizeTable(): Promise<PrizeTable> {
         rarities,
         prizes,
         cutscenes:
-          raw.cutscenes && typeof raw.cutscenes === "object" ? (raw.cutscenes as Record<string, string>) : {},
+          raw.cutscenes && typeof raw.cutscenes === "object"
+            ? (raw.cutscenes as Record<string, CutsceneEntry>)
+            : {},
       };
     })
     .catch(() => FALLBACK);

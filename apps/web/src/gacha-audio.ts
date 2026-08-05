@@ -25,6 +25,16 @@ export interface Sfx {
   open: () => void;
   boing: () => void;
   whoosh: () => void;
+  /** A flat hand meeting the back of a head. */
+  smack: () => void;
+  /** An empty stomach, at length. */
+  growl: () => void;
+  /** Something is about to go badly, and the music knows first. */
+  menace: (seconds: number) => void;
+  /** Getting in or out of water. */
+  splash: () => void;
+  /** A counter bell nobody answers. */
+  bell: () => void;
   stop: () => void;
 }
 
@@ -38,6 +48,11 @@ const SILENT: Sfx = {
   open: () => undefined,
   boing: () => undefined,
   whoosh: () => undefined,
+  smack: () => undefined,
+  growl: () => undefined,
+  menace: () => undefined,
+  splash: () => undefined,
+  bell: () => undefined,
   stop: () => undefined,
 };
 
@@ -194,6 +209,35 @@ export function createSfx(): Sfx {
       tone({ duration: 0.3, gain: 0.12, from: 200, to: 460, type: "sine", delay: 0.16 });
     }),
     whoosh: guard(() => burst({ duration: 0.6, gain: 0.22, type: "bandpass", from: 300, to: 2600, q: 1.4 })),
+    smack: guard(() => {
+      // Sharp, over almost before it starts, with a little body under it.
+      burst({ duration: 0.09, gain: 0.5, type: "bandpass", from: 2600, to: 900, q: 1.2 });
+      tone({ duration: 0.16, gain: 0.3, from: 240, to: 90 });
+    }),
+    growl: guard(() => {
+      // Low, wandering, and longer than is comfortable.
+      tone({ duration: 1.5, gain: 0.14, from: 78, to: 52, type: "sawtooth" });
+      tone({ duration: 1.3, gain: 0.07, from: 120, to: 64, type: "sine", delay: 0.2 });
+      burst({ duration: 1.4, gain: 0.05, type: "lowpass", from: 260, to: 90 });
+    }),
+    menace: (seconds) =>
+      guard(() => {
+        // A tritone that will not resolve, and a rise underneath it.
+        for (const f of [92, 130]) {
+          tone({ duration: seconds, gain: 0.13, from: f, to: f * 1.06, type: "sawtooth" });
+        }
+        tone({ duration: seconds, gain: 0.09, from: 300, to: 1500, type: "triangle" });
+        burst({ duration: seconds, gain: 0.08, type: "bandpass", from: 200, to: 1800, q: 3 });
+      })(),
+    splash: guard(() => {
+      burst({ duration: 0.42, gain: 0.34, type: "highpass", from: 900, to: 3400 });
+      tone({ duration: 0.3, gain: 0.18, from: 420, to: 120 });
+    }),
+    bell: guard(() => {
+      // A small counter bell: two partials and a long tail.
+      tone({ duration: 1.4, gain: 0.16, from: 2093, to: 2085, type: "sine" });
+      tone({ duration: 1.1, gain: 0.08, from: 3136, to: 3120, type: "sine" });
+    }),
     stop: () => {
       if (stopped) return;
       stopped = true;
