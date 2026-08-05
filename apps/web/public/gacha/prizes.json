@@ -40,7 +40,7 @@
     {
       "id": "gif-rubrub",
       "type": "gif",
-      "name": "Rub rub",
+      "name": "rubrub",
       "rarity": "common",
       "on": "correct",
       "image": "gifs/rubrub.gif",
@@ -49,47 +49,47 @@
     {
       "id": "gif-fan",
       "type": "gif",
-      "name": "Fan service",
+      "name": "fan",
       "rarity": "common",
       "on": "correct",
       "image": "gifs/fan.gif",
-      "text": "you've earned a rest"
+      "text": "you've earned a rest!!"
     },
     {
       "id": "gif-japan",
       "type": "gif",
-      "name": "3 things",
+      "name": "waow",
       "rarity": "common",
       "on": "correct",
       "image": "gifs/japan.gif",
-      "text": "correct, obviously"
+      "text": "sugoi!!"
     },
     {
       "id": "gif-nyaa",
       "type": "gif",
-      "name": "Nyaa",
+      "name": "nyaa",
       "rarity": "common",
       "on": "correct",
       "image": "gifs/nyaa.gif",
-      "text": "nyaa~"
+      "text": "にゃ〜"
     },
     {
       "id": "gif-plays",
       "type": "gif",
-      "name": "Plays with it",
+      "name": "plays with it",
       "rarity": "common",
-      "on": "wrong",
+      "on": "correct",
       "image": "gifs/plays.gif",
-      "text": "hmmmm"
+      "text": "waow nice job"
     },
     {
       "id": "gif-haircut",
       "type": "gif",
-      "name": "Evil haircut",
+      "name": "evil",
       "rarity": "common",
       "on": "wrong",
       "image": "gifs/haircut.gif",
-      "text": "that evil wrong-answer feeling"
+      "text": "that evil wrong answer feeling"
     }
   ],
 
