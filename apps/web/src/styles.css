@@ -4095,3 +4095,163 @@ button.gram-swap-line:hover {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
+
+/* ---------------- chests and the bag ---------------- */
+
+.bag-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 10px;
+}
+
+.bag-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+
+.bag-slot {
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--panel);
+  border: 1px solid #ffffff14;
+}
+
+.bag-slot.empty {
+  opacity: 0.45;
+}
+
+.bag-slot.on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.bag-slot.is-target {
+  border-color: var(--accent);
+}
+
+.bag-item {
+  font-size: 1.7rem;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  border-radius: 10px;
+  padding: 4px 7px;
+}
+
+.bag-item-float {
+  position: fixed;
+  z-index: 40;
+  pointer-events: none;
+  opacity: 0.95;
+}
+
+/* Rarity, worn as a glow. */
+.bag-item.rarity-rare,
+.bag-found.rarity-rare .bag-card-icon {
+  filter: drop-shadow(0 0 6px #4c9be5);
+}
+
+.bag-item.rarity-epic,
+.bag-found.rarity-epic .bag-card-icon {
+  filter: drop-shadow(0 0 7px #b56ce5);
+}
+
+.bag-item.rarity-legendary,
+.bag-found.rarity-legendary .bag-card-icon {
+  filter: drop-shadow(0 0 9px var(--warn));
+  animation: bag-legend 1.6s ease-in-out infinite;
+}
+
+@keyframes bag-legend {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.12);
+  }
+}
+
+.bag-rarity {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.bag-rarity.rarity-common {
+  color: var(--muted);
+}
+
+.bag-rarity.rarity-rare {
+  color: #4c9be5;
+}
+
+.bag-rarity.rarity-epic {
+  color: #b56ce5;
+}
+
+.bag-rarity.rarity-legendary {
+  color: var(--warn);
+}
+
+.bag-card {
+  margin-top: 12px;
+}
+
+.bag-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.bag-card-icon {
+  font-size: 2.2rem;
+}
+
+.bag-card-name {
+  font-weight: 700;
+}
+
+/* What a chest shows it held. */
+.bag-found {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 10px 0 6px;
+}
+
+/* The fork screen: the bend sits UNDER the tile it bends, in its own box. */
+.kmap-fork-opt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 150px;
+}
+
+.kmap-fork-opt .kmap-node {
+  width: 100%;
+}
+
+.kmap-fork-mod {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 7px 8px;
+  border-radius: 10px;
+  border: 1px dashed #ffffff22;
+  width: 100%;
+}
+
+.kmap-fork-mod .kmap-detail {
+  font-size: 0.66rem;
+}

@@ -45,7 +45,9 @@ export type Mechanic =
   | "taiko"
   | "ghost"
   | "duel"
-  | "rest";
+  | "rest"
+  | "chest"
+  | "alienwords";
 
 // ---------------- modifiers ----------------
 
@@ -174,6 +176,8 @@ const DEFS: Record<Mechanic, { name: string; icon: string; detail: string }> = {
   ghost: { name: "Ghost writing", icon: "👻", detail: "The kana condenses out of the fog. Name it the moment you see it." },
   duel: { name: "Duel — Chito", icon: "⚔️", detail: "She answers on a fuse. Beat her to every kana, or she takes the point." },
   rest: { name: "Hot spring", icon: "♨️", detail: "No questions. Every heart back. The road can wait a minute." },
+  chest: { name: "Chest", icon: "🧰", detail: "Something's inside. Different somethings, different days." },
+  alienwords: { name: "Alien dictionary", icon: "🛸", detail: "Words spelled with your kana that mean things no dictionary admits to." },
 };
 
 /** The fixed opening stretch, one tile per stage. */
@@ -200,6 +204,7 @@ const TAIL_POOL: Mechanic[] = [
   "rain",
   "taiko",
   "ghost",
+  "alienwords",
 ];
 
 /**
@@ -229,10 +234,10 @@ export const DUEL_STAGE = 15;
  * whole pool, reshuffled as it empties, so everything appears and the
  * repeats land later — where the tiers have turned crueller.
  *
- * Two tiles are not the bag's to deal. Stage 15 is always the duel — the
- * mini-boss keeps her appointment in every game. And up to two straight
- * stages may be hot springs instead of games: no questions, every heart
- * back, and a harder look at the bent tile you were saving yourself for.
+ * Some tiles are not the bag's to deal. Stage 15 is always the duel — the
+ * mini-boss keeps her appointment in every game. Straight stages may be
+ * hot springs (no questions, every heart back) or chests (something
+ * inside, rarity willing), a couple of each at most per road.
  *
  * Modifiers land on forked tiles only, and only from the SECOND fork on:
  * the first fork is a clean choice between games, learned safely. Deeper
@@ -264,6 +269,7 @@ export function generateTail(): TailTile[][] {
 
   let forksSeen = 0;
   let springs = 0;
+  let chests = 0;
   const tail: TailTile[][] = [];
   let previous = new Set<Mechanic>();
   widths.forEach((width, i) => {
@@ -272,10 +278,16 @@ export function generateTail(): TailTile[][] {
       previous = new Set<Mechanic>(["duel"]);
       return;
     }
-    if (width === 1 && i > 0 && springs < 2 && Math.random() < 0.18) {
+    if (width === 1 && i > 0 && springs < 2 && Math.random() < 0.15) {
       springs++;
       tail.push([{ m: "rest" }]);
       previous = new Set<Mechanic>(["rest"]);
+      return;
+    }
+    if (width === 1 && i > 0 && chests < 2 && Math.random() < 0.15) {
+      chests++;
+      tail.push([{ m: "chest" }]);
+      previous = new Set<Mechanic>(["chest"]);
       return;
     }
     const inStage = new Set<Mechanic>();

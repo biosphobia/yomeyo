@@ -22,6 +22,8 @@ import {
   type RoadNode,
   type StoredTail,
 } from "./kana-road.js";
+import { RARITY_LABEL, addToBag, renderBag, rollItem } from "./kana-chest.js";
+import { takeAlienWords, warmAlienWords } from "./kana-alien-ai.js";
 
 /**
  * The kana game.
@@ -120,6 +122,8 @@ const CAPS: Record<Mechanic, number> = {
   ghost: 12,
   duel: 12,
   rest: 0,
+  chest: 0,
+  alienwords: 12,
 };
 
 /** Seconds per question, where a mechanic runs on a clock. */
@@ -298,8 +302,8 @@ function primaryRomaji(kana: string): string {
 
 // ---------------- the screens ----------------
 
-/** Play or the record of playing. Remembered while the app is open. */
-let view: "play" | "stats" = "play";
+/** Play, the record of playing, or the bag. Remembered while the app is open. */
+let view: "play" | "stats" | "bag" = "play";
 
 export async function renderKana(main: HTMLElement, isCurrent: () => boolean = () => true): Promise<void> {
   // Warmed as the screen opens, not as a level starts: the reactions have to
@@ -314,11 +318,15 @@ export async function renderKana(main: HTMLElement, isCurrent: () => boolean = (
   }
   await unlockAll();
   if (!isCurrent()) return;
+  // The alien dictionary writes itself while the player is still picking:
+  // by the time that tile is reached, the words are already waiting.
+  if (game) void warmAlienWords(game.groups, poolOf(game));
 
   main.innerHTML = `
     ${screenHeader("Kana", await yennies())}
     <div class="segmented">
       <button data-view="play" class="${view === "play" ? "on" : ""}">Play</button>
+      <button data-view="bag" class="${view === "bag" ? "on" : ""}">Bag</button>
       <button data-view="stats" class="${view === "stats" ? "on" : ""}">Stats</button>
     </div>
     <div id="kana-body"></div>
@@ -333,6 +341,7 @@ export async function renderKana(main: HTMLElement, isCurrent: () => boolean = (
 
   const body = main.querySelector<HTMLDivElement>("#kana-body")!;
   if (view === "stats") void renderKanaStats(body);
+  else if (view === "bag") void renderBag(body);
   else renderSelection(body, game, main, isCurrent);
 }
 
@@ -459,6 +468,8 @@ function renderSelection(
       freshTail(next);
     }
     await saveGame(next);
+    // Start the alien dictionary writing now, so its tile opens instantly.
+    void warmAlienWords(next.groups, poolOf(next));
     void runLevel(body, next, next.unlocked, undefined, main, isCurrent);
   });
 
@@ -598,17 +609,21 @@ async function runLevel(
           ${road[level]
             .map(
               (option) => `
-            <button class="kmap-node open" data-id="${option.id}">
-              <span class="kmap-icon">${option.icon}</span>
-              <span class="kmap-name">${option.name}</span>
-              <span class="kmap-detail">${escapeHtml(option.detail)}</span>
+            <div class="kmap-fork-opt">
+              <button class="kmap-node open" data-id="${option.id}">
+                <span class="kmap-icon">${option.icon}</span>
+                <span class="kmap-name">${option.name}</span>
+                <span class="kmap-detail">${escapeHtml(option.detail)}</span>
+              </button>
               ${
                 option.modifier
-                  ? `<span class="kmap-modline tier-${option.modifier.tier}">${option.modifier.icon} ${escapeHtml(option.modifier.name)}</span>
-                     <span class="kmap-detail">${escapeHtml(option.modifier.detail)}</span>`
+                  ? `<div class="kmap-fork-mod tier-${option.modifier.tier}">
+                       <span class="kmap-modline tier-${option.modifier.tier}">${option.modifier.icon} ${escapeHtml(option.modifier.name)}</span>
+                       <span class="kmap-detail">${escapeHtml(option.modifier.detail)}</span>
+                     </div>`
                   : ""
               }
-            </button>`,
+            </div>`,
             )
             .join("")}
         </div>
@@ -655,6 +670,45 @@ async function runLevel(
     return;
   }
 
+  // A chest asks nothing either: one item, drawn by rarity, into the bag.
+  if (mechanic === "chest") {
+    game.path = { ...game.path, [String(level)]: node.id };
+    game.unlocked = Math.max(game.unlocked, level + 1);
+    await saveGame(game);
+    if (!isCurrent()) return;
+    drawMap();
+    const found = rollItem();
+    const stored = await addToBag(found.id);
+    // A full bag still opens the chest — it just pays cash for the trouble.
+    const spill = stored === "full" ? await earnYennies(60) : null;
+    const onward = level + 1 < road.length ? road[level + 1] : null;
+    quiz.innerHTML = `
+      <div class="card-panel kana-quiz">
+        <div class="big">🧰</div>
+        <div class="kana-score">A chest</div>
+        <div class="bag-found rarity-${found.rarity}">
+          <span class="bag-card-icon">${found.icon}</span>
+          <div>
+            <div class="bag-card-name">${found.name}</div>
+            <div class="bag-rarity rarity-${found.rarity}">${RARITY_LABEL[found.rarity]}</div>
+          </div>
+        </div>
+        <div class="glosses">${found.detail}</div>
+        <div class="glosses">${
+          spill !== null ? `Your bag is full — it fenced for 60 ¥ (${formatYennies(spill)}).` : "It's in your Bag."
+        }</div>
+        <div class="row-actions" style="justify-content:center;margin-top:12px">
+          ${onward ? `<button id="kana-next">Back on the road</button>` : ""}
+          <button id="kana-back" class="secondary">Stop here</button>
+        </div>
+      </div>`;
+    quiz.querySelector("#kana-next")?.addEventListener("click", () => {
+      void runLevel(body, game, level + 1, undefined, main, isCurrent);
+    });
+    quiz.querySelector("#kana-back")!.addEventListener("click", () => renderSelection(body, game, main, isCurrent));
+    return;
+  }
+
   // The duel gets its stage: Chito above the quiz, on a fuse.
   let duel: import("./kana-duel.js").DuelStage | null = null;
   let duelYou = 0;
@@ -686,6 +740,31 @@ async function runLevel(
     await spendYennies(Math.min(toll, have));
   }
 
+  // Items armed from the bag: read once, burned on the spot. The lucky cat
+  // doubles this level's pay; the charm eats the first heart a miss would.
+  const boost = (await getMeta<{ pay?: boolean; shield?: boolean }>("kanaBoost")) ?? {};
+  const payBoost = boost.pay ? 2 : 1;
+  let shieldLeft = boost.shield ?? false;
+  if (boost.pay || boost.shield) await setMeta("kanaBoost", {});
+
+  // A locally invented word: two to four sounds from the pool, no sound
+  // twice running. The alien levels lean on this whenever the AI batch
+  // has not arrived — or was never possible.
+  const makeWord = (): string => {
+    const length = 2 + Math.floor(Math.random() * 3);
+    const out: string[] = [];
+    let guard = 0;
+    while (out.length < length && guard++ < 30) {
+      const entry = pool[Math.floor(Math.random() * pool.length)];
+      if (out[out.length - 1] === entry.kana && pool.length > 1) continue;
+      out.push(entry.kana);
+    }
+    return out.join("");
+  };
+
+  /** A one-line banner over the quiz, for a level running on a stand-in. */
+  let notice = "";
+
   let items: Item[];
   if (isWords) {
     // The dictionary may still have to come down the wire, which on mobile
@@ -711,30 +790,22 @@ async function runLevel(
     clearTimeout(slow);
     if (left || !isCurrent() || !body.isConnected) return;
     if (words === null || words.length < 5) {
-      // The other way this used to strand somebody: a pool too small for the
-      // word levels left the game unlocked at 5 or 6, so Continue landed on
-      // this card every single time with nothing here to leave by except
-      // changing the pool. There is a way back down the ladder now.
-      quiz.innerHTML = `
-        <div class="card-panel kana-quiz">
-          <div class="big">🔍</div>
-          <div>Not enough short words can be written with only these kana.</div>
-          <div class="glosses" style="margin-top:8px">Add more groups, or go back and play the kana levels again.</div>
-          <div class="row-actions" style="justify-content:center;margin-top:12px">
-            <button id="kana-restart">Start from level ${RESTART_AT}</button>
-            <button id="kana-back" class="secondary">Change groups</button>
-          </div>
-        </div>`;
-      body.querySelector("#kana-restart")!.addEventListener("click", async () => {
-        game.unlocked = RESTART_AT;
-        game.health = MAX_HEALTH;
-        await saveGame(game);
-        void runLevel(body, game, RESTART_AT, undefined, main, isCurrent);
-      });
-      body.querySelector("#kana-back")!.addEventListener("click", () => renderSelection(body, game, main, isCurrent));
-      return;
+      // Too few real words in these kana. This used to be a dead-end card;
+      // now the level simply runs on invented words instead — the reading
+      // practice is the same, and nobody is stranded mid-road.
+      notice = "Your kana spell too few real words — these are made-up ones.";
+      const invented = await takeAlienWords(game.groups, CAPS[mechanic], makeWord);
+      if (!isCurrent() || !body.isConnected) return;
+      items = invented.map((word) => ({ kana: word.kana, gloss: word.gloss, ambiguous: true }));
+    } else {
+      items = words;
     }
-    items = words;
+  } else if (mechanic === "alienwords") {
+    // The alien dictionary: AI-written words from the cache when the batch
+    // arrived, hat-drawn ones when it didn't. Either way, instant.
+    const invented = await takeAlienWords(game.groups, CAPS.alienwords, makeWord);
+    if (!isCurrent() || !body.isConnected) return;
+    items = invented.map((word) => ({ kana: word.kana, gloss: word.gloss, ambiguous: true }));
   } else if (mechanic === "dictation") {
     // A word game at heart: real words where the pool can spell enough of
     // them, made-up ones where it cannot — the listening is the same drill.
@@ -805,11 +876,13 @@ async function runLevel(
    * here. Once, at the end, with the balance beside it.
    */
   const payout = async (): Promise<string> => {
-    // A bent tile pays over the odds — that is what made it worth stepping on.
-    const earned = Math.round(gotRight * PER_CORRECT * rules.payout);
+    // A bent tile pays over the odds — that is what made it worth stepping
+    // on — and the lucky cat doubles whatever the tile was worth.
+    const times = rules.payout * payBoost;
+    const earned = Math.round(gotRight * PER_CORRECT * times);
     const balance = earned > 0 ? await earnYennies(earned) : await yennies();
     return `<div class="yen-line">${
-      earned > 0 ? `<b>+${earned.toLocaleString()}</b>${rules.payout > 1 ? ` <span class="glosses">(×${rules.payout})</span>` : ""} · ` : ""
+      earned > 0 ? `<b>+${earned.toLocaleString()}</b>${times > 1 ? ` <span class="glosses">(×${times})</span>` : ""} · ` : ""
     }${formatYennies(balance)}</div>`;
   };
 
@@ -1087,6 +1160,9 @@ async function runLevel(
             ? `<div class="kana-mod tier-${node.modifier.tier}">${node.modifier.icon} <b>${escapeHtml(node.modifier.name)}</b> — ${escapeHtml(node.modifier.detail)}</div>`
             : ""
         }
+        ${notice ? `<div class="kana-mod tier-1">🛸 ${escapeHtml(notice)}</div>` : ""}
+        ${payBoost > 1 ? `<div class="kana-mod tier-1">🐱 Double pay armed</div>` : ""}
+        ${shieldLeft ? `<div class="kana-mod tier-1">🧿 Shield armed — the next miss is free</div>` : ""}
         ${clockSec > 0 ? `<div class="kana-timer"><div class="kana-timer-fill" id="kana-timer-fill"></div></div>` : ""}
         ${bigArea}
         ${answerArea}
@@ -1178,7 +1254,11 @@ async function runLevel(
       }
       // Back into the deck: the level ends only when everything is right.
       queue.push(queue[0]);
-      if (useLives) {
+      if (useLives && shieldLeft) {
+        // The charm takes the hit instead of a heart, once.
+        shieldLeft = false;
+        label += ` <span class="glosses">🧿 the charm took it</span>`;
+      } else if (useLives) {
         health--;
         if (health <= 0) {
           feedback.innerHTML = `<span class="err-text">${label}</span>`;
@@ -1710,13 +1790,17 @@ function simonItems(pool: KanaEntry[], weights: Map<string, number>, extra: numb
 function sharpshooterItems(pool: KanaEntry[], weights: Map<string, number>, cap: number, crowded: boolean): Item[] {
   return drawByNeed(pool, weights, Math.min(cap, pool.length)).map((target) => {
     const sound = target.romaji[0];
-    const variants = pool.filter((entry) => entry.romaji[0] === sound);
+    // Copies cycle through every glyph that wears the sound — か and カ in
+    // one wall when both scripts are in play — so the hunt is for a SOUND,
+    // not for three identical pictures.
+    const variants = shuffle(pool.filter((entry) => entry.romaji[0] === sound));
     const foils = shuffle(pool.filter((entry) => entry.romaji[0] !== sound));
-    // A crowded range hides more targets in a fuller wall.
-    const copies = (crowded ? 3 : 2) + Math.floor(Math.random() * 2);
+    const copies = 2 + Math.floor(Math.random() * 3);
     const cells: string[] = [];
-    for (let i = 0; i < copies; i++) cells.push(variants[Math.floor(Math.random() * variants.length)].kana);
-    const size = Math.max(crowded ? 9 : 6, Math.min(12, foils.length + copies));
+    for (let i = 0; i < copies; i++) cells.push(variants[i % variants.length].kana);
+    // A wall, not a row: enough fakes that the eye has to hunt. Sixteen
+    // tiles when there are fakes to fill them, more still when crowded.
+    const size = Math.min(16, Math.max(crowded ? 14 : 12, copies + 6));
     for (let i = 0; cells.length < size && foils.length > 0; i++) cells.push(foils[i % foils.length].kana);
     const grid = shuffle(cells);
     const hits = grid.flatMap((kana, index) =>
