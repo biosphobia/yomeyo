@@ -69,21 +69,12 @@
       "text": "good good good"
     },
     {
-      "id": "gif-fan",
-      "type": "gif",
-      "name": "fan",
-      "rarity": "common",
-      "on": "correct",
-      "image": "gifs/fan.gif",
-      "text": "you've earned a rest!!"
-    },
-    {
       "id": "gif-japan",
       "type": "gif",
       "name": "waow",
       "rarity": "common",
       "on": "correct",
-      "image": "gifs/japan.gif",
+      "image": "gifs/japan.avif",
       "text": "sugoi!!"
     },
     {
@@ -92,7 +83,7 @@
       "name": "nyaa",
       "rarity": "common",
       "on": "correct",
-      "image": "gifs/nyaa.gif",
+      "image": "gifs/nyaa.avif",
       "text": "にゃ〜"
     },
     {
@@ -112,6 +103,24 @@
       "on": "correct",
       "image": "gifs/burger.webp",
       "text": "burger"
+    },
+    {
+      "id": "gif-pears",
+      "type": "gif",
+      "name": "pears",
+      "rarity": "common",
+      "on": "correct",
+      "image": "gifs/pears.gif",
+      "text": "pears"
+    },
+    {
+      "id": "gif-sorry",
+      "type": "gif",
+      "name": "sorry",
+      "rarity": "common",
+      "on": "wrong",
+      "image": "gifs/sorry.gif",
+      "text": "sorry"
     },
     {
       "id": "gif-haircut",

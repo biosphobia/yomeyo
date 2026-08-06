@@ -23,8 +23,11 @@
  */
 import { execFileSync } from "node:child_process";
 import {
+  closeSync,
   copyFileSync,
   existsSync,
+  openSync,
+  readSync,
   readdirSync,
   renameSync,
   statSync,
@@ -48,6 +51,37 @@ const KINDS = new Set([".gif", ".webp", ".avif", ".png", ".jpg", ".jpeg"]);
 
 const kb = (file) => Math.round(statSync(file).size / 1000);
 const name = (file) => file.split("/").pop();
+
+/**
+ * What a file actually is, read from its first bytes.
+ *
+ * Not from its name. Pictures arrive named after whatever the person who
+ * saved them thought they were — an animated avif called `.gif` is a real
+ * thing that turns up — and a name is not a format. Browsers have always
+ * sniffed images rather than trusting the extension, so the file works
+ * regardless; what a name gets wrong is which tool is handed the file, which
+ * is how a perfectly good picture ends up reported as corrupt.
+ */
+function sniff(file) {
+  const head = Buffer.alloc(16);
+  const fd = openSync(file, "r");
+  try {
+    readSync(fd, head, 0, 16, 0);
+  } finally {
+    closeSync(fd);
+  }
+  const at = (from, to) => head.subarray(from, to).toString("latin1");
+  if (at(0, 3) === "GIF") return "gif";
+  if (at(0, 4) === "RIFF" && at(8, 12) === "WEBP") return "webp";
+  if (at(4, 8) === "ftyp") {
+    // `avis` is an image *sequence* — an animated avif. Nothing here can
+    // write one, so those are left exactly as they came.
+    return at(8, 12) === "avis" ? "avif-sequence" : "avif";
+  }
+  if (head[0] === 0x89 && at(1, 4) === "PNG") return "png";
+  if (head[0] === 0xff && head[1] === 0xd8) return "jpeg";
+  return "unknown";
+}
 
 // ---------------- gifs: gifsicle ----------------
 
@@ -158,15 +192,14 @@ async function sharp() {
   return sharpLib;
 }
 
-/** Each format keeps its own container: the name in prizes.json is a promise. */
-function encode(pipeline, file, quality, loop) {
-  switch (extname(file).toLowerCase()) {
-    case ".png":
+/** Each format keeps its own container: the bytes go back as what they were. */
+function encode(pipeline, kind, quality, loop) {
+  switch (kind) {
+    case "png":
       return pipeline.png({ compressionLevel: 9, palette: true, quality });
-    case ".jpg":
-    case ".jpeg":
+    case "jpeg":
       return pipeline.jpeg({ quality, mozjpeg: true });
-    case ".avif":
+    case "avif":
       // Slower to encode than the rest and worth it: for a photograph avif is
       // routinely half the size of jpeg at the same quality.
       return pipeline.avif({ quality, effort: 4 });
@@ -191,7 +224,7 @@ function encode(pipeline, file, quality, loop) {
  * picture; width scales the frames and lets the strip follow, which is the
  * same thing said safely.
  */
-async function shrinkRaster(file) {
+async function shrinkRaster(file, kind) {
   const lib = await sharp();
   if (!lib) return `${name(file)}: sharp not installed, left alone`;
   const before = kb(file);
@@ -202,11 +235,6 @@ async function shrinkRaster(file) {
   const height = (turned ? meta.width : meta.pageHeight ?? meta.height) ?? 0;
   const width = (turned ? meta.pageHeight ?? meta.height : meta.width) ?? 0;
   if (before <= MAX_KB && Math.max(width, height) <= MAX_SIDE) return null;
-  if (pages > 1 && extname(file).toLowerCase() === ".avif") {
-    // Nothing here can write an animated avif, and rewriting it as a single
-    // frame would throw the animation away silently.
-    return `${name(file)}: animated avif, left alone (${before} KB)`;
-  }
 
   // The width that brings the longest side down to the budget.
   const scale = Math.min(1, MAX_SIDE / Math.max(width, height, 1));
@@ -287,7 +315,25 @@ async function main() {
   for (const file of targets) {
     const before = statSync(file).size;
     try {
-      const line = extname(file).toLowerCase() === ".gif" ? shrinkGif(file) : await shrinkRaster(file);
+      const kind = sniff(file);
+      let line;
+      if (kind === "gif") {
+        line = shrinkGif(file);
+      } else if (kind === "avif-sequence" || kind === "unknown") {
+        // An animated avif cannot be rewritten by anything here, and an
+        // unrecognised file is not ours to guess at. Said out loud only when
+        // it is over budget, since there is nothing to be done about it.
+        line = kb(file) > MAX_KB ? `${name(file)}: ${kind === "unknown" ? "unrecognised" : "animated avif"}, left alone (${kb(file)} KB)` : null;
+      } else {
+        line = await shrinkRaster(file, kind);
+      }
+      // A name that lies about the format is worth saying, shrunk or not:
+      // browsers sniff and cope, but a person reading the folder will not,
+      // and neither would anything else that trusts the extension.
+      const named = extname(file).toLowerCase().slice(1).replace("jpg", "jpeg");
+      if (named !== kind && !(kind === "avif-sequence" && named === "avif")) {
+        line = `${line ?? `${name(file)}: ${kb(file)} KB, within budget`} — really ${kind}, not ${named}`;
+      }
       if (line) lines.push(line);
     } catch (err) {
       lines.push(`${name(file)}: left alone (${err instanceof Error ? err.message : err})`);

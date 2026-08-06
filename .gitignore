@@ -21,3 +21,6 @@ apps/web/public/kanji/strokes/
 data/kanjidic2-*.json
 data/kanjidic2-*.zip
 data/kanjivg*
+
+# macOS Finder leaves these in every folder it opens.
+.DS_Store
