@@ -45,6 +45,11 @@ export interface CutsceneOptions {
   onOpen?: (origin: { x: number; y: number }) => void;
   /** Lines from the prize file, which win over the ones written here. */
   lines?: Record<string, string>;
+  /**
+   * Play this one rather than a random one. For the admin's preview: a film
+   * you cannot choose is a film you cannot check.
+   */
+  scenario?: string;
 }
 
 export interface Cutscene {
@@ -959,7 +964,9 @@ async function build(
     const camera = new THREE.PerspectiveCamera(38, host.clientWidth / host.clientHeight, 0.1, 200);
     camera.position.set(0, 1.55, 6.4);
 
-    const scenario = SCENARIOS[Math.floor(Math.random() * SCENARIOS.length)];
+    const scenario =
+      SCENARIOS.find((s2) => s2.id === options.scenario) ??
+      SCENARIOS[Math.floor(Math.random() * SCENARIOS.length)];
     tellId(scenario.id);
     const location = buildLocation(scenario.location, THREE, scene);
 
@@ -1085,6 +1092,25 @@ async function build(
       },
     };
 
+    /**
+     * Where the speaker's head is on screen, for the line above it.
+     *
+     * Yuuri is the first model and Chito the second, so a name is matched by
+     * its first letters rather than by keeping a second list in step. Anyone
+     * behind the camera has no place on screen, and the line falls back to
+     * sitting along the bottom.
+     */
+    const headPoint = new THREE.Vector3();
+    const anchorOf = (who: string): { x: number; y: number } | null => {
+      const person = /^chi/i.test(who.trim()) ? cast[1] : cast[0];
+      if (!person) return null;
+      const p = person.root.position;
+      headPoint.set(p.x, p.y + 1.56, p.z);
+      headPoint.project(camera);
+      if (headPoint.z > 1) return null;
+      return { x: clamp01((headPoint.x + 1) / 2), y: clamp01((1 - headPoint.y) / 2) };
+    };
+
     const clock = new THREE.Clock();
     sfx.wind(true);
     let announced = false;
@@ -1160,7 +1186,7 @@ async function build(
       }
       camera.lookAt(look[0], look[1], look[2]);
 
-      dialogue.update(t);
+      dialogue.update(t, anchorOf);
       renderer.render(scene, camera);
 
       // The pull starts against the film rather than after it, and unrolls

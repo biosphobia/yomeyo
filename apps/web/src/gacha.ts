@@ -1,4 +1,5 @@
 import { levelState } from "./levels.js";
+import { screenHeader } from "./screen.js";
 import { toast } from "./toast.js";
 import { earnYennies, formatYennies, levelReward, spendYennies, yennies } from "./yennies.js";
 import { addOwned, equipSkin, equippedSkin, owned } from "./gacha-collection.js";
@@ -47,7 +48,7 @@ export async function renderGacha(main: HTMLElement, isCurrent: () => boolean = 
   const free = unlockAllNow();
   const affordable = free || balance >= table.cost;
   main.innerHTML = `
-    <h1>Gacha</h1>
+    ${screenHeader("Gacha")}
 
     <div class="card-panel purse-panel">
       <div class="purse-amount">${formatYennies(balance)}</div>
@@ -114,11 +115,17 @@ export async function renderGacha(main: HTMLElement, isCurrent: () => boolean = 
         <span class="purse-rate">${levelReward(level.level + 1).toLocaleString()} ¥</span>
       </div>
     </div>
+
+    ${free ? `<div class="card-panel" id="cutscene-list"></div>` : ""}
   `;
 
   // three.js and the models, fetched now rather than when the button is
   // pressed, so the film starts at once instead of after a wait.
   void import("./gacha-scene.js").then((mod) => mod.warmUpCutscene()).catch(() => undefined);
+
+  // The films are what most of this tab is; an admin should be able to watch
+  // one without opening a crate to see it. Same key as the free pulls.
+  if (free) void drawCutscenes(main, table, isCurrent);
 
   drawCollection(main, table, have, wearing, () => void renderGacha(main, isCurrent));
   const open = main.querySelector<HTMLButtonElement>("#gacha-open");
@@ -140,6 +147,82 @@ export async function renderGacha(main: HTMLElement, isCurrent: () => boolean = 
  * over one canvas.
  */
 let opening = false;
+
+// ---------------- every film, for the admin ----------------
+
+/**
+ * The cutscenes, listed and playable.
+ *
+ * Nine films play at random, one per crate, so seeing a particular one has
+ * meant opening crates until it came up — which is no way to check that the
+ * one you just rewrote on GitHub reads right. Each is named by its title from
+ * the prize file, so this list is also where you find out which id a title
+ * belongs to.
+ */
+async function drawCutscenes(main: HTMLElement, table: PrizeTable, isCurrent: () => boolean): Promise<void> {
+  const box = main.querySelector<HTMLDivElement>("#cutscene-list");
+  if (!box) return;
+  const { SCENARIOS } = await import("./gacha-scene.js");
+  if (!isCurrent() || !box.isConnected) return;
+
+  box.innerHTML = `
+    <b>Cutscenes</b>
+    <div class="glosses">Admin: play any of them, without a crate.</div>
+    <div class="gram-levels" id="cutscene-chips">
+      ${SCENARIOS.map(
+        (scenario) => `<button class="gram-level-chip" data-id="${escapeAttr(scenario.id)}">
+          ${escapeHtml(cutsceneTitle(table, scenario.id))}
+          <span class="gram-level-count">${escapeHtml(scenario.id)} · ${scenario.seconds}s</span>
+        </button>`,
+      ).join("")}
+    </div>
+  `;
+
+  for (const chip of box.querySelectorAll<HTMLButtonElement>("#cutscene-chips button")) {
+    chip.addEventListener("click", () => void preview(main, table, chip.dataset.id!, isCurrent));
+  }
+}
+
+/** Play one film in the stage, with a way out and nothing at stake. */
+async function preview(
+  main: HTMLElement,
+  table: PrizeTable,
+  scenario: string,
+  isCurrent: () => boolean,
+): Promise<void> {
+  if (opening) return;
+  opening = true;
+  const stage = main.querySelector<HTMLDivElement>("#gacha-stage")!;
+  stage.innerHTML = `
+    <div class="card-panel gacha-stage">
+      <div class="scene" id="gacha-scene">
+        <div class="scene-caption" id="scene-caption"></div>
+      </div>
+      <div class="row-actions" style="justify-content:center;margin-top:10px">
+        <button id="preview-stop" class="secondary">Stop</button>
+      </div>
+    </div>
+  `;
+  const sceneBox = stage.querySelector<HTMLDivElement>("#gacha-scene")!;
+  sceneBox.scrollIntoView({ behavior: "smooth", block: "center" });
+
+  const { playCutscene } = await import("./gacha-scene.js");
+  const film = playCutscene(sceneBox, { lines: cutsceneLines(table), scenario });
+  void film.id.then((id) => {
+    const caption = stage.querySelector("#scene-caption");
+    if (caption && id) caption.textContent = cutsceneTitle(table, id);
+  });
+  stage.querySelector("#preview-stop")!.addEventListener("click", () => film.stop());
+
+  try {
+    await film.done;
+  } finally {
+    film.stop();
+    opening = false;
+  }
+  if (!isCurrent() || !stage.isConnected) return;
+  stage.innerHTML = "";
+}
 
 // ---------------- the collection ----------------
 
