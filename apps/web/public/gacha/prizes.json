@@ -105,6 +105,15 @@
       "text": "waow nice job"
     },
     {
+      "id": "gif-burger",
+      "type": "gif",
+      "name": "burger",
+      "rarity": "common",
+      "on": "correct",
+      "image": "gifs/burger.webp",
+      "text": "burger"
+    },
+    {
       "id": "gif-haircut",
       "type": "gif",
       "name": "evil",
