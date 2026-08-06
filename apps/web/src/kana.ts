@@ -798,7 +798,7 @@ async function runLevel(
       // now the level simply runs on invented words instead — the reading
       // practice is the same, and nobody is stranded mid-road.
       notice = "Your kana spell too few real words — these are made-up ones.";
-      const invented = await takeAlienWords(game.groups, CAPS[mechanic], makeWord);
+      const invented = await takeAlienWords(game.groups, CAPS[mechanic], makeWord, pool);
       if (!isCurrent() || !body.isConnected) return;
       items = invented.map((word) => ({ kana: word.kana, gloss: word.gloss, ambiguous: true }));
     } else {
@@ -807,7 +807,7 @@ async function runLevel(
   } else if (mechanic === "alienwords") {
     // The alien dictionary: AI-written words from the cache when the batch
     // arrived, hat-drawn ones when it didn't. Either way, instant.
-    const invented = await takeAlienWords(game.groups, CAPS.alienwords, makeWord);
+    const invented = await takeAlienWords(game.groups, CAPS.alienwords, makeWord, pool);
     if (!isCurrent() || !body.isConnected) return;
     items = invented.map((word) => ({ kana: word.kana, gloss: word.gloss, ambiguous: true }));
   } else if (mechanic === "dictation") {
