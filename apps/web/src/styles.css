@@ -4098,58 +4098,6 @@ button.gram-swap-line:hover {
 
 /* ---------------- chests and the bag ---------------- */
 
-.bag-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 10px;
-}
-
-.bag-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 8px;
-}
-
-.bag-slot {
-  aspect-ratio: 1;
-  display: grid;
-  place-items: center;
-  border-radius: 12px;
-  background: var(--panel);
-  border: 1px solid #ffffff14;
-}
-
-.bag-slot.empty {
-  opacity: 0.45;
-}
-
-.bag-slot.on {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-soft);
-}
-
-.bag-slot.is-target {
-  border-color: var(--accent);
-}
-
-.bag-item {
-  font-size: 1.7rem;
-  cursor: grab;
-  user-select: none;
-  -webkit-user-select: none;
-  touch-action: none;
-  border-radius: 10px;
-  padding: 4px 7px;
-}
-
-.bag-item-float {
-  position: fixed;
-  z-index: 40;
-  pointer-events: none;
-  opacity: 0.95;
-}
-
 /* Rarity, worn as a glow. */
 .bag-item.rarity-rare,
 .bag-found.rarity-rare .bag-card-icon {
@@ -4198,17 +4146,6 @@ button.gram-swap-line:hover {
 
 .bag-rarity.rarity-legendary {
   color: var(--warn);
-}
-
-.bag-card {
-  margin-top: 12px;
-}
-
-.bag-card-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 6px;
 }
 
 .bag-card-icon {
@@ -4374,4 +4311,70 @@ button.gram-swap-line:hover {
 .lesson-row-marks {
   font-size: 0.72rem;
   margin-top: 2px;
+}
+
+/* ---------------- the bend bomb ---------------- */
+
+.kana-pack-float {
+  position: fixed;
+  z-index: 40;
+  pointer-events: none;
+  opacity: 0.95;
+}
+
+.kana-pack-item[title^="Bend bomb"] {
+  touch-action: none;
+  cursor: grab;
+}
+
+.kana-mod.bomb-target {
+  outline: 2px dashed var(--bad);
+  outline-offset: 2px;
+}
+
+.kana-mod.exploding {
+  animation: kana-boom 0.6s ease-out forwards;
+  position: relative;
+}
+
+.kana-mod.exploding::after {
+  content: "💥";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 1.6rem;
+  animation: kana-boom-flash 0.6s ease-out forwards;
+}
+
+@keyframes kana-boom {
+  0% {
+    transform: scale(1);
+  }
+  15% {
+    transform: scale(1.08) rotate(1.5deg);
+    background: color-mix(in srgb, var(--warn) 45%, transparent);
+  }
+  45% {
+    transform: scale(1.02) rotate(-1deg);
+  }
+  100% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+}
+
+@keyframes kana-boom-flash {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  25% {
+    opacity: 1;
+    transform: scale(1.4);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2);
+  }
 }

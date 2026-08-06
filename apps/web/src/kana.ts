@@ -19,6 +19,7 @@ import {
   tierOf,
   type Mechanic,
   type ModEffects,
+  type Modifier,
   type RoadNode,
   type StoredTail,
 } from "./kana-road.js";
@@ -731,6 +732,9 @@ async function runLevel(
   }
 
   const rules = rulesFor(mechanic, tierOf(level), node.modifier?.effects ?? {});
+  // The bend in force. A bend bomb can blow it off mid-level, so everything
+  // that shows or reads the modifier goes through this, not the node.
+  let activeMod: Modifier | undefined = node.modifier;
   // The clock is mutable because the speed ladder tightens it as it goes.
   let clockSec = rules.timerSec;
   const useLives = level >= 3 && mechanic !== "learn";
@@ -827,9 +831,34 @@ async function runLevel(
   if (node.modifier?.effects.suddenDeath) health = 1;
   else if (node.modifier?.effects.hearts) health = Math.max(1, health + node.modifier.effects.hearts);
 
+  // Hearts genuinely lost to misses, so a defused door-charge can give
+  // back exactly what the BEND took and nothing the player earned losing.
+  let heartsLost = 0;
+
+  /**
+   * The bend bomb went off: the modifier stops applying from here on.
+   * Rules revert to the tier's own, the clock resets clean, the payout
+   * bonus goes with the bend it paid for, and hearts the door charged
+   * come back — hearts lost to actual misses stay lost.
+   */
+  const defuse = (): void => {
+    if (!activeMod) return;
+    activeMod = undefined;
+    const clean = rulesFor(mechanic, tierOf(level), {});
+    rules.payout = clean.payout;
+    rules.fade = clean.fade;
+    rules.oneListen = clean.oneListen;
+    rules.mirror = clean.mirror;
+    rules.flashMs = clean.flashMs;
+    rules.pace = clean.pace;
+    clockSec = clean.timerSec;
+    health = Math.max(health, Math.min(MAX_HEALTH, game.health - heartsLost));
+  };
+
   // The pack, worn top-left over the quiz: tap an item to use it right
   // here, mid-level — hearts land at once, the cat and the charm arm for
-  // this level. The ⓘ unfolds what each thing does.
+  // this level, and the bomb is dragged onto a bend's banner to blow the
+  // modifier off. The ⓘ unfolds what each thing does.
   const packHost = document.createElement("div");
   packHost.id = "kana-pack-host";
   quiz.before(packHost);
@@ -869,6 +898,61 @@ async function runLevel(
       renderPack();
     });
     for (const button of packHost.querySelectorAll<HTMLButtonElement>(".kana-pack-item")) {
+      const held = itemById((game.items ?? [])[Number(button.dataset.i)] ?? "");
+      // The bomb is thrown, not tapped: drag it onto the bend's banner.
+      if (held?.use === "bomb") {
+        let float: HTMLElement | null = null;
+        let moved = false;
+        const bannerAt = (x: number, y: number): HTMLElement | null => {
+          const banner = body.querySelector<HTMLElement>("#kana-mod-banner");
+          if (!banner) return null;
+          const box = banner.getBoundingClientRect();
+          return x >= box.left && x <= box.right && y >= box.top && y <= box.bottom ? banner : null;
+        };
+        button.addEventListener("pointerdown", (ev) => {
+          ev.preventDefault();
+          moved = false;
+          const box = button.getBoundingClientRect();
+          float = button.cloneNode(true) as HTMLElement;
+          float.className = "kana-pack-item kana-pack-float";
+          float.style.left = `${box.left}px`;
+          float.style.top = `${box.top}px`;
+          document.body.appendChild(float);
+          button.setPointerCapture?.(ev.pointerId);
+        });
+        button.addEventListener("pointermove", (ev) => {
+          if (!float) return;
+          ev.preventDefault();
+          moved = true;
+          float.style.left = `${ev.clientX - 17}px`;
+          float.style.top = `${ev.clientY - 17}px`;
+          const over = bannerAt(ev.clientX, ev.clientY);
+          body.querySelector("#kana-mod-banner")?.classList.toggle("bomb-target", over !== null);
+        });
+        const drop = (ev: PointerEvent): void => {
+          if (!float) return;
+          float.remove();
+          float = null;
+          const banner = bannerAt(ev.clientX, ev.clientY);
+          body.querySelector("#kana-mod-banner")?.classList.remove("bomb-target");
+          if (!moved) {
+            renderPack(activeMod ? "drag it onto the bend's banner" : "no bend here to bomb");
+            return;
+          }
+          if (!banner || !activeMod) return;
+          // 💥 — the banner goes up, the bend goes with it.
+          banner.classList.add("exploding");
+          setTimeout(() => banner.remove(), 620);
+          defuse();
+          game.items = (game.items ?? []).filter((_, k) => k !== Number(button.dataset.i));
+          void saveGame(game);
+          updateHearts();
+          renderPack("💥 the bend is gone");
+        };
+        button.addEventListener("pointerup", drop);
+        button.addEventListener("pointercancel", drop);
+        continue;
+      }
       button.addEventListener("click", async () => {
         const at = Number(button.dataset.i);
         const item = itemById((game.items ?? [])[at] ?? "");
@@ -1239,8 +1323,8 @@ async function runLevel(
         </div>
         <div class="kana-bar"><div class="kana-bar-fill" style="width:${percent}%"></div></div>
         ${
-          node.modifier
-            ? `<div class="kana-mod tier-${node.modifier.tier}">${node.modifier.icon} <b>${escapeHtml(node.modifier.name)}</b> — ${escapeHtml(node.modifier.detail)}</div>`
+          activeMod
+            ? `<div class="kana-mod tier-${activeMod.tier}" id="kana-mod-banner">${activeMod.icon} <b>${escapeHtml(activeMod.name)}</b> — ${escapeHtml(activeMod.detail)}</div>`
             : ""
         }
         ${notice ? `<div class="kana-mod tier-1">🛸 ${escapeHtml(notice)}</div>` : ""}
@@ -1343,6 +1427,7 @@ async function runLevel(
         label += ` <span class="glosses">🧿 the charm took it</span>`;
       } else if (useLives) {
         health--;
+        heartsLost++;
         if (health <= 0) {
           feedback.innerHTML = `<span class="err-text">${label}</span>`;
           void showReaction(body.querySelector("#kana-cheer"), "wrong");

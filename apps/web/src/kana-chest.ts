@@ -21,7 +21,7 @@ export interface PackItem {
   rarity: Rarity;
   detail: string;
   /** What using it does, applied by the level engine on the spot. */
-  use: "heart" | "hearts-all" | "shield" | "pay" | "yennies";
+  use: "heart" | "hearts-all" | "shield" | "pay" | "yennies" | "bomb";
   /** For use "yennies". */
   amount?: number;
 }
@@ -33,6 +33,7 @@ export const ITEMS: PackItem[] = [
   { id: "omamori", name: "Omamori", icon: "🧿", rarity: "rare", detail: "A charm. Your next miss costs no heart.", use: "shield" },
   { id: "luckycat", name: "Lucky cat", icon: "🐱", rarity: "rare", detail: "This level pays double.", use: "pay" },
   { id: "purse", name: "Heavy pouch", icon: "💰", rarity: "epic", detail: "250 ¥. It clinks.", use: "yennies", amount: 250 },
+  { id: "bomb", name: "Bend bomb", icon: "💣", rarity: "epic", detail: "Drag it onto a bend's banner to blow the modifier off the level. Loud.", use: "bomb" },
   { id: "ticket", name: "Onsen ticket", icon: "🎫", rarity: "epic", detail: "Every heart back, right now, no spring required.", use: "hearts-all" },
   { id: "daruma", name: "Golden daruma", icon: "🪆", rarity: "legendary", detail: "Double pay AND a shield, on the spot.", use: "pay" },
 ];
