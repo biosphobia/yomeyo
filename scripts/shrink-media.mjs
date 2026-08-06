@@ -2,10 +2,11 @@
 /**
  * Bring every reaction image to the same weight, on the way out.
  *
- * Reactions arrive from wherever pictures come from: 35 KB or 1.9 MB, tall or
- * wide, gif or webp. On screen they are all drawn in one fixed box, so the
- * extra pixels are never seen — they are only a slower first showing on a
- * phone, and the phone is where this app lives.
+ * Reactions arrive from wherever pictures come from: 35 KB or 12 MB, tall or
+ * wide, an animation or a photograph — gif, webp, avif, png, jpeg. On screen
+ * they are all drawn in one fixed box, so the extra pixels are never seen:
+ * they are only a slower first showing on a phone, and the phone is where
+ * this app lives.
  *
  * This runs as part of the web build, over `dist`, so the originals stay in
  * the repository exactly as they were uploaded and what gets deployed is the
@@ -43,7 +44,7 @@ const MAX_KB = 260;
 /** Where reactions live inside a built site. The models under `gacha/`
  *  are not images and are skipped by the extension filter below. */
 const PLACES = ["gacha", "feedback"];
-const KINDS = new Set([".gif", ".webp", ".png", ".jpg", ".jpeg"]);
+const KINDS = new Set([".gif", ".webp", ".avif", ".png", ".jpg", ".jpeg"]);
 
 const kb = (file) => Math.round(statSync(file).size / 1000);
 const name = (file) => file.split("/").pop();
@@ -165,27 +166,47 @@ function encode(pipeline, file, quality, loop) {
     case ".jpg":
     case ".jpeg":
       return pipeline.jpeg({ quality, mozjpeg: true });
+    case ".avif":
+      // Slower to encode than the rest and worth it: for a photograph avif is
+      // routinely half the size of jpeg at the same quality.
+      return pipeline.avif({ quality, effort: 4 });
     default:
       return pipeline.webp({ quality, effort: 4, loop });
   }
 }
 
 /**
- * Resize by width alone, never height.
+ * Shrink anything that is not a gif: webp, avif, png, jpeg — a drawing, an
+ * animation, or a photograph straight off a phone.
  *
- * An animated webp is one tall strip of frames, and asking for a height
- * resizes the strip rather than the picture. Width scales the frames and lets
- * the strip follow, which is the same thing said safely.
+ * Two things are done for photographs in particular. They are turned the
+ * right way up, because a photo carries its rotation as a note in its
+ * metadata rather than in its pixels, and the notes are dropped here — which
+ * is the second thing, and why: a photo taken on a phone carries the place
+ * and time it was taken, and a reaction gif has no business telling anyone
+ * where the person who made it was standing.
+ *
+ * Resizing is by width alone, never height. An animated webp is one tall
+ * strip of frames, and asking for a height resizes the strip rather than the
+ * picture; width scales the frames and lets the strip follow, which is the
+ * same thing said safely.
  */
 async function shrinkRaster(file) {
   const lib = await sharp();
   if (!lib) return `${name(file)}: sharp not installed, left alone`;
   const before = kb(file);
   const meta = await lib(file, { animated: true }).metadata();
-  const height = meta.pageHeight ?? meta.height ?? 0;
-  const width = meta.width ?? 0;
   const pages = meta.pages ?? 1;
+  // A quarter-turn in the metadata swaps what "wide" means.
+  const turned = (meta.orientation ?? 1) >= 5;
+  const height = (turned ? meta.width : meta.pageHeight ?? meta.height) ?? 0;
+  const width = (turned ? meta.pageHeight ?? meta.height : meta.width) ?? 0;
   if (before <= MAX_KB && Math.max(width, height) <= MAX_SIDE) return null;
+  if (pages > 1 && extname(file).toLowerCase() === ".avif") {
+    // Nothing here can write an animated avif, and rewriting it as a single
+    // frame would throw the animation away silently.
+    return `${name(file)}: animated avif, left alone (${before} KB)`;
+  }
 
   // The width that brings the longest side down to the budget.
   const scale = Math.min(1, MAX_SIDE / Math.max(width, height, 1));
@@ -205,8 +226,11 @@ async function shrinkRaster(file) {
     [0.5, 30],
   ]) {
     const px = Math.max(48, Math.round(width * scale * shrink));
+    // `rotate()` with no angle means "however the metadata says"; it cannot be
+    // asked of a strip of frames, which has no orientation note anyway.
+    const pipeline = lib(file, { animated: pages > 1 });
     const buffer = await encode(
-      lib(file, { animated: pages > 1 }).resize({ width: px, withoutEnlargement: true }),
+      (pages > 1 ? pipeline : pipeline.rotate()).resize({ width: px, withoutEnlargement: true }),
       file,
       quality,
       meta.loop ?? 0,

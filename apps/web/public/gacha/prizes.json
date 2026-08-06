@@ -1,5 +1,5 @@
 {
-  "_comment": "Everything the gacha can give out. Edit this file on GitHub and the next deploy has it — no code changes. A gif is a reaction that joins the pool the kana and grammar drills draw from. Images are filenames in this folder (put them in gifs/), a path like ../feedback/correct.gif, or a full https:// URL.",
+  "_comment": "Everything the gacha can give out. Edit this file on GitHub and the next deploy has it — no code changes. A gif is a reaction that joins the pool the kana and grammar drills draw from, and it need not be a gif: animated webp, avif, png and jpeg all work, as does a photograph. Images are filenames in this folder (put them in gifs/), a path like ../feedback/correct.gif, or a full https:// URL. Any size is fine — each deploy squeezes its own copy to the same budget, so upload the original.",
 
   "cost": 120,
   "_cost": "Yennies per pull.",

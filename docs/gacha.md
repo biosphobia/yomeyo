@@ -99,8 +99,9 @@ under it, never another prize's.
 
 `image` is a filename in `public/gacha/` (put pictures in
 `public/gacha/gifs/`), a path like `../feedback/correct.gif`, or a full
-`https://` URL. Gif, animated webp, png or jpeg all work, and any size does:
-reactions are drawn in a box of their own.
+`https://` URL. Gif, animated webp, avif, png or jpeg all work — an
+animation or a photograph — and any size does: reactions are drawn in a box
+of their own.
 
 **Nothing to run.** Every deploy squeezes each reaction to the same budget —
 longest side 320px, 260 KB — so a tall picture and a wide one cost the same
@@ -110,9 +111,13 @@ worry about the weight. Gifs go through gifsicle, which gives up size and
 palette before it drops frames, because a gif missing half its frames looks
 worse than one drawn slightly smaller; everything else goes through sharp,
 which gives up size before quality for the same reason. An animation keeps
-its frames, its timing and its loop. Anything already inside the budget is
+its frames, its timing and its loop. A photograph is turned the right way up
+— the rotation of a photo lives in its metadata rather than in its pixels,
+and the metadata is dropped here, which also means a picture taken on a phone
+stops carrying the place it was taken. Anything already inside the budget is
 left alone, and anything that will not fit is deployed as small as it would
-go rather than failing the build.
+go rather than failing the build. (Animated avif is the one exception: nothing
+in the toolchain can write one, so it ships as it arrived.)
 
 To see what a deploy will do to a picture, run the same pass by hand:
 `node scripts/shrink-media.mjs path/to/it.webp` — though note that one
