@@ -3,9 +3,10 @@
  *
  * The first seven stages are the original ladder, single file, the same in
  * every game. The road past them — stages 7 through 19 — is rolled fresh
- * each time a game starts: eleven games dealt into a random arrangement of
- * forks, coming round more than once as the road runs on, harder each time
- * it does. Stage 20 waits at the end of the map, face down.
+ * each time a game starts: a deck of games dealt into a random arrangement
+ * of forks, coming round more than once as the road runs on, harder each
+ * time it does. Two fixtures interrupt the deal: the duel at 15, and the
+ * odd hot spring. Stage 20 waits at the end of the map, face down.
  *
  * Difficulty climbs two ways. Tiers, first: every stage past 10 plays a
  * little meaner than its mechanic did earlier — clocks tighter, sequences
@@ -38,7 +39,13 @@ export type Mechanic =
   | "dictation"
   | "speed"
   | "whichmissing"
-  | "fishing";
+  | "fishing"
+  | "whack"
+  | "rain"
+  | "taiko"
+  | "ghost"
+  | "duel"
+  | "rest";
 
 // ---------------- modifiers ----------------
 
@@ -75,6 +82,12 @@ export interface ModEffects {
   crowded?: boolean;
   /** Dictation: this many extra decoy tiles. */
   decoys?: number;
+  /** Every kana shows mirror-flipped. */
+  mirror?: boolean;
+  /** Ghost writing: the kana never fully comes into focus. */
+  ghostShy?: boolean;
+  /** Speed ladder: the clock shrinks twice as fast. */
+  steep?: boolean;
 }
 
 export interface Modifier {
@@ -115,6 +128,12 @@ export const MODIFIERS: Modifier[] = [
   { id: "onelisten", name: "One listen", icon: "👂", tier: 2, applies: ["echo", "simon", "dictation", "whichmissing"], detail: "It plays once. There is no replay button.", effects: { oneListen: true, payout: 1.5 } },
   { id: "noisy", name: "Noisy line", icon: "📢", tier: 2, applies: ["dictation"], detail: "Three extra decoy tiles muddy the board.", effects: { decoys: 3, payout: 1.5 } },
   { id: "fullpond", name: "Full pond", icon: "🐠", tier: 2, applies: ["fishing"], detail: "Half again as many fish, swimming every which way.", effects: { crowded: true, payout: 1.5 } },
+  { id: "mirror", name: "Mirror world", icon: "🪞", tier: 3, applies: ["type", "lives", "timed", "flash", "speed", "onebehind", "choice", "ghost"], detail: "Every kana appears mirror-flipped. Read through the glass.", effects: { mirror: true, payout: 2 } },
+  { id: "quickmoles", name: "Quick moles", icon: "⛏️", tier: 2, applies: ["whack"], detail: "They barely surface before they're gone.", effects: { timerScale: 0.7, payout: 1.5 } },
+  { id: "downpour", name: "Downpour", icon: "🌧️", tier: 3, applies: ["rain"], detail: "It falls hard and fast.", effects: { timerScale: 0.7, payout: 2 } },
+  { id: "uptempo", name: "Uptempo", icon: "🎏", tier: 2, applies: ["taiko"], detail: "The beat quickens.", effects: { timerScale: 0.75, payout: 1.5 } },
+  { id: "shyghost", name: "Shy ghost", icon: "🌁", tier: 2, applies: ["ghost"], detail: "It never quite comes into focus.", effects: { ghostShy: true, payout: 1.5 } },
+  { id: "steep", name: "Steep ladder", icon: "📉", tier: 3, applies: ["speed"], detail: "The clock shrinks twice as fast per rung.", effects: { steep: true, payout: 2 } },
 ];
 
 const MODIFIER_BY_ID = new Map(MODIFIERS.map((mod) => [mod.id, mod]));
@@ -149,6 +168,12 @@ const DEFS: Record<Mechanic, { name: string; icon: string; detail: string }> = {
   speed: { name: "Speed ladder", icon: "🪜", detail: "The clock shrinks with every right answer. Find your limit." },
   whichmissing: { name: "The silent one", icon: "🤫", detail: "Three sounds play. Four tiles show. Tap the one that stayed quiet." },
   fishing: { name: "Fishing", icon: "🎣", detail: "Kana swim past. Hook the one that says the sound — before the clock, not the fish, gets away." },
+  whack: { name: "Whack-a-mole", icon: "🔨", detail: "Kana pop out of holes and duck away. Whack only the ones wearing the sound." },
+  rain: { name: "Kana rain", icon: "☔", detail: "They fall. Type each one before it lands — and they fall faster as you go." },
+  taiko: { name: "Taiko beat", icon: "🥁", detail: "A kana shows, a voice speaks. Hit the drum ONLY when they match." },
+  ghost: { name: "Ghost writing", icon: "👻", detail: "The kana condenses out of the fog. Name it the moment you see it." },
+  duel: { name: "Duel — Chito", icon: "⚔️", detail: "She answers on a fuse. Beat her to every kana, or she takes the point." },
+  rest: { name: "Hot spring", icon: "♨️", detail: "No questions. Every heart back. The road can wait a minute." },
 };
 
 /** The fixed opening stretch, one tile per stage. */
@@ -171,6 +196,10 @@ const TAIL_POOL: Mechanic[] = [
   "speed",
   "whichmissing",
   "fishing",
+  "whack",
+  "rain",
+  "taiko",
+  "ghost",
 ];
 
 /**
@@ -191,11 +220,19 @@ export interface TailTile {
 /** A stored tail: what lives in the save. Older saves stored bare names. */
 export type StoredTail = (TailTile | Mechanic)[][];
 
+/** The mini-boss stands at this stage in every deal. */
+export const DUEL_STAGE = 15;
+
 /**
  * A fresh deal of the road past the base stages: stages 7..19, widths
  * random, always opening with a fork of two. Mechanics cycle through the
  * whole pool, reshuffled as it empties, so everything appears and the
  * repeats land later — where the tiers have turned crueller.
+ *
+ * Two tiles are not the bag's to deal. Stage 15 is always the duel — the
+ * mini-boss keeps her appointment in every game. And up to two straight
+ * stages may be hot springs instead of games: no questions, every heart
+ * back, and a harder look at the bent tile you were saving yourself for.
  *
  * Modifiers land on forked tiles only, and only from the SECOND fork on:
  * the first fork is a clean choice between games, learned safely. Deeper
@@ -204,10 +241,11 @@ export type StoredTail = (TailTile | Mechanic)[][];
  */
 export function generateTail(): TailTile[][] {
   const stages = LAST_STAGE - BASE_STAGES + 1;
+  const duelAt = DUEL_STAGE - BASE_STAGES;
   const widths: number[] = [2];
   while (widths.length < stages) {
     const r = Math.random();
-    widths.push(r < 0.4 ? 1 : r < 0.78 ? 2 : 3);
+    widths.push(widths.length === duelAt ? 1 : r < 0.4 ? 1 : r < 0.78 ? 2 : 3);
   }
 
   let bag: Mechanic[] = [];
@@ -225,9 +263,21 @@ export function generateTail(): TailTile[][] {
   };
 
   let forksSeen = 0;
+  let springs = 0;
   const tail: TailTile[][] = [];
   let previous = new Set<Mechanic>();
   widths.forEach((width, i) => {
+    if (i === duelAt) {
+      tail.push([{ m: "duel" }]);
+      previous = new Set<Mechanic>(["duel"]);
+      return;
+    }
+    if (width === 1 && i > 0 && springs < 2 && Math.random() < 0.18) {
+      springs++;
+      tail.push([{ m: "rest" }]);
+      previous = new Set<Mechanic>(["rest"]);
+      return;
+    }
     const inStage = new Set<Mechanic>();
     const stageTiles: TailTile[] = [];
     for (let k = 0; k < width; k++) {

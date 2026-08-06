@@ -2,7 +2,7 @@ import { getMeta, setMeta } from "./db.js";
 import { playKana, playWord, prefetchAudio, spokenKana } from "./audio.js";
 import { cheerBox, preloadReactions, showReaction } from "./feedback.js";
 import { recordQuestEvents } from "./quests.js";
-import { unlockAll, unlockAllNow } from "./unlock.js";
+import { unlockAll } from "./unlock.js";
 import { PER_CORRECT, earnYennies, formatYennies, spendYennies, yennies } from "./yennies.js";
 import { kanaStats, startGameSession, type GameSession, type KanaStat } from "./kana-stats.js";
 import { renderKanaStats } from "./kana-stats-view.js";
@@ -114,6 +114,12 @@ const CAPS: Record<Mechanic, number> = {
   speed: 20,
   whichmissing: 10,
   fishing: 10,
+  whack: 8,
+  rain: 14,
+  taiko: 18,
+  ghost: 12,
+  duel: 12,
+  rest: 0,
 };
 
 /** Seconds per question, where a mechanic runs on a clock. */
@@ -123,12 +129,18 @@ const TIMERS: Partial<Record<Mechanic, number>> = {
   sort: 4,
   sharpshooter: 10,
   fishing: 10,
+  rain: 6,
+  ghost: 9,
+  duel: 6,
 };
 
 /** Speed ladder: where the clock starts, how it shrinks, where it stops. */
 const SPEED_START = 5.5;
 const SPEED_STEP = 0.3;
 const SPEED_FLOOR = 2;
+/** Kana rain: each catch quickens the fall, down to a floor. */
+const RAIN_STEP = 0.15;
+const RAIN_FLOOR = 3;
 
 /**
  * Everything the road can bend about one run of one level, assembled from
@@ -137,6 +149,8 @@ const SPEED_FLOOR = 2;
  */
 interface LevelRules {
   timerSec: number;
+  /** For mechanics that keep their own rhythm (whack, taiko): <1 is faster. */
+  pace: number;
   flashMs: number;
   seqExtra: number;
   alienExtra: number;
@@ -146,6 +160,9 @@ interface LevelRules {
   oneListen: boolean;
   decoys: number;
   payout: number;
+  mirror: boolean;
+  ghostShy: boolean;
+  steep: boolean;
 }
 
 /** The tier's own sharpening, before any modifier has its say. */
@@ -156,6 +173,7 @@ function rulesFor(mechanic: Mechanic, tier: 1 | 2 | 3, fx: ModEffects): LevelRul
   if (timerSec === 0 && fx.addTimer) timerSec = fx.addTimer;
   return {
     timerSec,
+    pace: tierScale * (fx.timerScale ?? 1),
     flashMs: fx.flashMs ?? (tier === 1 ? 700 : tier === 2 ? 550 : 420),
     seqExtra: (tier === 3 ? 1 : 0) + (fx.seqExtra ?? 0),
     alienExtra: (tier === 3 ? 1 : 0) + (fx.alienExtra ?? 0),
@@ -165,6 +183,9 @@ function rulesFor(mechanic: Mechanic, tier: 1 | 2 | 3, fx: ModEffects): LevelRul
     oneListen: fx.oneListen ?? false,
     decoys: fx.decoys ?? 0,
     payout: fx.payout ?? 1,
+    mirror: fx.mirror ?? false,
+    ghostShy: fx.ghostShy ?? false,
+    steep: fx.steep ?? false,
   };
 }
 
@@ -364,33 +385,9 @@ function renderSelection(
       <button id="kana-start" disabled>Start</button>
       <span class="glosses" id="kana-start-note"></span>
     </div>
-    ${
-      // The admin's key: jump straight to any level, to see one without
-      // playing through everything below it first.
-      unlockAllNow()
-        ? `<div class="gram-levels" id="kana-jump">${road.flatMap((nodes, stage) =>
-            nodes.map(
-              (node) =>
-                `<button class="gram-level-chip" data-stage="${stage}" data-id="${node.id}">${stage}<span class="gram-level-count">${node.name}</span></button>`,
-            ),
-          ).join("")}</div>`
-        : ""
-    }
   `;
-
-  for (const chip of body.querySelectorAll<HTMLButtonElement>("#kana-jump button")) {
-    chip.addEventListener("click", async () => {
-      if (chosen.size === 0) return;
-      const stage = Number(chip.dataset.stage);
-      const next: GameState =
-        game && sameGroups(game.groups, chosen)
-          ? { ...game, skipLearn }
-          : { groups: [...chosen].sort(), unlocked: stage, health: MAX_HEALTH, skipLearn, road: tail };
-      next.unlocked = Math.max(next.unlocked, stage);
-      await saveGame(next);
-      void runLevel(body, next, stage, chip.dataset.id, main, isCurrent);
-    });
-  }
+  // Deliberately no level list here: the road past the first fork is dealt
+  // fresh per game, and reading it off a menu would spoil the walk.
 
   body.querySelector<HTMLInputElement>("#kana-skip")!.addEventListener("change", (ev) => {
     skipLearn = (ev.target as HTMLInputElement).checked;
@@ -509,6 +506,10 @@ interface Item {
   show?: string;
   /** One behind: the opening question, where shown and asked are the same. */
   lead?: boolean;
+  /** Taiko: the kana the VOICE says, which may not be the one shown. */
+  say?: string;
+  /** Taiko: do the shown kana and the spoken one match? */
+  match?: boolean;
 }
 
 /**
@@ -628,6 +629,47 @@ async function runLevel(
   const mechanic = node.mechanic;
   drawMap(node);
 
+  // The hot spring asks nothing: hearts back, stage cleared, walk on.
+  if (mechanic === "rest") {
+    game.path = { ...game.path, [String(level)]: node.id };
+    game.unlocked = Math.max(game.unlocked, level + 1);
+    game.health = MAX_HEALTH;
+    await saveGame(game);
+    if (!isCurrent()) return;
+    drawMap();
+    const onward = level + 1 < road.length ? road[level + 1] : null;
+    quiz.innerHTML = `
+      <div class="card-panel kana-quiz">
+        <div class="big">♨️</div>
+        <div class="kana-score">Hot spring</div>
+        <div class="glosses">Every heart back: ${heartsHtml(game.health)}<br/>Nothing asked. Nothing paid.</div>
+        <div class="row-actions" style="justify-content:center;margin-top:12px">
+          ${onward ? `<button id="kana-next">Back on the road</button>` : ""}
+          <button id="kana-back" class="secondary">Stop here</button>
+        </div>
+      </div>`;
+    quiz.querySelector("#kana-next")?.addEventListener("click", () => {
+      void runLevel(body, game, level + 1, undefined, main, isCurrent);
+    });
+    quiz.querySelector("#kana-back")!.addEventListener("click", () => renderSelection(body, game, main, isCurrent));
+    return;
+  }
+
+  // The duel gets its stage: Chito above the quiz, on a fuse.
+  let duel: import("./kana-duel.js").DuelStage | null = null;
+  let duelYou = 0;
+  let duelChito = 0;
+  if (mechanic === "duel") {
+    const duelHost = document.createElement("div");
+    duelHost.id = "kana-duel";
+    quiz.before(duelHost);
+    void import("./kana-duel.js").then(async (mod) => {
+      const mounted = await mod.mountDuel(duelHost);
+      if (!duelHost.isConnected) mounted.stop();
+      else duel = mounted;
+    });
+  }
+
   const rules = rulesFor(mechanic, tierOf(level), node.modifier?.effects ?? {});
   // The clock is mutable because the speed ladder tightens it as it goes.
   let clockSec = rules.timerSec;
@@ -722,11 +764,12 @@ async function runLevel(
   // whole. Each is warmed the way it will be played.
   const speaksSequence = mechanic === "simon" || mechanic === "whichmissing";
   void prefetchAudio(
-    items.flatMap((item) =>
-      speaksSequence && item.seq
-        ? item.seq.map((kana) => audioFor({ kana, entry: entryFor.get(kana) }))
-        : [audioFor(item)],
-    ),
+    items.flatMap((item) => {
+      if (speaksSequence && item.seq) return item.seq.map((kana) => audioFor({ kana, entry: entryFor.get(kana) }));
+      // Taiko speaks one kana and shows another; both get said eventually.
+      if (item.say) return [audioFor({ kana: item.say, entry: entryFor.get(item.say) }), audioFor(item)];
+      return [audioFor(item)];
+    }),
     warming,
   );
   let timer: ReturnType<typeof setInterval> | null = null;
@@ -743,9 +786,15 @@ async function runLevel(
         words: isWords,
       });
 
+  // Whack's mole spawner and taiko's beat live beside the countdown clock,
+  // never in its slot — a bend can give any level a clock, and the two must
+  // not fight over one variable.
+  let side: ReturnType<typeof setInterval> | null = null;
   const stopTimer = (): void => {
     if (timer !== null) clearInterval(timer);
     timer = null;
+    if (side !== null) clearInterval(side);
+    side = null;
   };
 
   /**
@@ -926,26 +975,46 @@ async function runLevel(
     const seqDots = item.seq
       ? `<div class="kana-simon-dots" id="kana-dots">${item.seq.map(() => `<span class="kana-dot"></span>`).join("")}</div>`
       : "";
-    const bigArea =
-      mechanic === "echo" || mechanic === "simon"
-        ? `${hearButton}${mechanic === "simon" ? seqDots : ""}`
-        : mechanic === "dictation"
-          ? `${hearButton}${seqDots}
-             ${item.gloss ? `<div class="kana-gloss">${escapeHtml(item.gloss)}</div>` : ""}
-             <div class="kana-gloss">build what you heard, tile by tile</div>`
-          : mechanic === "whichmissing"
-            ? `${hearButton}<div class="kana-gloss">three sounds played — tap the tile that was NOT one of them</div>`
-            : mechanic === "fishing"
-              ? `<div class="kana-big">${escapeHtml(itemAnswer(item))}</div>
-                 <div class="kana-gloss">hook the fish that says it</div>`
-              : mechanic === "sharpshooter"
-                ? `<div class="kana-big">${escapeHtml(itemAnswer(item))}</div>
-                   <div class="kana-gloss">tap every tile that says it — ${item.hits!.length} of them</div>`
-                : mechanic === "onebehind"
-                  ? `<div class="kana-big${rules.fade ? " kana-fading" : ""}" id="kana-big" lang="ja">${escapeHtml(item.show ?? item.kana)}</div>
-                     <div class="kana-gloss">${item.lead ? "type THIS one — and remember it" : "type the one you saw BEFORE this"}</div>`
-                  : `<div class="kana-big${mechanic === "flash" ? " kana-flashable" : ""}${rules.fade ? " kana-fading" : ""}" id="kana-big" lang="ja">${escapeHtml(item.kana)}</div>
-                     ${item.gloss ? `<div class="kana-gloss">${escapeHtml(item.gloss)}</div>` : ""}`;
+    const mirrorCls = rules.mirror ? " kana-mirrored" : "";
+    const bigArea = ((): string => {
+      switch (mechanic) {
+        case "echo":
+          return hearButton;
+        case "simon":
+          return `${hearButton}${seqDots}`;
+        case "dictation":
+          return `${hearButton}${seqDots}
+            ${item.gloss ? `<div class="kana-gloss">${escapeHtml(item.gloss)}</div>` : ""}
+            <div class="kana-gloss">build what you heard, tile by tile</div>`;
+        case "whichmissing":
+          return `${hearButton}<div class="kana-gloss">three sounds played — tap the tile that was NOT one of them</div>`;
+        case "fishing":
+          return `<div class="kana-big">${escapeHtml(itemAnswer(item))}</div>
+            <div class="kana-gloss">hook the fish that says it</div>`;
+        case "sharpshooter":
+          return `<div class="kana-big">${escapeHtml(itemAnswer(item))}</div>
+            <div class="kana-gloss">tap every tile that says it — ${item.hits!.length} of them</div>`;
+        case "whack":
+          return `<div class="kana-big">${escapeHtml(itemAnswer(item))}</div>
+            <div class="kana-gloss">whack every mole wearing it — three hits</div>`;
+        case "taiko":
+          return `<div class="kana-big${mirrorCls}" id="kana-big" lang="ja">${escapeHtml(item.kana)}</div>
+            <div class="kana-gloss">hit the drum ONLY if this is what you hear</div>`;
+        case "rain":
+          return `<div class="kana-sky"><div class="kana-big kana-raindrop${mirrorCls}" id="kana-big" lang="ja"
+              style="animation-duration:${clockSec}s">${escapeHtml(item.kana)}</div></div>
+            <div class="kana-gloss">type it before it lands</div>`;
+        case "ghost":
+          return `<div class="kana-big kana-ghostly${rules.ghostShy ? " shy" : ""}${mirrorCls}" id="kana-big" lang="ja">${escapeHtml(item.kana)}</div>
+            <div class="kana-gloss">name it the moment you see it</div>`;
+        case "onebehind":
+          return `<div class="kana-big${rules.fade ? " kana-fading" : ""}${mirrorCls}" id="kana-big" lang="ja">${escapeHtml(item.show ?? item.kana)}</div>
+            <div class="kana-gloss">${item.lead ? "type THIS one — and remember it" : "type the one you saw BEFORE this"}</div>`;
+        default:
+          return `<div class="kana-big${mechanic === "flash" ? " kana-flashable" : ""}${rules.fade ? " kana-fading" : ""}${mirrorCls}" id="kana-big" lang="ja">${escapeHtml(item.kana)}</div>
+            ${item.gloss ? `<div class="kana-gloss">${escapeHtml(item.gloss)}</div>` : ""}`;
+      }
+    })();
 
     const tileGrid = (tiles: string[]): string =>
       `<div class="kana-choices kana-grid" id="kana-grid">${tiles
@@ -988,19 +1057,28 @@ async function runLevel(
               ? `<div class="kana-buckets" id="kana-buckets">${item
                   .buckets!.map((label) => `<button data-choice="${escapeHtml(label)}">🗂️<span>${escapeHtml(label)}</span></button>`)
                   .join("")}</div>`
-              : mechanic === "simon" || mechanic === "sharpshooter" || mechanic === "dictation"
-                ? tileGrid(item.grid!)
-                : `<input type="text" id="kana-answer" autocomplete="off" autocapitalize="none"
-                     autocorrect="off" spellcheck="false" placeholder="type the romaji…" />`;
+              : mechanic === "taiko"
+                ? `<button class="kana-drum" id="kana-drum">🥁</button>
+                   <div class="glosses" style="text-align:center">match → drum · no match → let it pass</div>`
+                : mechanic === "whack"
+                  ? `<div class="kana-holes" id="kana-holes">${Array.from(
+                      { length: 9 },
+                      (_, i) => `<div class="kana-hole" data-h="${i}"></div>`,
+                    ).join("")}</div>
+                    <div class="kana-whack-count" id="kana-whack-count"></div>`
+                  : mechanic === "simon" || mechanic === "sharpshooter" || mechanic === "dictation"
+                    ? tileGrid(item.grid!)
+                    : `<input type="text" id="kana-answer" autocomplete="off" autocapitalize="none"
+                        autocorrect="off" spellcheck="false" placeholder="type the romaji…" />`;
 
     quiz.innerHTML = `
       <div class="card-panel kana-quiz">
         <div class="kana-quiz-top">
+          <button id="kana-quit" class="quiz-stop" title="Stop" aria-label="Stop">✕</button>
           <span class="glosses quiz-level">Level ${level}: ${node.name}</span>
           <span class="kana-count">${done + 1}/${total}</span>
           <span class="quiz-right">
             ${streakHtml()}${useLives ? heartsHtml(health) : ""}
-            <button id="kana-quit" class="quiz-stop" title="Stop" aria-label="Stop">✕</button>
           </span>
         </div>
         <div class="kana-bar"><div class="kana-bar-fill" style="width:${percent}%"></div></div>
@@ -1032,6 +1110,11 @@ async function runLevel(
     // has recorded it. Never let a silent device stop the quiz. A simon
     // sequence is spoken one kana at a time, with air between them.
     const say = (): void => {
+      // Taiko replays what the VOICE said, not what the eyes saw.
+      if (mechanic === "taiko" && item.say) {
+        void playKana(item.say).catch(() => undefined);
+        return;
+      }
       if (item.seq && speaksSequence) {
         let at = 0;
         const step = (): void => {
@@ -1070,8 +1153,15 @@ async function runLevel(
         <span class="kana-streak">🔥 ${streak}</span>`;
       void showReaction(body.querySelector("#kana-cheer"), "correct");
       say();
-      // The speed ladder tightens its clock with every rung climbed.
-      if (mechanic === "speed") clockSec = Math.max(SPEED_FLOOR, clockSec - SPEED_STEP);
+      // The speed ladder tightens its clock with every rung climbed, and
+      // the rain falls a little faster with every catch.
+      if (mechanic === "speed") clockSec = Math.max(SPEED_FLOOR, clockSec - SPEED_STEP * (rules.steep ? 2 : 1));
+      if (mechanic === "rain") clockSec = Math.max(RAIN_FLOOR, clockSec - RAIN_STEP);
+      if (mechanic === "duel") {
+        duelYou++;
+        duel?.you();
+        duel?.score(duelYou, duelChito);
+      }
       setTimeout(advance, 1100);
     };
 
@@ -1081,6 +1171,11 @@ async function runLevel(
       session?.answer(item.kana, { correct: false, mistake, timeout });
       streak = 0;
       missedAny = true;
+      if (mechanic === "duel") {
+        duelChito++;
+        duel?.rival();
+        duel?.score(duelYou, duelChito);
+      }
       // Back into the deck: the level ends only when everything is right.
       queue.push(queue[0]);
       if (useLives) {
@@ -1124,7 +1219,7 @@ async function runLevel(
       ev.stopPropagation();
       say();
     });
-    if (["echo", "simon", "dictation", "whichmissing", "fishing"].includes(mechanic)) setTimeout(say, 250);
+    if (["echo", "simon", "dictation", "whichmissing", "fishing", "taiko"].includes(mechanic)) setTimeout(say, 250);
 
     if (useChoices || mechanic === "echo" || mechanic === "whichmissing") {
       // The same buttons shape, pointed several ways: choice shows kana and
@@ -1305,6 +1400,81 @@ async function runLevel(
           }
         });
       }
+    } else if (mechanic === "taiko") {
+      // Go or no-go: the beat window closes on its own. Letting a mismatch
+      // pass is a right answer that costs nothing but nerve.
+      const beatMs = 2400 * rules.pace;
+      side = setTimeout(() => {
+        side = null;
+        if (settled) return;
+        if (item.match) {
+          miss(`✗ it matched — <b lang="ja">${escapeHtml(item.kana)}</b> = <b>${escapeHtml(itemAnswer(item))}</b>`, undefined, true);
+        } else {
+          succeed();
+        }
+      }, beatMs) as unknown as ReturnType<typeof setInterval>;
+      body.querySelector<HTMLButtonElement>("#kana-drum")!.addEventListener("click", () => {
+        if (settled) return;
+        if (item.match) {
+          succeed();
+        } else {
+          miss(
+            `✗ <b lang="ja">${escapeHtml(item.kana)}</b> says <b>${escapeHtml(itemAnswer(item))}</b> — the voice said <b>${escapeHtml(primaryRomaji(item.say ?? ""))}</b>`,
+            item.say,
+          );
+        }
+      });
+    } else if (mechanic === "whack") {
+      // Moles surface, wait a beat, and duck away. Three clean hits on the
+      // called sound clear the item; one wrong bonk is the miss.
+      const holes = [...body.querySelectorAll<HTMLElement>(".kana-hole")];
+      const countEl = body.querySelector<HTMLElement>("#kana-whack-count")!;
+      const targetSound = item.entry!.romaji[0];
+      const wearing = pool.filter((entry) => entry.romaji[0] === targetSound);
+      const foils = pool.filter((entry) => entry.romaji[0] !== targetSound);
+      const NEED = 3;
+      let hits = 0;
+      const drawCount = (): void => {
+        countEl.textContent = "🔨".repeat(hits) + "・".repeat(NEED - hits);
+      };
+      drawCount();
+      const upMs = 1300 * rules.pace;
+      const spawn = (): void => {
+        if (settled || !body.isConnected) return;
+        const free = holes.filter((hole) => !hole.querySelector(".kana-mole"));
+        if (free.length === 0) return;
+        const hole = free[Math.floor(Math.random() * free.length)];
+        const isTarget = foils.length === 0 || Math.random() < 0.45;
+        const entry = isTarget
+          ? wearing[Math.floor(Math.random() * wearing.length)]
+          : foils[Math.floor(Math.random() * foils.length)];
+        const mole = document.createElement("button");
+        mole.className = "kana-mole";
+        mole.innerHTML = `<span lang="ja">${escapeHtml(entry.kana)}</span>`;
+        mole.addEventListener("click", () => {
+          if (settled) return;
+          if (entry.romaji[0] === targetSound) {
+            mole.classList.add("bonked");
+            void playKana(entry.kana).catch(() => undefined);
+            hits++;
+            drawCount();
+            setTimeout(() => mole.remove(), 260);
+            if (hits >= NEED) succeed();
+          } else {
+            mole.classList.add("wrong");
+            miss(
+              `✗ <b lang="ja">${escapeHtml(entry.kana)}</b> says <b>${escapeHtml(entry.romaji[0])}</b>, not <b>${escapeHtml(targetSound)}</b>`,
+              entry.kana,
+            );
+          }
+        });
+        hole.appendChild(mole);
+        setTimeout(() => {
+          if (!mole.classList.contains("bonked") && !mole.classList.contains("wrong")) mole.remove();
+        }, upMs);
+      };
+      spawn();
+      side = setInterval(spawn, 750 * rules.pace);
     } else {
       const input = body.querySelector<HTMLInputElement>("#kana-answer")!;
       input.focus();
@@ -1446,6 +1616,7 @@ async function kanaItems(pool: KanaEntry[], mechanic: Mechanic, rules: LevelRule
   if (mechanic === "onebehind") return onebehindItems(pool, weights, cap);
   if (mechanic === "whichmissing") return whichMissingItems(pool, weights, cap);
   if (mechanic === "fishing") return fishingItems(pool, weights, cap, rules.crowded);
+  if (mechanic === "taiko") return taikoItems(pool, weights, cap);
 
   const target = Math.min(cap, pool.length * 2);
   const distinct = drawByNeed(pool, weights, Math.min(pool.length, target));
@@ -1628,6 +1799,27 @@ function whichMissingItems(pool: KanaEntry[], weights: Map<string, number>, cap:
 }
 
 /**
+ * Taiko: one kana for the eyes, one sound for the ears, half the time the
+ * same one. The shown kana draws by need; the impostor sound is any other
+ * sound the pool knows.
+ */
+function taikoItems(pool: KanaEntry[], weights: Map<string, number>, cap: number): Item[] {
+  const drawn: KanaEntry[] = [];
+  while (drawn.length < cap) {
+    for (const entry of drawByNeed(pool, weights, pool.length)) {
+      drawn.push(entry);
+      if (drawn.length >= cap) break;
+    }
+  }
+  return drawn.map((entry) => {
+    const impostors = pool.filter((other) => other.romaji[0] !== entry.romaji[0]);
+    const match = impostors.length === 0 || Math.random() < 0.5;
+    const spoken = match ? entry : impostors[Math.floor(Math.random() * impostors.length)];
+    return { kana: entry.kana, entry, say: spoken.kana, match };
+  });
+}
+
+/**
  * Dictation: a word game for the ears. Real words where the pool can spell
  * enough of them; made-up ones where it cannot — the listening is the same
  * drill either way.
@@ -1777,12 +1969,10 @@ async function wordsFor(game: GameState, pool: KanaEntry[], count: number): Prom
     // stopped being a filter and started being the whole dictionary. Let it
     // go rather than serve the same handful of leftovers.
     const source = fresh.length >= count * 2 ? fresh : ranked;
-    // Words are chosen for being common, then narrowed to the ones that
-    // happen to be spelt with the kana you are struggling with — so the word
-    // levels practise the same weak spots the kana levels do, without ever
-    // reaching for an obscure word to do it.
-    const stats = await kanaStats().catch(() => ({}) as Record<string, KanaStat>);
-    const chosen = byWeakestKana(drawByFrequency(source, count * 3), stats, count);
+    // The draw leans common but is otherwise pure chance — deliberately no
+    // steering towards struggling kana here, so the words stay a surprise
+    // rather than the same weak-spot vocabulary every night.
+    const chosen = drawByFrequency(source, count);
     await setMeta(RECENT_WORDS_KEY, [...chosen.map(([kana]) => kana), ...recent].slice(0, RECENT_WORDS));
 
     return chosen.map(([kana, word]) => ({
@@ -1831,26 +2021,6 @@ function readAnotherWay(dictionary: { lookupExact(text: string): DictEntry[] }, 
  * mostly common ones, but which common ones is different every time, and a
  * long tail still turns up often enough to be worth having.
  */
-/**
- * Of these words, the ones made of the kana that need the practice.
- *
- * The need of a word is the need of its neediest letter, not the average:
- * a word is worth showing for the one kana in it you keep missing, and
- * averaging would hide that behind four you know.
- */
-function byWeakestKana(
-  words: [string, Word][],
-  stats: Record<string, KanaStat>,
-  count: number,
-): [string, Word][] {
-  const scored = words.map((word) => {
-    const need = [...word[0]].reduce((most, kana) => Math.max(most, needOf(stats[kana])), 0);
-    return { word, need };
-  });
-  scored.sort((a, b) => b.need - a.need);
-  return shuffle(scored.slice(0, count).map((s) => s.word));
-}
-
 function drawByFrequency<T>(ranked: T[], count: number): T[] {
   const taken = new Set<number>();
   const out: T[] = [];
