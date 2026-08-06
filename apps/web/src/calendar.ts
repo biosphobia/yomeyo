@@ -1,4 +1,12 @@
-import { dateKey, dayStreak, eventsOf, planForDay, questProgress } from "./quests.js";
+import {
+  dateKey,
+  dayStreak,
+  eventsOf,
+  examCountdown,
+  planForDay,
+  questProgress,
+  type Countdown,
+} from "./quests.js";
 import { screenHeader } from "./screen.js";
 import { levelState } from "./levels.js";
 
@@ -7,9 +15,10 @@ import { levelState } from "./levels.js";
  *
  * Days run on local time. Today shows its quests with live progress; past
  * days show how they went; future days show what is coming — readable any
- * time, attemptable only when the day arrives. Landmark days carry a 🏁.
- * A run of fully-completed days is the day streak, counted next to the
- * month.
+ * time, attemptable only when the day arrives. Landmark days carry a 🏁 and
+ * glow gold. A run of fully-completed days is the day streak, counted next to
+ * the month, and the hiragana exam counts itself down at the top until the
+ * day it falls on.
  */
 
 const MONTHS = [
@@ -31,10 +40,12 @@ export async function renderCalendar(main: HTMLElement, isCurrent: () => boolean
 
   const streak = await dayStreak(now);
   const level = await levelState();
+  const exam = await examCountdown(now);
   if (!isCurrent()) return;
 
   main.innerHTML = `
     ${screenHeader("Calendar")}
+    ${countdownHtml(exam)}
     <div class="cal-head">
       <button id="cal-prev" class="ghost" aria-label="Previous month">‹</button>
       <div class="cal-month">${MONTHS[viewMonth]} ${viewYear}</div>
@@ -49,6 +60,16 @@ export async function renderCalendar(main: HTMLElement, isCurrent: () => boolean
     </div>
     <div id="cal-day"></div>
   `;
+
+  // Tapping the countdown goes to the day itself, which is where the exam
+  // and the quests around it are written out.
+  main.querySelector<HTMLButtonElement>("#exam-countdown")?.addEventListener("click", () => {
+    const [year, month] = exam.key.split("-").map(Number);
+    viewYear = year;
+    viewMonth = month - 1;
+    selectedKey = exam.key;
+    void renderCalendar(main, isCurrent);
+  });
 
   main.querySelector<HTMLButtonElement>("#cal-prev")!.addEventListener("click", () => {
     viewMonth!--;
@@ -121,6 +142,38 @@ export async function renderCalendar(main: HTMLElement, isCurrent: () => boolean
     ? selectedKey
     : todayKey;
   void renderDay(main, shown, todayKey, isCurrent);
+}
+
+/**
+ * The countdown to the hiragana exam.
+ *
+ * The exam is the eighth day of the journey — the last row learned, and
+ * everything before it tested together — so it has a real date the moment
+ * somebody starts, and a date you can see coming is a date you prepare for.
+ * It leaves the screen the day after it falls: a countdown to something
+ * behind you is just clutter.
+ */
+function countdownHtml(exam: Countdown): string {
+  if (exam.daysAway < 0) return "";
+  const soon = exam.daysAway <= 1;
+  const left = exam.daysAway === 0 ? "Today" : exam.daysAway === 1 ? "Tomorrow" : `${exam.daysAway} days`;
+  return `
+    <button class="card-panel exam-countdown" id="exam-countdown" data-key="${exam.key}">
+      <span class="exam-days">${left}</span>
+      <span class="exam-what">${soon ? "is" : "until"} the hiragana exam</span>
+      <span class="glosses">${readableDate(exam.key)} · every row, together</span>
+    </button>
+  `;
+}
+
+/** "Saturday 9 August", from a day key. */
+function readableDate(key: string): string {
+  const [y, m, d] = key.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  const weekday = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][
+    date.getDay()
+  ];
+  return `${weekday} ${d} ${MONTHS[m - 1]}`;
 }
 
 async function renderDay(

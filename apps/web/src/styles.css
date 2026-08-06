@@ -1977,16 +1977,25 @@ button.gram-swap-line:hover {
 
 /* ---------------- the Calendar ---------------- */
 
+/*
+ * Month, arrows and streak.
+ *
+ * It wraps, and the streak is what wraps first. Held on one line it was wider
+ * than a phone, and since the grid below sizes its columns off the same box,
+ * a too-wide heading pushed Saturday and Sunday off the screen.
+ */
 .cal-head {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   margin-bottom: 12px;
 }
 
 .cal-month {
   font-weight: 700;
-  min-width: 150px;
+  flex: 1;
+  min-width: 0;
   text-align: center;
 }
 
@@ -1996,9 +2005,19 @@ button.gram-swap-line:hover {
   font-size: 0.9rem;
 }
 
+@media (max-width: 560px) {
+  .cal-streak {
+    flex-basis: 100%;
+    margin-left: 0;
+    text-align: center;
+  }
+}
+
 .cal-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  /* `minmax(0, 1fr)`, not `1fr`: a plain 1fr will not shrink below its
+     content, and seven of those on a narrow phone overflow the screen. */
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 6px;
   margin-bottom: 16px;
 }
@@ -2068,8 +2087,79 @@ button.gram-swap-line:hover {
   gap: 10px;
 }
 
+/*
+ * A milestone glows.
+ *
+ * There are one or two of these in a month and they are the days the whole
+ * schedule is pointed at, so they are the one thing on this grid worth
+ * finding at a glance. Gold, lit from inside, and breathing slowly — slow
+ * enough to be noticed rather than watched.
+ */
 .cal-cell.milestone {
-  border-color: #ffb54d88;
+  border-color: #ffc861;
+  color: #ffe6b0;
+  background: linear-gradient(#2a2233, #241d2c);
+  box-shadow:
+    0 0 0 1px #ffc86155,
+    0 0 14px #ffb54d3d,
+    inset 0 0 12px #ffb54d1f;
+  animation: milestone-glow 3.4s ease-in-out infinite;
+}
+
+.cal-cell.milestone .cal-mark {
+  filter: drop-shadow(0 0 4px #ffb54daa);
+}
+
+/* Still gold when it is also today, and still obviously today. */
+.cal-cell.milestone.today {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 1px #ffc86188,
+    0 0 18px #ffb54d55,
+    inset 0 0 12px #ffb54d29;
+}
+
+@keyframes milestone-glow {
+  50% {
+    box-shadow:
+      0 0 0 1px #ffc86188,
+      0 0 22px #ffb54d66,
+      inset 0 0 16px #ffb54d33;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cal-cell.milestone {
+    animation: none;
+  }
+}
+
+/* The countdown to the exam: a whole panel, because it is the date the first
+   week is pointed at. */
+.exam-countdown {
+  display: block;
+  width: 100%;
+  text-align: center;
+  cursor: pointer;
+  background: linear-gradient(#2a2233, #221c2b);
+  border: 1px solid #ffc86155;
+  box-shadow: 0 0 18px #ffb54d1f;
+}
+
+.exam-days {
+  display: block;
+  font-size: 1.9rem;
+  font-weight: 700;
+  color: #ffd88a;
+  line-height: 1.1;
+  text-shadow: 0 0 16px #ffb54d55;
+}
+
+.exam-what {
+  display: block;
+  font-size: 0.95rem;
+  color: var(--text);
+  margin-bottom: 4px;
 }
 
 .cal-cell.grace {

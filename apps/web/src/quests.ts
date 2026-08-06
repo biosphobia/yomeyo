@@ -104,6 +104,40 @@ function dayNumber(key: string, start: string): number {
   return Math.round((localTime(key) - localTime(start)) / 86400000) + 1;
 }
 
+/**
+ * The day the hiragana exam falls on: the eighth of the journey, when the
+ * last row is learned and everything before it is tested together.
+ */
+export const EXAM_DAY = 8;
+
+/** The date of a numbered day of the journey. */
+function keyOfDay(start: string, day: number): string {
+  const [y, m, d] = start.split("-").map(Number);
+  return dateKey(new Date(y, m - 1, d + day - 1));
+}
+
+export interface Countdown {
+  /** The date it falls on, as a day key. */
+  key: string;
+  /** Whole days from today: 0 is today, negative is behind us. */
+  daysAway: number;
+}
+
+/**
+ * When the hiragana exam is, counted from today.
+ *
+ * Its date is not a fixed calendar date — it is the eighth day of *this*
+ * learner's journey, which begins the first time they look at a quest. So it
+ * is worked out rather than stored, and it moves for nobody once the journey
+ * has started.
+ */
+export async function examCountdown(now: Date = new Date()): Promise<Countdown> {
+  const start = await questStart();
+  const key = keyOfDay(start, EXAM_DAY);
+  const daysAway = Math.round((localTime(key) - localTime(dateKey(now))) / 86400000);
+  return { key, daysAway };
+}
+
 /** How many level clears each new group asks for — one pass is a glance. */
 const CLEARS_PER_GROUP = 2;
 
@@ -180,7 +214,7 @@ export async function planForDay(key: string): Promise<DayPlan> {
   }
 
   // Day 8: the last group, the exam over everything, and a full drill.
-  if (day === 8) {
+  if (day === EXAM_DAY) {
     const finalGroup = hiragana[hiragana.length - 1];
     return {
       milestone: "Hiragana complete",
