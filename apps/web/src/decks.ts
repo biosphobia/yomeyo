@@ -2,6 +2,7 @@ import { MINING_DECK_ID, fromSharedCards, type DeckInfo } from "@yomeyo/core";
 import { screenHeader } from "./screen.js";
 import { currentAccount, getFirebaseConfig, type AccountInfo } from "./cloud.js";
 import { cardsInDeck, forgetDeck, listDecks, rememberDeck } from "./my-decks.js";
+import { canShare, isSharedByMe } from "./deck-share.js";
 import { deleteCards, importCards } from "./store.js";
 import { deleteMediaOf } from "./media.js";
 import { toast } from "./toast.js";
@@ -116,6 +117,10 @@ async function openEditor(
         resetEditor();
         editing = null;
         tab = "mine";
+        void renderDecks(main, isCurrent);
+      },
+      onReopen: (deckId) => {
+        editing = deckId;
         void renderDecks(main, isCurrent);
       },
     },
@@ -342,11 +347,12 @@ async function renderMine(
   for (const deck of decks) {
     const row = document.createElement("div");
     row.className = "word-row";
-    const publishedByMe = deck.shared === true && deck.ownerUid === account?.uid;
-    // Only a deck imported here can be shared. One added from the library
-    // already has a publisher, and re-sharing it would put a second copy in
-    // the list under somebody else's name.
-    const shareable = deck.kind === "premade" && !deck.ownerUid && account !== null;
+    const publishedByMe = isSharedByMe(deck, account);
+    // Anything of yours that is not already shared, including one you
+    // published and then withdrew — which used to be publishable exactly
+    // once, because withdrawing left your name on it and the old rule read
+    // any name at all as somebody else's.
+    const shareable = canShare(deck, account);
     row.innerHTML = `
       <div class="word">
         <div><b>${escapeHtml(deck.name)}</b>${deck.shared ? ` <span class="glosses">· shared</span>` : ""}</div>

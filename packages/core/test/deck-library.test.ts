@@ -4,6 +4,8 @@ import {
   deckOf,
   fromSharedCards,
   MINING_DECK_ID,
+  canShareDeck,
+  isSharedBy,
   mergeDeckLists,
   newDeckId,
   orderOf,
@@ -75,6 +77,46 @@ describe("where a card sits in its deck", () => {
       expect(middle).toBeLessThan(orderOf(high));
       low = card({ id: "a", order: middle });
     }
+  });
+});
+
+describe("who may share a deck", () => {
+  const owned = (over: Partial<DeckInfo> = {}): DeckInfo => ({
+    id: "d",
+    name: "d",
+    kind: "premade",
+    cardCount: 3,
+    ...over,
+  });
+
+  it("offers a deck of your own that has never been shared", () => {
+    expect(canShareDeck(owned(), "me")).toBe(true);
+  });
+
+  it("offers one you published and then withdrew", () => {
+    // The bug: withdrawing left your uid on the deck, and the old rule read
+    // any uid at all as somebody else's, so it could never be shared again.
+    expect(canShareDeck(owned({ ownerUid: "me", shared: false }), "me")).toBe(true);
+  });
+
+  it("does not offer a deck that is already shared", () => {
+    expect(canShareDeck(owned({ ownerUid: "me", shared: true }), "me")).toBe(false);
+  });
+
+  it("does not offer somebody else's deck", () => {
+    expect(canShareDeck(owned({ ownerUid: "them", shared: true }), "me")).toBe(false);
+    expect(canShareDeck(owned({ ownerUid: "them" }), "me")).toBe(false);
+  });
+
+  it("never offers the mining deck, or offers anything to nobody", () => {
+    expect(canShareDeck(owned({ id: MINING_DECK_ID, kind: "mining" }), "me")).toBe(false);
+    expect(canShareDeck(owned(), null)).toBe(false);
+  });
+
+  it("knows which decks are the library's copy of yours", () => {
+    expect(isSharedBy(owned({ ownerUid: "me", shared: true }), "me")).toBe(true);
+    expect(isSharedBy(owned({ ownerUid: "them", shared: true }), "me")).toBe(false);
+    expect(isSharedBy(owned({ ownerUid: "me" }), "me")).toBe(false);
   });
 });
 

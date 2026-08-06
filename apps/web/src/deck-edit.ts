@@ -10,6 +10,7 @@ import { cardsInDeck, rememberDeck } from "./my-decks.js";
 import { deleteCards, saveCard, saveCards } from "./store.js";
 import { speakerButton } from "./audio.js";
 import { toast } from "./toast.js";
+import { canShare, flushSharedDeck, isSharedByMe, touchSharedDeck } from "./deck-share.js";
 import {
   addDrafts,
   draftsFromRequest,
@@ -53,6 +54,12 @@ export interface EditorOptions {
   isAdmin: boolean;
   /** Back to the deck list. */
   onBack: () => void;
+  /**
+   * Open the editor again on this deck. Sharing re-files a deck under a
+   * library id — that is what lets the rules tell who may change it — so the
+   * deck being edited is, from that moment, a different id.
+   */
+  onReopen?: (deckId: string) => void;
 }
 
 export async function renderDeckEditor(
@@ -66,7 +73,8 @@ export async function renderDeckEditor(
   if (!isCurrent()) return;
 
   const mining = deck.id === MINING_DECK_ID;
-  const mine = deck.ownerUid !== undefined && deck.ownerUid === options.account?.uid;
+  const mine = isSharedByMe(deck, options.account);
+  const shareable = canShare(deck, options.account) && cards.length > 0;
   const shown = state.filter
     ? cards.filter((card) => matches(card, state.filter))
     : cards;
@@ -88,12 +96,15 @@ export async function renderDeckEditor(
                placeholder="What is in it, in one line" />
              <div class="row-actions" style="margin-top:10px">
                <button id="deck-rename">Save name</button>
-               ${
-                 mine
-                   ? `<button id="deck-republish" class="secondary">Update the shared copy</button>`
-                   : ""
-               }
-             </div>`
+               ${shareable ? `<button id="deck-share" class="secondary">Share with everyone</button>` : ""}
+               ${mine ? `<button id="deck-republish" class="secondary">Update the shared copy now</button>` : ""}
+             </div>
+             ${
+               mine
+                 ? `<div class="glosses" style="margin-top:8px">Shared. Every change you make
+                      here reaches the library on its own, a few seconds later.</div>`
+                 : ""
+             }`
       }
       <div class="glosses" style="margin-top:8px">${cards.length.toLocaleString()} word${
         cards.length === 1 ? "" : "s"
@@ -143,7 +154,12 @@ export async function renderDeckEditor(
     </div>
   `;
 
-  body.querySelector<HTMLButtonElement>("#deck-back")!.addEventListener("click", options.onBack);
+  body.querySelector<HTMLButtonElement>("#deck-back")!.addEventListener("click", () => {
+    // Anything still settling goes now, so closing the editor is not a way to
+    // leave the library a version behind.
+    if (mine) void flushSharedDeck(deck.id);
+    options.onBack();
+  });
 
   const redraw = (): void => void renderDeckEditor(body, deck, options, isCurrent);
 
@@ -156,10 +172,30 @@ export async function renderDeckEditor(
       return;
     }
     const description = body.querySelector<HTMLInputElement>("#deck-desc")!.value.trim();
-    await rememberDeck({ ...deck, name, description });
+    await rememberDeck({ ...deck, name, description, updatedAt: Date.now() });
     deck = { ...deck, name, description };
+    touchSharedDeck(deck.id);
     toast(`Renamed to ${name}`);
     redraw();
+  });
+
+  body.querySelector<HTMLButtonElement>("#deck-share")?.addEventListener("click", async (ev) => {
+    const button = ev.currentTarget as HTMLButtonElement;
+    button.disabled = true;
+    button.textContent = "Sharing…";
+    try {
+      const { shareDeck } = await import("./anki-import.js");
+      const id = await shareDeck(options.account!, deck.id, deck.name, deck.source ?? "");
+      toast(`${deck.name} is now in the shared library`);
+      // Same deck, new id: reopen it there rather than leaving the editor
+      // pointed at an id that no longer has any cards under it.
+      if (options.onReopen) options.onReopen(id);
+      else options.onBack();
+    } catch (err) {
+      button.disabled = false;
+      button.textContent = "Share with everyone";
+      toast(err instanceof Error ? err.message : "Could not share that deck.", "error");
+    }
   });
 
   body.querySelector<HTMLButtonElement>("#deck-republish")?.addEventListener("click", async (ev) => {
@@ -317,6 +353,7 @@ function drawDrafts(box: HTMLDivElement, deck: DeckInfo, redraw: () => void): vo
     button.disabled = true;
     const result = await addDrafts(state.drafts, deck.id);
     state.drafts = [];
+    touchSharedDeck(deck.id);
     toast(
       `Added ${result.added.toLocaleString()} word${result.added === 1 ? "" : "s"}` +
         (result.elsewhere > 0 ? ` · ${result.elsewhere} are in another deck already` : ""),
@@ -381,15 +418,18 @@ function cardRow(card: Card, ordered: Card[] | null, deck: DeckInfo, redraw: () 
 
   row.querySelector<HTMLButtonElement>(".move-up")?.addEventListener("click", async () => {
     await move(ordered!, at, -1);
+    touchSharedDeck(deck.id);
     redraw();
   });
   row.querySelector<HTMLButtonElement>(".move-down")?.addEventListener("click", async () => {
     await move(ordered!, at, 1);
+    touchSharedDeck(deck.id);
     redraw();
   });
   row.querySelector<HTMLButtonElement>(".delete-btn")!.addEventListener("click", async () => {
     if (!confirm(`Delete “${card.term}” from ${deck.name}?`)) return;
     await deleteCards([card]);
+    touchSharedDeck(deck.id);
     row.remove();
   });
   row.querySelector<HTMLButtonElement>(".edit-btn")!.addEventListener("click", () => {
@@ -485,6 +525,7 @@ function editRow(
       ...(notes ? { notes } : {}),
       updatedAt: Date.now(),
     });
+    touchSharedDeck(deck.id);
     redraw();
   });
   row.querySelector<HTMLButtonElement>(".cancel-edit")!.addEventListener("click", () => {

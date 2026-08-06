@@ -138,6 +138,27 @@ export function fromSharedCards(shared: SharedCard[], deckId: string, now: numbe
     }));
 }
 
+/**
+ * Whether this account could publish this deck.
+ *
+ * Not the mining deck: those are the words somebody saved off the pages they
+ * were reading, and they are nobody else's business. Not a deck published by
+ * someone else either — adding it from the library does not make it yours to
+ * republish. Everything else, *including* a deck this account published and
+ * then withdrew: the old rule read "has a publisher" as "belongs to somebody
+ * else", so withdrawing your own deck made it unshareable for ever.
+ */
+export function canShareDeck(deck: DeckInfo, uid: string | null): boolean {
+  if (!uid || deck.kind !== "premade" || deck.id === MINING_DECK_ID) return false;
+  if (deck.shared) return false;
+  return !deck.ownerUid || deck.ownerUid === uid;
+}
+
+/** Whether this deck is the library's copy, published by this account. */
+export function isSharedBy(deck: DeckInfo, uid: string | null): boolean {
+  return deck.shared === true && !!uid && deck.ownerUid === uid;
+}
+
 // ---------------- one account's decks, across its devices ----------------
 
 /** A deck removed on some device, and when — so it stays removed. */

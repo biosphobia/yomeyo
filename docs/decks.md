@@ -64,13 +64,26 @@ invented reading without seeing it first.
 The drafts behave exactly as the typed ones do — look, drop what is wrong,
 add the rest.
 
-## Sharing, and updating what is shared
+## Sharing, and staying shared
 
-A deck built here is local until it is shared. **Share with everyone** on the
-deck's row publishes it to the library under your username; from then on the
-editor offers **Update the shared copy**, which republishes the deck's current
-words over the same library entry. Everyone who already added it keeps the
-deck they have; the library shows one deck rather than two.
+A deck is local until it is shared. **Share with everyone** — on the deck's
+row, and in the editor — publishes it to the library under your username. It
+is offered for any deck of yours that is not already shared, including one you
+published and then withdrew.
+
+After that it keeps itself up to date. Rename it, fix a reading, add forty
+words, reorder them, delete one: a few seconds later the library's copy is
+rewritten to match, and everyone who adds the deck from then on gets what you
+actually have. The delay swallows a burst of edits, so rearranging a deck is
+one upload rather than twenty; leaving the editor sends anything still
+waiting, and **Update the shared copy now** does it on the spot. Editing a
+card from the Words screen counts too.
+
+Two things it will not do. It will not publish an empty deck, so deleting
+every word leaves the last good copy alone rather than replacing it with
+nothing. And it checks the deck is still in the library first — if the admin
+has withdrawn it, the update stops and the deck quietly stops calling itself
+shared, so automatic updating cannot undo a moderation decision.
 
 Withdrawing is on the deck's row in **Premade** (its publisher, or the admin,
 for anything).

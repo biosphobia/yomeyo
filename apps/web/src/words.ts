@@ -2,6 +2,7 @@ import type { Card } from "@yomeyo/core";
 import { screenHeader } from "./screen.js";
 import { getMeta, setMeta } from "./db.js";
 import { liveCards, resetCards, saveCard } from "./store.js";
+import { touchSharedDeck } from "./deck-share.js";
 import { speakerButton } from "./audio.js";
 import { extensionStatus } from "./extension-bridge.js";
 import { getAdvancedMode } from "./prefs.js";
@@ -150,6 +151,8 @@ function wordRow(card: Card, main: HTMLElement, isCurrent: () => boolean): HTMLD
   `;
   row.querySelector<HTMLButtonElement>(".delete-btn")!.addEventListener("click", async () => {
     await saveCard({ ...card, deleted: true, updatedAt: Date.now() });
+    // A word removed from a shared deck is removed from the shared copy too.
+    touchSharedDeck(card.deckId);
     row.remove();
   });
   row.querySelector<HTMLButtonElement>(".edit-btn")!.addEventListener("click", () => {
@@ -211,6 +214,7 @@ function editRow(row: HTMLDivElement, card: Card, main: HTMLElement, isCurrent: 
       ...(notes ? { notes } : {}),
       updatedAt: Date.now(),
     });
+    touchSharedDeck(card.deckId);
     void renderWords(main, isCurrent);
   });
   row.querySelector<HTMLButtonElement>(".cancel-edit")!.addEventListener("click", () => {
