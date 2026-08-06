@@ -93,7 +93,9 @@ Light skins work: set `--bg` and `--panel` light and `--text` dark.
 
 `on` is `"correct"` or `"wrong"`. Once won, it **joins the pool** the kana
 game and grammar drills draw from — it does not replace anything, so the more
-that have been pulled the more varied the answering gets.
+that have been pulled the more varied the answering gets. `text` is that
+gif's own line and travels with it: when this gif comes up, this is the line
+under it, never another prize's.
 
 `image` is a filename in `public/gacha/` (put gifs in `public/gacha/gifs/`),
 a path like `../feedback/correct.gif`, or a full `https://` URL. Any size

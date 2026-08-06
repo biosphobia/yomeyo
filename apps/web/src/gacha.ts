@@ -12,6 +12,7 @@ import {
   type Prize,
   type PrizeTable,
 } from "./gacha-data.js";
+import { forgetReactions } from "./feedback.js";
 import { applySkin } from "./skins.js";
 import { unlockAll, unlockAllNow } from "./unlock.js";
 
@@ -223,6 +224,9 @@ async function openCrate(main: HTMLElement, table: PrizeTable, isCurrent: () => 
     return;
   }
   const isNew = await addOwned(prize.id);
+  // A won gif joins the drills' pool. Told now, so the next question can
+  // show it rather than the one after the app is next opened.
+  if (isNew && prize.type === "gif") forgetReactions();
   // A free pull refunds nothing, because it took nothing.
   const refund = isNew || free ? 0 : Math.round(table.cost * table.duplicateRefund);
   if (refund > 0) await earnYennies(refund);

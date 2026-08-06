@@ -174,6 +174,10 @@ function primaryRomaji(kana: string): string {
 let view: "play" | "stats" = "play";
 
 export async function renderKana(main: HTMLElement, isCurrent: () => boolean = () => true): Promise<void> {
+  // Warmed as the screen opens, not as a level starts: the reactions have to
+  // be in hand the instant an answer lands, and picking your kana is exactly
+  // the free half-second in which to fetch them.
+  void preloadReactions();
   const game = await getGame();
   await unlockAll();
   if (!isCurrent()) return;

@@ -38,7 +38,11 @@ function isExcluded(relPath) {
     relPath === "grammar.php" ||
     relPath === "grammar-key.php" ||
     relPath.startsWith("dict/") || // megabytes; cached on first use instead
-    relPath.startsWith("feedback/") || // quiz reaction gifs; cached on first sight
+    // The reaction gifs, which are hundreds of kilobytes each and arrive on
+    // first sight. Their JSON is the exception: it is a few hundred bytes and
+    // decides what a drill can show, and a drill that has to wait for the
+    // network to find that out shows nothing for its first answer.
+    (relPath.startsWith("feedback/") && base !== "feedback.json") ||
     // The gacha's character models, and the gifs it hands out. A megabyte of
     // cutscene is not the shell, and someone who never opens a crate should
     // never download it.

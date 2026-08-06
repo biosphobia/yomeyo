@@ -49,6 +49,10 @@ interface GrammarProgress {
 let view: "practice" | "dictionary" | "parse" = "practice";
 
 export async function renderGrammar(main: HTMLElement, isCurrent: () => boolean = () => true): Promise<void> {
+  // Warmed as the screen opens, not as a drill starts: the reactions have to
+  // be in hand the instant an answer lands, and choosing a unit is exactly
+  // the free half-second in which to fetch them.
+  void preloadReactions();
   const progress = (await getMeta<GrammarProgress>(GAME_KEY)) ?? { unlocked: 0 };
   const romaji = (await getMeta<boolean>(ROMAJI_KEY)) ?? true;
   await unlockAll();
