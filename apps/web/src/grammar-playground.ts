@@ -10,6 +10,7 @@ import {
   guessKind,
   isKana,
   kanaToRomaji,
+  kindFitsShape,
   kindFromPos,
   startState,
   toHiragana,
@@ -68,7 +69,8 @@ export async function renderPlayground(body: HTMLDivElement, isCurrent: () => bo
     const saved = await getMeta<Saved>(LAST_KEY);
     if (saved?.typed) {
       word = await resolveWord(saved.typed);
-      if (word && saved.kind) word = { ...word, kind: saved.kind };
+      // A stored kind from before the shape-check existed may be nonsense.
+      if (word && saved.kind && kindFitsShape(word.kana, saved.kind)) word = { ...word, kind: saved.kind };
       chain = saved.chain ?? [];
     }
     if (!isCurrent() || !body.isConnected) return;
@@ -99,12 +101,16 @@ async function resolveWord(typed: string): Promise<PlayWord | null> {
   const kana = covers && entry?.reading ? toHiragana(entry.reading) : isKana(text) ? toHiragana(text) : null;
   if (!kana) return null;
 
+  // A tag the word's own shape cannot conjugate as would build nonsense
+  // (ねこ bent as a verb gives ねこた); the shape has the final say.
+  const tagged = covers ? kindTagged : null;
+  const kind = tagged && kindFitsShape(kana, tagged) ? tagged : guessKind(kana);
   return {
     typed: text,
     kana,
     gloss: covers && entry ? entry.glosses[0] ?? "" : "",
-    kind: (covers ? kindTagged : null) ?? guessKind(kana),
-    sure: Boolean(covers && kindTagged),
+    kind,
+    sure: Boolean(tagged && tagged === kind),
   };
 }
 
@@ -207,11 +213,17 @@ function drawBoard(out: HTMLDivElement, body: HTMLDivElement): void {
   const { steps, state } = walkChain();
   void setMeta(LAST_KEY, { typed: w.typed, kind: w.kind, chain } satisfies Saved);
 
+  // Only the kinds this word's shape can honestly be: ねこ is never a verb,
+  // however curious the finger. What cannot fit is shown but says why not.
   const kindChips = (Object.keys(WORD_KIND_INFO) as WordKind[])
-    .map(
-      (k) => `<button class="pg-kind${k === w.kind ? " on" : ""}" data-kind="${k}"
-        title="${escapeHtml(WORD_KIND_INFO[k].hint)}">${escapeHtml(WORD_KIND_INFO[k].name)}</button>`,
-    )
+    .map((k) => {
+      const fits = kindFitsShape(w.kana, k);
+      return `<button class="pg-kind${k === w.kind ? " on" : ""}${fits ? "" : " off"}" data-kind="${k}"
+        ${fits ? "" : "disabled"}
+        title="${escapeHtml(fits ? WORD_KIND_INFO[k].hint : `${w.kana} doesn't have the shape for this`)}">${escapeHtml(
+          WORD_KIND_INFO[k].name,
+        )}</button>`;
+    })
     .join("");
 
   const blockHtml = (label: string, sub: string, cls: string, at?: number): string => `

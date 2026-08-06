@@ -3,45 +3,96 @@ import { speak } from "./audio.js";
 import { cheerBox, preloadReactions, showReaction } from "./feedback.js";
 import { PER_CORRECT, earnYennies, formatYennies, yennies } from "./yennies.js";
 import { LESSONS } from "./grammar-lessons.js";
+import { GRAMMAR_UNITS } from "./grammar-data.js";
+import { runUnit } from "./grammar-practice.js";
 
 /**
- * The Learn view: the grammar course read as lessons, each closed by a test.
+ * The Course: the grammar curriculum as chapters, each read, drilled and
+ * tested in one flow.
  *
- * Reading and testing are deliberately separate moods. The lesson is a calm
- * page — sections, examples with a speaker button, no timer, no score — and
- * the test at the bottom is the same quiz machinery the rest of the app
- * uses, one question at a time with a why after every answer. Passing (8 in
- * 10 or better) marks the lesson done on the list; nothing is ever locked,
- * because a reference you cannot open is a reference you stop using.
+ * Reading and drilling used to live in separate tabs teaching overlapping
+ * material in different orders. Now every chapter is one thing: a calm
+ * page of sections and spoken examples, then — where a drill unit exists
+ * for exactly this material — a "drill it" run of the sentence-dissection
+ * tasks, then a short test. The drill units attach to the chapters that
+ * teach their content: が gets the smallest sentences, は gets the unsaid
+ * doer, を gets doing-something-to-something, and so on. Chapters without
+ * a matching unit (the sentence-enders, verb conjugation — which the
+ * playground drills better) go read → test.
+ *
+ * Nothing is locked: a reference you cannot open is a reference you stop
+ * using. A chapter counts as done when its test is passed AND its drill
+ * (if it has one) has been cleared at least once.
  */
 
 const DONE_KEY = "grammarLessonsDone";
-/** Best score per lesson index, as a percent. */
+const UNITS_DONE_KEY = "grammarUnitsDone";
+/** The old Practice tab's save, read once to carry progress across. */
+const OLD_GAME_KEY = "grammarGame";
+const ROMAJI_KEY = "grammarRomaji";
+
+/** Best test score per chapter index, as a percent. */
 type Progress = Record<number, number>;
 
 const PASS = 80;
 
+/**
+ * Which drill unit belongs to which chapter (both zero-based). A unit sits
+ * with the chapter that finishes teaching its material — the に/で/へ unit
+ * waits for で's chapter, the joining unit for the て form.
+ */
+const UNIT_FOR: Record<number, number> = {
+  2: 0, // が — the smallest sentences
+  3: 1, // は — when nobody says who
+  4: 2, // を — doing something to something
+  6: 3, // で (after に/へ) — where and how
+  10: 4, // から・まで — from and until
+  13: 7, // て form — joining two sentences
+  14: 5, // adjectives — describing words
+  16: 6, // reading between the lines — describing with a whole sentence
+};
+
 let openLesson: number | null = null;
+
+async function unitsDone(): Promise<Set<number>> {
+  const stored = await getMeta<number[]>(UNITS_DONE_KEY);
+  if (stored) return new Set(stored);
+  // First visit since the tabs merged: whatever the old Practice tab had
+  // cleared counts as cleared here.
+  const old = await getMeta<{ unlocked?: number }>(OLD_GAME_KEY);
+  const carried = new Set<number>();
+  for (let i = 0; i < (old?.unlocked ?? 0); i++) carried.add(i);
+  await setMeta(UNITS_DONE_KEY, [...carried]);
+  return carried;
+}
 
 export async function renderLessons(body: HTMLDivElement, isCurrent: () => boolean = () => true): Promise<void> {
   const progress = (await getMeta<Progress>(DONE_KEY)) ?? {};
+  const drilled = await unitsDone();
   if (!isCurrent() || !body.isConnected) return;
   if (openLesson !== null && LESSONS[openLesson]) {
-    drawLesson(body, openLesson, progress, isCurrent);
+    await drawLesson(body, openLesson, progress, drilled, isCurrent);
   } else {
-    drawList(body, progress, isCurrent);
+    drawList(body, progress, drilled, isCurrent);
   }
 }
 
-// ---------------- the lesson list ----------------
+/** Done = test passed, and the drill (where there is one) cleared. */
+function chapterDone(index: number, progress: Progress, drilled: Set<number>): boolean {
+  const testPassed = (progress[index] ?? 0) >= PASS;
+  const unit = UNIT_FOR[index];
+  return testPassed && (unit === undefined || drilled.has(unit));
+}
 
-function drawList(body: HTMLDivElement, progress: Progress, isCurrent: () => boolean): void {
-  const passed = LESSONS.filter((_, i) => (progress[i] ?? 0) >= PASS).length;
-  const firstOpen = LESSONS.findIndex((_, i) => (progress[i] ?? 0) < PASS);
+// ---------------- the chapter list ----------------
+
+function drawList(body: HTMLDivElement, progress: Progress, drilled: Set<number>, isCurrent: () => boolean): void {
+  const passed = LESSONS.filter((_, i) => chapterDone(i, progress, drilled)).length;
+  const firstOpen = LESSONS.findIndex((_, i) => !chapterDone(i, progress, drilled));
   body.innerHTML = `
     <div class="lesson-course-head">
-      <div><b>The course</b><span class="glosses"> · read in order, test as you go</span></div>
-      <span class="glosses">${passed} / ${LESSONS.length} passed</span>
+      <div><b>The course</b><span class="glosses"> · read, drill, test — chapter by chapter</span></div>
+      <span class="glosses">${passed} / ${LESSONS.length} done</span>
     </div>
     <div class="kana-bar" style="margin-bottom:14px"><div class="kana-bar-fill" style="width:${Math.round(
       (passed / LESSONS.length) * 100,
@@ -50,8 +101,15 @@ function drawList(body: HTMLDivElement, progress: Progress, isCurrent: () => boo
   `;
   const list = body.querySelector<HTMLDivElement>("#lesson-list")!;
   LESSONS.forEach((lesson, index) => {
+    const done = chapterDone(index, progress, drilled);
     const best = progress[index] ?? 0;
-    const done = best >= PASS;
+    const unit = UNIT_FOR[index];
+    const marks = [
+      best > 0 ? `🏅 ${best}%` : "",
+      unit !== undefined ? (drilled.has(unit) ? "🎯 drilled" : "🎯 drill waiting") : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
     const panel = document.createElement("div");
     panel.className = `card-panel lesson-row${done ? " done" : ""}${index === firstOpen ? " next" : ""}`;
     panel.innerHTML = `
@@ -60,27 +118,37 @@ function drawList(body: HTMLDivElement, progress: Progress, isCurrent: () => boo
         <div>
           <div class="lesson-row-title">${escapeHtml(lesson.title)}</div>
           <div class="glosses">${escapeHtml(lesson.tagline)}</div>
+          ${marks ? `<div class="glosses lesson-row-marks">${marks}</div>` : ""}
         </div>
       </div>
-      <button class="${done ? "secondary" : ""}">${done ? "Again" : "Read"}</button>
+      <button class="${done ? "secondary" : ""}">${done ? "Again" : "Open"}</button>
     `;
     panel.querySelector("button")!.addEventListener("click", () => {
       openLesson = index;
-      drawLesson(body, index, progress, isCurrent);
+      void drawLesson(body, index, progress, drilled, isCurrent);
     });
     list.appendChild(panel);
   });
 }
 
-// ---------------- one lesson, read ----------------
+// ---------------- one chapter ----------------
 
-function drawLesson(body: HTMLDivElement, index: number, progress: Progress, isCurrent: () => boolean): void {
+async function drawLesson(
+  body: HTMLDivElement,
+  index: number,
+  progress: Progress,
+  drilled: Set<number>,
+  isCurrent: () => boolean,
+): Promise<void> {
   const lesson = LESSONS[index];
+  const unitIndex = UNIT_FOR[index];
+  const unit = unitIndex !== undefined ? GRAMMAR_UNITS[unitIndex] : null;
+  const romaji = (await getMeta<boolean>(ROMAJI_KEY)) ?? true;
   window.scrollTo({ top: 0 });
   body.innerHTML = `
-    <button class="ghost lesson-back" id="lesson-back">← All lessons</button>
+    <button class="ghost lesson-back" id="lesson-back">← All chapters</button>
     <div class="lesson-head">
-      <div class="glosses">Lesson ${index + 1} of ${LESSONS.length}</div>
+      <div class="glosses">Chapter ${index + 1} of ${LESSONS.length}</div>
       <h2>${escapeHtml(lesson.title)}</h2>
       <div class="glosses">${escapeHtml(lesson.tagline)}</div>
     </div>
@@ -92,7 +160,7 @@ function drawLesson(body: HTMLDivElement, index: number, progress: Progress, isC
         <p>${escapeHtml(section.body)}</p>
         ${(section.examples ?? [])
           .map(
-            (ex, exIndex) => `
+            (ex) => `
           <div class="lesson-example" data-say="${escapeHtml(spokenOf(ex.jp))}">
             <button class="speaker" title="Say it" aria-label="Say it">🔊</button>
             <div>
@@ -107,10 +175,24 @@ function drawLesson(body: HTMLDivElement, index: number, progress: Progress, isC
       )
       .join("")}
     <div class="card-panel lesson-test-cta">
-      <b>Ready?</b>
+      <b>Put it to work</b>
+      ${
+        unit
+          ? `<div class="glosses">First drill it on real sentences — ${escapeHtml(unit.tagline)}</div>
+             <label class="unseen-toggle" style="justify-content:center;margin:6px 0">
+               <input type="checkbox" id="lesson-romaji" ${romaji ? "checked" : ""} /> Show romaji
+             </label>
+             <div class="row-actions" style="justify-content:center">
+               <button id="lesson-drill">${drilled.has(unitIndex!) ? "🎯 Drill it again" : "🎯 Drill it"}</button>
+             </div>
+             <div class="glosses" style="margin:4px 0 8px">${drilled.has(unitIndex!) ? "Drilled ✓" : ""}</div>`
+          : `<div class="glosses">This chapter drills best in the Playground and the test below.</div>`
+      }
       <div class="glosses">${lesson.quiz.length} quick questions on what you just read.
         ${progress[index] !== undefined ? ` Best so far: ${progress[index]}%.` : ""}</div>
-      <button id="lesson-test">Take the test</button>
+      <div class="row-actions" style="justify-content:center;margin-top:6px">
+        <button id="lesson-test" class="${unit && !drilled.has(unitIndex!) ? "secondary" : ""}">🏅 Take the test</button>
+      </div>
     </div>
   `;
 
@@ -123,9 +205,26 @@ function drawLesson(body: HTMLDivElement, index: number, progress: Progress, isC
       void speak(row.dataset.say ?? "", { rate: 0.85 }).catch(() => undefined);
     });
   }
+  body.querySelector<HTMLInputElement>("#lesson-romaji")?.addEventListener("change", (ev) => {
+    void setMeta(ROMAJI_KEY, (ev.target as HTMLInputElement).checked);
+  });
+  body.querySelector("#lesson-drill")?.addEventListener("click", async () => {
+    void preloadReactions();
+    const showRomaji = (await getMeta<boolean>(ROMAJI_KEY)) ?? true;
+    void runUnit(body, unitIndex!, showRomaji, isCurrent, {
+      continueLabel: "Back to the chapter",
+      onCleared: async () => {
+        drilled.add(unitIndex!);
+        await setMeta(UNITS_DONE_KEY, [...drilled]);
+      },
+      onExit: () => {
+        void drawLesson(body, index, progress, drilled, isCurrent);
+      },
+    });
+  });
   body.querySelector("#lesson-test")!.addEventListener("click", () => {
     void preloadReactions();
-    runQuiz(body, index, progress, isCurrent);
+    runQuiz(body, index, progress, drilled, isCurrent);
   });
 }
 
@@ -136,14 +235,20 @@ function spokenOf(jp: string): string {
 
 // ---------------- the test ----------------
 
-function runQuiz(body: HTMLDivElement, index: number, progress: Progress, isCurrent: () => boolean): void {
+function runQuiz(
+  body: HTMLDivElement,
+  index: number,
+  progress: Progress,
+  drilled: Set<number>,
+  isCurrent: () => boolean,
+): void {
   const lesson = LESSONS[index];
   const queue = shuffle([...lesson.quiz]);
   const total = queue.length;
   let at = 0;
   let right = 0;
 
-  const backToLesson = (): void => drawLesson(body, index, progress, isCurrent);
+  const backToLesson = (): void => void drawLesson(body, index, progress, drilled, isCurrent);
 
   const finish = async (): Promise<void> => {
     const score = Math.round((right / total) * 100);
@@ -155,29 +260,45 @@ function runQuiz(body: HTMLDivElement, index: number, progress: Progress, isCurr
     const balance = earned > 0 ? await earnYennies(earned) : await yennies();
     if (!isCurrent() || !body.isConnected) return;
     const next = index + 1 < LESSONS.length ? LESSONS[index + 1] : null;
+    const unit = UNIT_FOR[index];
+    const drillWaiting = passed && unit !== undefined && !drilled.has(unit);
     body.innerHTML = `
       <div class="card-panel kana-quiz">
         <div class="big">${passed ? "🎉" : "📖"}</div>
         <div class="kana-score">${right} / ${total}</div>
         <div class="glosses">${
           passed
-            ? `Passed — ${escapeHtml(lesson.title)} is yours.`
-            : `Not quite — ${PASS}% passes. The lesson is one tap away.`
+            ? drillWaiting
+              ? `Passed — now drill it on real sentences to finish the chapter.`
+              : `Passed — ${escapeHtml(lesson.title)} is yours.`
+            : `Not quite — ${PASS}% passes. The chapter is one tap away.`
         }</div>
         <div class="yen-line">${earned > 0 ? `<b>+${earned.toLocaleString()}</b> · ` : ""}${formatYennies(balance)}</div>
         <div class="row-actions" style="justify-content:center;margin-top:12px">
-          ${passed && next ? `<button id="lq-next">Next: ${escapeHtml(next.title)}</button>` : ""}
+          ${drillWaiting ? `<button id="lq-drill">🎯 Drill it now</button>` : ""}
+          ${passed && !drillWaiting && next ? `<button id="lq-next">Next: ${escapeHtml(next.title)}</button>` : ""}
           ${passed ? "" : `<button id="lq-reread">Read it again</button>`}
           <button id="lq-retry" class="secondary">Retake the test</button>
-          <button id="lq-list" class="ghost">All lessons</button>
+          <button id="lq-list" class="ghost">All chapters</button>
         </div>
       </div>`;
+    body.querySelector("#lq-drill")?.addEventListener("click", async () => {
+      const showRomaji = (await getMeta<boolean>(ROMAJI_KEY)) ?? true;
+      void runUnit(body, unit!, showRomaji, isCurrent, {
+        continueLabel: "Back to the chapter",
+        onCleared: async () => {
+          drilled.add(unit!);
+          await setMeta(UNITS_DONE_KEY, [...drilled]);
+        },
+        onExit: backToLesson,
+      });
+    });
     body.querySelector("#lq-next")?.addEventListener("click", () => {
       openLesson = index + 1;
-      drawLesson(body, index + 1, progress, isCurrent);
+      void drawLesson(body, index + 1, progress, drilled, isCurrent);
     });
     body.querySelector("#lq-reread")?.addEventListener("click", backToLesson);
-    body.querySelector("#lq-retry")!.addEventListener("click", () => runQuiz(body, index, progress, isCurrent));
+    body.querySelector("#lq-retry")!.addEventListener("click", () => runQuiz(body, index, progress, drilled, isCurrent));
     body.querySelector("#lq-list")!.addEventListener("click", () => {
       openLesson = null;
       void renderLessons(body, isCurrent);
@@ -190,9 +311,9 @@ function runQuiz(body: HTMLDivElement, index: number, progress: Progress, isCurr
     body.innerHTML = `
       <div class="card-panel kana-quiz gram-quiz">
         <div class="kana-quiz-top">
+          <button id="lq-quit" class="quiz-stop" title="Stop" aria-label="Stop">✕</button>
           <span class="glosses">${escapeHtml(lesson.title)} — test</span>
           <span class="glosses">${at}/${total}</span>
-          <button id="lq-quit" class="quiz-stop" title="Stop" aria-label="Stop">✕</button>
         </div>
         <div class="kana-bar"><div class="kana-bar-fill" style="width:${percent}%"></div></div>
         <div class="gram-prompt">${escapeHtml(question.q)}</div>

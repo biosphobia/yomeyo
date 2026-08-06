@@ -22,7 +22,7 @@ import {
   type RoadNode,
   type StoredTail,
 } from "./kana-road.js";
-import { RARITY_LABEL, addToBag, renderBag, rollItem } from "./kana-chest.js";
+import { PACK_MAX, RARITY_LABEL, itemById, rollItem } from "./kana-chest.js";
 import { takeAlienWords, warmAlienWords } from "./kana-alien-ai.js";
 
 /**
@@ -60,6 +60,8 @@ interface GameState {
   path?: Record<string, string>;
   /** This game's deal of the road past the fixed stages. */
   road?: StoredTail;
+  /** The pack: items found on THIS road. Gone when a new road is dealt. */
+  items?: string[];
 }
 
 /**
@@ -69,6 +71,8 @@ interface GameState {
  */
 function freshTail(game: GameState): void {
   game.road = generateTail();
+  // The pack empties with the road: items belong to the run that found them.
+  game.items = [];
   game.path = Object.fromEntries(
     Object.entries(game.path ?? {}).filter(([stage]) => Number(stage) < BASE_STAGES),
   );
@@ -302,8 +306,8 @@ function primaryRomaji(kana: string): string {
 
 // ---------------- the screens ----------------
 
-/** Play, the record of playing, or the bag. Remembered while the app is open. */
-let view: "play" | "stats" | "bag" = "play";
+/** Play or the record of playing. Remembered while the app is open. */
+let view: "play" | "stats" = "play";
 
 export async function renderKana(main: HTMLElement, isCurrent: () => boolean = () => true): Promise<void> {
   // Warmed as the screen opens, not as a level starts: the reactions have to
@@ -326,7 +330,6 @@ export async function renderKana(main: HTMLElement, isCurrent: () => boolean = (
     ${screenHeader("Kana", await yennies())}
     <div class="segmented">
       <button data-view="play" class="${view === "play" ? "on" : ""}">Play</button>
-      <button data-view="bag" class="${view === "bag" ? "on" : ""}">Bag</button>
       <button data-view="stats" class="${view === "stats" ? "on" : ""}">Stats</button>
     </div>
     <div id="kana-body"></div>
@@ -341,7 +344,6 @@ export async function renderKana(main: HTMLElement, isCurrent: () => boolean = (
 
   const body = main.querySelector<HTMLDivElement>("#kana-body")!;
   if (view === "stats") void renderKanaStats(body);
-  else if (view === "bag") void renderBag(body);
   else renderSelection(body, game, main, isCurrent);
 }
 
@@ -670,17 +672,19 @@ async function runLevel(
     return;
   }
 
-  // A chest asks nothing either: one item, drawn by rarity, into the bag.
+  // A chest asks nothing either: one item, drawn by rarity, into the pack.
   if (mechanic === "chest") {
     game.path = { ...game.path, [String(level)]: node.id };
     game.unlocked = Math.max(game.unlocked, level + 1);
+    const found = rollItem();
+    const carried = game.items ?? [];
+    // A full pack still opens the chest — it just pays cash for the trouble.
+    const full = carried.length >= PACK_MAX;
+    if (!full) game.items = [...carried, found.id];
     await saveGame(game);
+    const spill = full ? await earnYennies(60) : null;
     if (!isCurrent()) return;
     drawMap();
-    const found = rollItem();
-    const stored = await addToBag(found.id);
-    // A full bag still opens the chest — it just pays cash for the trouble.
-    const spill = stored === "full" ? await earnYennies(60) : null;
     const onward = level + 1 < road.length ? road[level + 1] : null;
     quiz.innerHTML = `
       <div class="card-panel kana-quiz">
@@ -695,7 +699,9 @@ async function runLevel(
         </div>
         <div class="glosses">${found.detail}</div>
         <div class="glosses">${
-          spill !== null ? `Your bag is full — it fenced for 60 ¥ (${formatYennies(spill)}).` : "It's in your Bag."
+          spill !== null
+            ? `Your pack is full — it fenced for 60 ¥ (${formatYennies(spill)}).`
+            : `In your pack (${(game.items ?? []).length}/${PACK_MAX}) — tap it over any level to use it.`
         }</div>
         <div class="row-actions" style="justify-content:center;margin-top:12px">
           ${onward ? `<button id="kana-next">Back on the road</button>` : ""}
@@ -740,12 +746,10 @@ async function runLevel(
     await spendYennies(Math.min(toll, have));
   }
 
-  // Items armed from the bag: read once, burned on the spot. The lucky cat
-  // doubles this level's pay; the charm eats the first heart a miss would.
-  const boost = (await getMeta<{ pay?: boolean; shield?: boolean }>("kanaBoost")) ?? {};
-  const payBoost = boost.pay ? 2 : 1;
-  let shieldLeft = boost.shield ?? false;
-  if (boost.pay || boost.shield) await setMeta("kanaBoost", {});
+  // Armed by pack items mid-run: the lucky cat doubles this level's pay,
+  // the charm eats the first heart a miss would have taken.
+  let payBoost = 1;
+  let shieldLeft = false;
 
   // A locally invented word: two to four sounds from the pool, no sound
   // twice running. The alien levels lean on this whenever the AI batch
@@ -822,6 +826,85 @@ async function runLevel(
   // The door charges what the tile's bend says it charges.
   if (node.modifier?.effects.suddenDeath) health = 1;
   else if (node.modifier?.effects.hearts) health = Math.max(1, health + node.modifier.effects.hearts);
+
+  // The pack, worn top-left over the quiz: tap an item to use it right
+  // here, mid-level — hearts land at once, the cat and the charm arm for
+  // this level. The ⓘ unfolds what each thing does.
+  const packHost = document.createElement("div");
+  packHost.id = "kana-pack-host";
+  quiz.before(packHost);
+  const updateHearts = (): void => {
+    const el = body.querySelector(".quiz-right .kana-hearts");
+    if (el && useLives) el.outerHTML = heartsHtml(health);
+  };
+  let packOpen = false;
+  const renderPack = (note = ""): void => {
+    const carried = (game.items ?? []).map((id) => itemById(id));
+    if (carried.length === 0) {
+      packHost.innerHTML = "";
+      return;
+    }
+    packHost.innerHTML = `
+      <div class="kana-pack">
+        <button class="kana-pack-info" id="pack-info" title="What these do" aria-label="What these do">ⓘ</button>
+        ${carried
+          .map((item, i) =>
+            item
+              ? `<button class="kana-pack-item rarity-${item.rarity}" data-i="${i}" title="${escapeHtml(item.name)} — ${escapeHtml(item.detail)}">${item.icon}</button>`
+              : "",
+          )
+          .join("")}
+        <span class="glosses">${escapeHtml(note)}</span>
+      </div>
+      ${
+        packOpen
+          ? `<div class="kana-pack-list">${carried
+              .map((item) => (item ? `<div>${item.icon} <b>${escapeHtml(item.name)}</b> — <span class="glosses">${escapeHtml(item.detail)}</span></div>` : ""))
+              .join("")}</div>`
+          : ""
+      }
+    `;
+    packHost.querySelector("#pack-info")!.addEventListener("click", () => {
+      packOpen = !packOpen;
+      renderPack();
+    });
+    for (const button of packHost.querySelectorAll<HTMLButtonElement>(".kana-pack-item")) {
+      button.addEventListener("click", async () => {
+        const at = Number(button.dataset.i);
+        const item = itemById((game.items ?? [])[at] ?? "");
+        if (!item) return;
+        let used = "";
+        switch (item.use) {
+          case "heart":
+            health = Math.min(MAX_HEALTH, health + 1);
+            used = "+1 ❤️";
+            break;
+          case "hearts-all":
+            health = MAX_HEALTH;
+            used = "every heart back ❤️";
+            break;
+          case "shield":
+            shieldLeft = true;
+            used = "🧿 armed — next miss is free";
+            break;
+          case "pay":
+            payBoost = 2;
+            if (item.id === "daruma") shieldLeft = true;
+            used = item.id === "daruma" ? "×2 pay and a shield, armed" : "×2 pay armed";
+            break;
+          case "yennies":
+            await earnYennies(item.amount ?? 0);
+            used = `+${(item.amount ?? 0).toLocaleString()} ¥`;
+            break;
+        }
+        game.items = (game.items ?? []).filter((_, k) => k !== at);
+        void saveGame(game);
+        updateHearts();
+        renderPack(used);
+      });
+    }
+  };
+  renderPack();
   let missedAny = false;
   let gotRight = 0;
   let active = true; // cleared on quit, so a pending auto-advance dies quietly

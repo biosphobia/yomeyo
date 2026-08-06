@@ -4255,3 +4255,123 @@ button.gram-swap-line:hover {
 .kmap-fork-mod .kmap-detail {
   font-size: 0.66rem;
 }
+
+/* ---------------- the compact pass ----------------
+   Everything on the quiz screen — map strip, card, reaction gif — must fit
+   one phone or laptop viewport with nothing to scroll. These overrides
+   trade a little grandeur for the whole picture. */
+
+.kana-big {
+  font-size: 3.6rem;
+  margin: 8px 0;
+}
+
+.kana-quiz.card-panel,
+.kana-quiz {
+  padding: 12px 14px;
+}
+
+.kana-feedback {
+  min-height: 38px;
+  margin-top: 6px;
+  font-size: 1rem;
+}
+
+.cheer {
+  margin-top: 8px;
+}
+
+.cheer img {
+  width: min(200px, 55vw);
+  height: min(120px, 32vw);
+}
+
+.kmap {
+  margin-bottom: 6px;
+}
+
+.kmap-inner {
+  min-height: 0;
+  gap: 10px;
+  padding: 2px 6px;
+}
+
+.kmap .kmap-node {
+  width: 40px;
+  padding: 4px 2px;
+}
+
+.kmap .kmap-icon {
+  font-size: 0.82rem;
+}
+
+.kmap .kmap-num {
+  font-size: 0.54rem;
+}
+
+.kana-sky {
+  height: 170px;
+}
+
+.kana-pond {
+  height: 200px;
+}
+
+#kana-duel .duel-stage {
+  height: 116px;
+}
+
+/* ---------------- the pack ----------------
+   Five slots, worn on the sleeve: a small strip over the quiz, an ⓘ that
+   unfolds what each thing does, a tap that uses it right now. */
+
+.kana-pack {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.kana-pack-info {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--panel);
+  border: 1px solid #ffffff1c;
+  color: var(--muted);
+  font-size: 0.8rem;
+  padding: 0;
+}
+
+.kana-pack-item {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid #ffffff1c;
+  font-size: 1.1rem;
+  padding: 0;
+}
+
+.kana-pack-item:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.kana-pack-list {
+  font-size: 0.78rem;
+  margin-bottom: 8px;
+  display: grid;
+  gap: 2px;
+}
+
+/* A word kind the current word's shape cannot be. */
+.pg-kind.off {
+  opacity: 0.3;
+}
+
+/* Chapter-row badges: test score, drill state. */
+.lesson-row-marks {
+  font-size: 0.72rem;
+  margin-top: 2px;
+}

@@ -393,6 +393,29 @@ export function kindFromPos(pos: string[]): WordKind | null {
   return null;
 }
 
+/**
+ * Can this word's shape honestly conjugate as this kind? ねこ ends in こ,
+ * which no verb family can bend — treating it as a verb would produce
+ * nonsense like ねこた, shown to a learner as if it were real. Thing-words
+ * and な-words accept anything; the conjugating kinds have to fit.
+ */
+export function kindFitsShape(kana: string, kind: WordKind): boolean {
+  switch (kind) {
+    case "godan":
+      return kana.length >= 2 && GODAN_ROWS[kana[kana.length - 1]] !== undefined;
+    case "ichidan":
+      return kana.length >= 2 && kana.endsWith("る");
+    case "suru":
+      return kana.endsWith("する");
+    case "kuru":
+      return kana === "くる";
+    case "i-adj":
+      return kana.length >= 2 && kana.endsWith("い");
+    default:
+      return true;
+  }
+}
+
 const IE_ROW = new Set("いきぎしじちにひびみりえけげせぜてでねへべめれ");
 
 /** A guess from the shape alone, for words the dictionary doesn't know. */
