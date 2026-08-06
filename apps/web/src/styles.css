@@ -3454,12 +3454,13 @@ button.gram-swap-line:hover {
    glowing ahead, forks stacked vertically. Scrolls sideways and keeps the
    frontier in view. */
 
+/* Scenery, not controls: it scrolls itself to the tile in play and takes
+   no touches — the choosing happens on the fork screen. */
 .kmap {
-  overflow-x: auto;
+  overflow-x: hidden;
   margin-bottom: 16px;
   padding: 4px 2px 8px;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
+  pointer-events: none;
 }
 
 .kmap-inner {
@@ -3565,6 +3566,12 @@ button.gram-swap-line:hover {
 .kmap-node.locked {
   opacity: 0.32;
   filter: grayscale(0.6);
+}
+
+/* The tile being played right now. */
+.kmap-node.current {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* The fork chooser on a level-clear screen: the same tiles, but roomier,

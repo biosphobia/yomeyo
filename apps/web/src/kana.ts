@@ -9,7 +9,15 @@ import { renderKanaStats } from "./kana-stats-view.js";
 import { screenHeader } from "./screen.js";
 import { assetUrl, loadDictionary } from "./store.js";
 import { KANA_GROUPS, isCorrect, type KanaEntry, type KanaGroup } from "./kana-data.js";
-import { ROAD, nodeById, renderRoadMap, type Mechanic } from "./kana-road.js";
+import {
+  BASE_STAGES,
+  buildRoad,
+  generateTail,
+  nodeById,
+  renderRoadMap,
+  type Mechanic,
+  type RoadNode,
+} from "./kana-road.js";
 
 /**
  * The kana game.
@@ -17,10 +25,10 @@ import { ROAD, nodeById, renderRoadMap, type Mechanic } from "./kana-road.js";
  * First the learner picks which groups to practice — any mix of rows from
  * either syllabary. Then the game runs along the road in `kana-road.ts`:
  * seven stages single file (learn, choice, type, lives, timed, words,
- * words timed), and after those the road forks and the player picks their
- * own tile — flash, echo, sort race, simon, sharpshooter, alien names.
- * The map at the top of the screen shows the road, the route walked, and
- * the choice ahead.
+ * words timed), and past those a randomly dealt stretch of forks — flash,
+ * echo, sort race, simon, sharpshooter, alien names, arranged fresh each
+ * game — where the player picks their tile on a fork screen. While
+ * playing, the map rides above the quiz, walking itself along the route.
  *
  * A missed item goes back into the queue, so a level is only done when
  * everything has been answered correctly; the progress bar shows how far
@@ -44,6 +52,20 @@ interface GameState {
   skipLearn?: boolean;
   /** Which tile was taken at each cleared stage, for the map. */
   path?: Record<string, string>;
+  /** This game's deal of the road past the fixed stages. */
+  road?: Mechanic[][];
+}
+
+/**
+ * A new deal of the random stretch, for a game starting (or starting over).
+ * The route walked through the old tail is forgotten with the tail itself —
+ * its tile ids point at a road that no longer exists.
+ */
+function freshTail(game: GameState): void {
+  game.road = generateTail();
+  game.path = Object.fromEntries(
+    Object.entries(game.path ?? {}).filter(([stage]) => Number(stage) < BASE_STAGES),
+  );
 }
 
 const MAX_HEALTH = 5;
@@ -198,6 +220,11 @@ export async function renderKana(main: HTMLElement, isCurrent: () => boolean = (
   // the free half-second in which to fetch them.
   void preloadReactions();
   const game = await getGame();
+  // A save from before the road was dealt gets its deal now, once.
+  if (game && !game.road) {
+    freshTail(game);
+    await saveGame(game);
+  }
   await unlockAll();
   if (!isCurrent()) return;
 
@@ -255,9 +282,12 @@ function renderSelection(
   };
 
   let skipLearn = game?.skipLearn ?? false;
+  // The road this screen talks about: the saved game's own deal, or — for a
+  // game about to be started fresh — the deal it will start with.
+  const tail = game?.road ?? generateTail();
+  const road = buildRoad(tail);
 
   body.innerHTML = `
-    <div id="kana-map"></div>
     ${section("hiragana", "Hiragana ひらがな")}
     ${section("katakana", "Katakana カタカナ")}
     <label class="kana-skip-row">
@@ -272,7 +302,7 @@ function renderSelection(
       // The admin's key: jump straight to any level, to see one without
       // playing through everything below it first.
       unlockAllNow()
-        ? `<div class="gram-levels" id="kana-jump">${ROAD.flatMap((nodes, stage) =>
+        ? `<div class="gram-levels" id="kana-jump">${road.flatMap((nodes, stage) =>
             nodes.map(
               (node) =>
                 `<button class="gram-level-chip" data-stage="${stage}" data-id="${node.id}">${stage}<span class="gram-level-count">${node.name}</span></button>`,
@@ -282,20 +312,6 @@ function renderSelection(
     }
   `;
 
-  // The road, above everything: where you are, where you've been, and —
-  // at a fork — the choice. Tapping any reachable tile plays it with the
-  // saved game's own groups; the checkboxes below are for starting fresh.
-  if (game) {
-    renderRoadMap(
-      body.querySelector<HTMLDivElement>("#kana-map")!,
-      game.unlocked,
-      game.path ?? {},
-      (stage, node) => {
-        void runLevel(body, game, stage, node.id, main, isCurrent);
-      },
-    );
-  }
-
   for (const chip of body.querySelectorAll<HTMLButtonElement>("#kana-jump button")) {
     chip.addEventListener("click", async () => {
       if (chosen.size === 0) return;
@@ -303,7 +319,7 @@ function renderSelection(
       const next: GameState =
         game && sameGroups(game.groups, chosen)
           ? { ...game, skipLearn }
-          : { groups: [...chosen].sort(), unlocked: stage, health: MAX_HEALTH, skipLearn };
+          : { groups: [...chosen].sort(), unlocked: stage, health: MAX_HEALTH, skipLearn, road: tail };
       next.unlocked = Math.max(next.unlocked, stage);
       await saveGame(next);
       void runLevel(body, next, stage, chip.dataset.id, main, isCurrent);
@@ -329,13 +345,13 @@ function renderSelection(
     // save written before the rollback existed — or any future way of getting
     // past the end — parks on the last level and never leaves it.
     const startAt = resuming && game
-      ? game.unlocked >= ROAD.length
+      ? game.unlocked >= road.length
         ? RESTART_AT
         : game.unlocked
       : skipLearn
         ? 1
         : 0;
-    const ahead = ROAD[startAt];
+    const ahead = road[startAt];
     note.textContent =
       chosen.size === 0
         ? "Pick at least one group."
@@ -370,11 +386,15 @@ function renderSelection(
     const next: GameState =
       game && sameGroups(game.groups, chosen)
         ? { ...game, skipLearn }
-        : { groups: [...chosen].sort(), unlocked: 0, health: MAX_HEALTH, skipLearn };
+        : { groups: [...chosen].sort(), unlocked: 0, health: MAX_HEALTH, skipLearn, road: tail };
     if (skipLearn) next.unlocked = Math.max(next.unlocked, 1);
     // Same guard as the note on the selection screen: a finished road
-    // starts over rather than clamping onto its last stage.
-    if (next.unlocked >= ROAD.length) next.unlocked = RESTART_AT;
+    // starts over rather than clamping onto its last stage — and starting
+    // over rolls a fresh road to walk.
+    if (next.unlocked >= buildRoad(next.road).length) {
+      next.unlocked = RESTART_AT;
+      freshTail(next);
+    }
     await saveGame(next);
     void runLevel(body, next, next.unlocked, undefined, main, isCurrent);
   });
@@ -465,9 +485,58 @@ async function runLevel(
   isCurrent: () => boolean,
 ): Promise<void> {
   const pool = poolOf(game);
-  const node = nodeById(level, nodeId);
-  const mechanic = node.mechanic;
+  const road = buildRoad(game.road);
   void preloadReactions();
+
+  // The map rides above whatever the level shows, walks itself to the tile
+  // in play, and never takes a touch. Everything below draws into the quiz
+  // host so the strip survives from question to question.
+  body.innerHTML = `<div id="kana-map-strip"></div><div id="kana-quiz-host"></div>`;
+  const mapHost = body.querySelector<HTMLDivElement>("#kana-map-strip")!;
+  const quiz = body.querySelector<HTMLDivElement>("#kana-quiz-host")!;
+  const drawMap = (current?: RoadNode): void =>
+    renderRoadMap(mapHost, road, {
+      unlocked: game.unlocked,
+      path: game.path ?? {},
+      ...(current ? { current: { stage: level, id: current.id } } : {}),
+    });
+
+  // A fork reached without a choice made: the choosing IS the screen.
+  if (road[level].length > 1 && nodeId === undefined) {
+    drawMap();
+    quiz.innerHTML = `
+      <div class="card-panel kana-quiz">
+        <div class="big">🛤️</div>
+        <div class="kana-score">The road forks</div>
+        <div class="glosses">Level ${level} — pick your tile:</div>
+        <div class="kmap-fork">
+          ${road[level]
+            .map(
+              (option) => `
+            <button class="kmap-node open" data-id="${option.id}">
+              <span class="kmap-icon">${option.icon}</span>
+              <span class="kmap-name">${option.name}</span>
+              <span class="kmap-detail">${escapeHtml(option.detail)}</span>
+            </button>`,
+            )
+            .join("")}
+        </div>
+        <div class="row-actions" style="justify-content:center;margin-top:12px">
+          <button id="kana-back" class="secondary">Change groups</button>
+        </div>
+      </div>`;
+    for (const option of quiz.querySelectorAll<HTMLButtonElement>(".kmap-fork .kmap-node")) {
+      option.addEventListener("click", () => {
+        void runLevel(body, game, level, option.dataset.id, main, isCurrent);
+      });
+    }
+    quiz.querySelector("#kana-back")!.addEventListener("click", () => renderSelection(body, game, main, isCurrent));
+    return;
+  }
+
+  const node = nodeById(road, level, nodeId);
+  const mechanic = node.mechanic;
+  drawMap(node);
 
   const useLives = level >= 3 && mechanic !== "learn";
   const timerSec = TIMERS[mechanic] ?? 0;
@@ -480,7 +549,7 @@ async function runLevel(
     // The dictionary may still have to come down the wire, which on mobile
     // data is long enough that a bare line of text reads as a hung screen.
     // So: say what is happening, and always leave a way out.
-    body.innerHTML = `
+    quiz.innerHTML = `
       <div class="card-panel kana-quiz">
         <div class="glosses" id="kana-loading">Finding words made only of your kana…</div>
         <div class="row-actions" style="justify-content:center;margin-top:12px">
@@ -504,7 +573,7 @@ async function runLevel(
       // word levels left the game unlocked at 5 or 6, so Continue landed on
       // this card every single time with nothing here to leave by except
       // changing the pool. There is a way back down the ladder now.
-      body.innerHTML = `
+      quiz.innerHTML = `
         <div class="card-panel kana-quiz">
           <div class="big">🔍</div>
           <div>Not enough short words can be written with only these kana.</div>
@@ -591,7 +660,7 @@ async function runLevel(
     if (!isCurrent()) return;
     const purse = await payout();
     if (!isCurrent()) return;
-    body.innerHTML = `
+    quiz.innerHTML = `
       <div class="card-panel kana-quiz">
         <div class="big">💔</div>
         <div class="kana-score">Out of hearts</div>
@@ -616,7 +685,11 @@ async function runLevel(
     // groups, another tab, closing the app — used to save an unlocked value
     // past the end, which the selection screen clamped to the top level, so
     // Continue replayed the last level for ever.
-    if (game.unlocked >= ROAD.length) game.unlocked = RESTART_AT;
+    // Walking off the end also rolls a fresh road for the next lap.
+    if (game.unlocked >= road.length) {
+      game.unlocked = RESTART_AT;
+      freshTail(game);
+    }
     if (useLives) game.health = Math.min(MAX_HEALTH, health + 1);
     // Levels count towards the day's quests; the learn level is a stroll,
     // not a clear. The groups in play are reported too, so a quest can ask
@@ -633,11 +706,13 @@ async function runLevel(
     await saveGame(game);
     const purse = await payout();
     if (!isCurrent()) return;
-    const next = level + 1 < ROAD.length ? ROAD[level + 1] : null;
+    // The strip walks on to what was just unlocked.
+    drawMap();
+    const next = level + 1 < road.length ? road[level + 1] : null;
 
     if (!next) {
       // The end of the road.
-      body.innerHTML = `
+      quiz.innerHTML = `
         <div class="card-panel kana-quiz">
           <div class="big">🏆</div>
           <div class="kana-score">The whole road clear</div>
@@ -659,7 +734,7 @@ async function runLevel(
     if (next.length > 1) {
       // A fork: the road ahead is the player's to pick, so nothing
       // auto-continues. The tiles here are the same tiles the map shows.
-      body.innerHTML = `
+      quiz.innerHTML = `
         <div class="card-panel kana-quiz">
           <div class="big">🎉</div>
           <div class="kana-score">Level ${level} clear</div>
@@ -693,7 +768,7 @@ async function runLevel(
 
     // A straight stretch: the climb continues by itself; the button is for
     // the impatient.
-    body.innerHTML = `
+    quiz.innerHTML = `
       <div class="card-panel kana-quiz">
         <div class="big">🎉</div>
         <div class="kana-score">Level ${level} clear</div>
@@ -775,7 +850,7 @@ async function runLevel(
               : `<input type="text" id="kana-answer" autocomplete="off" autocapitalize="none"
                    autocorrect="off" spellcheck="false" placeholder="type the romaji…" />`;
 
-    body.innerHTML = `
+    quiz.innerHTML = `
       <div class="card-panel kana-quiz">
         <div class="kana-quiz-top">
           <span class="glosses quiz-level">Level ${level}: ${node.name}</span>

@@ -1,16 +1,16 @@
 /**
  * The kana road: the level ladder drawn as a map, with forks in it.
  *
- * The first seven stages are the original ladder, single file. After that
- * the road forks — two tiles to choose between, then back to one, then a
- * three-way — and the choice is the player's. A stage is cleared by
- * clearing ANY of its tiles, and the tile taken is remembered so the map
- * can show the route actually walked.
+ * The first seven stages are the original ladder, single file, the same in
+ * every game. The road past them is rolled fresh each time a game starts:
+ * the six later games are dealt into a random arrangement of forks — two
+ * tiles here, a merge there, a three-way somewhere — so no two runs walk
+ * the same map. The deal lives in the save, so reopening the app shows the
+ * same road, not a new one.
  *
- * Every mechanic works over whatever kana pool the player picked: nothing
- * here assumes both scripts, particular rows, or a pool big enough for
- * dictionary words (the two word stages, which do, already know how to
- * bow out gracefully).
+ * The map itself is scenery, not controls: it rides above the quiz,
+ * scrolls itself to wherever the player stands, and takes no touches. The
+ * choosing happens at the fork, on its own screen.
  *
  * Nodes carry an optional `modifier` slot on purpose. Rarely, a tile will
  * appear bent — easier or harder than its plain self. Nothing reads the
@@ -43,36 +43,83 @@ export interface RoadNode {
   modifier?: string;
 }
 
-/** Each entry is one stage of the road; 2-3 nodes means the player chooses. */
-export const ROAD: RoadNode[][] = [
-  [{ id: "0", mechanic: "learn", name: "Learn", icon: "📖", detail: "Meet your kana, the ones you know least first." }],
-  [{ id: "1", mechanic: "choice", name: "Multiple choice", icon: "🔤", detail: "Three options." }],
-  [{ id: "2", mechanic: "type", name: "Type it", icon: "⌨️", detail: "Type the romaji yourself." }],
-  [{ id: "3", mechanic: "lives", name: "Lives", icon: "❤️", detail: "Typing, five hearts. A miss costs one." }],
-  [{ id: "4", mechanic: "timed", name: "Timed", icon: "⏱️", detail: "Hearts, and six seconds a question." }],
-  [{ id: "5", mechanic: "words", name: "Real words", icon: "📚", detail: "Short dictionary words from your kana. No clock." }],
-  [{ id: "6", mechanic: "words-timed", name: "Words, timed", icon: "⚡", detail: "Different words, ten seconds each." }],
-  [
-    { id: "7a", mechanic: "flash", name: "Flash", icon: "👁️", detail: "The kana shows for a blink, then hides. Type it from the afterimage." },
-    { id: "7b", mechanic: "echo", name: "Echo", icon: "🔊", detail: "Hear the sound, tap the kana. No reading — only listening." },
-  ],
-  [{ id: "8", mechanic: "sort", name: "Sort race", icon: "🗂️", detail: "Three buckets, four seconds. Fling each kana where it belongs." }],
-  [
-    { id: "9a", mechanic: "simon", name: "Simon", icon: "🎶", detail: "A spoken sequence, growing longer. Tap it back in order." },
-    { id: "9b", mechanic: "sharpshooter", name: "Sharpshooter", icon: "🎯", detail: "One sound, a wall of kana. Tap every tile that says it." },
-    { id: "9c", mechanic: "alien", name: "Alien names", icon: "👾", detail: "Made-up words from your own kana. No vocabulary to lean on." },
-  ],
+const DEFS: Record<Mechanic, { name: string; icon: string; detail: string }> = {
+  learn: { name: "Learn", icon: "📖", detail: "Meet your kana, the ones you know least first." },
+  choice: { name: "Multiple choice", icon: "🔤", detail: "Three options." },
+  type: { name: "Type it", icon: "⌨️", detail: "Type the romaji yourself." },
+  lives: { name: "Lives", icon: "❤️", detail: "Typing, five hearts. A miss costs one." },
+  timed: { name: "Timed", icon: "⏱️", detail: "Hearts, and six seconds a question." },
+  words: { name: "Real words", icon: "📚", detail: "Short dictionary words from your kana. No clock." },
+  "words-timed": { name: "Words, timed", icon: "⚡", detail: "Different words, ten seconds each." },
+  flash: { name: "Flash", icon: "👁️", detail: "The kana shows for a blink, then hides. Type it from the afterimage." },
+  echo: { name: "Echo", icon: "🔊", detail: "Hear the sound, tap the kana. No reading — only listening." },
+  sort: { name: "Sort race", icon: "🗂️", detail: "Three buckets, four seconds. Fling each kana where it belongs." },
+  simon: { name: "Simon", icon: "🎶", detail: "A spoken sequence, growing longer. Tap it back in order." },
+  sharpshooter: { name: "Sharpshooter", icon: "🎯", detail: "One sound, a wall of kana. Tap every tile that says it." },
+  alien: { name: "Alien names", icon: "👾", detail: "Made-up words from your own kana. No vocabulary to lean on." },
+};
+
+/** The fixed opening stretch, one tile per stage. */
+const BASE: Mechanic[] = ["learn", "choice", "type", "lives", "timed", "words", "words-timed"];
+export const BASE_STAGES = BASE.length;
+
+/** The games the random stretch is dealt from. */
+const TAIL_POOL: Mechanic[] = ["flash", "echo", "sort", "simon", "sharpshooter", "alien"];
+
+/**
+ * The shapes the tail may take: how many tiles stand at each stage. Every
+ * shape spends all six games, always holds at least one fork, and never
+ * forks the same width twice running — a road that reads as a road.
+ */
+const TAIL_SHAPES: number[][] = [
+  [2, 1, 3],
+  [3, 1, 2],
+  [1, 2, 3],
+  [1, 3, 2],
+  [2, 3, 1],
+  [3, 2, 1],
+  [2, 1, 2, 1],
+  [1, 2, 1, 2],
 ];
 
+/** A fresh deal of the road past the base stages. Rolled per game. */
+export function generateTail(): Mechanic[][] {
+  const shape = TAIL_SHAPES[Math.floor(Math.random() * TAIL_SHAPES.length)];
+  const dealt = shuffle([...TAIL_POOL]);
+  const tail: Mechanic[][] = [];
+  let at = 0;
+  for (const width of shape) {
+    tail.push(dealt.slice(at, at + width));
+    at += width;
+  }
+  return tail;
+}
+
+/** For saves from before the road was dealt: the layout those games had. */
+const LEGACY_TAIL: Mechanic[][] = [["flash", "echo"], ["sort"], ["simon", "sharpshooter", "alien"]];
+
+/** The whole road as drawable, playable nodes: fixed base plus this game's tail. */
+export function buildRoad(tail: Mechanic[][] | undefined): RoadNode[][] {
+  const nodeOf = (mechanic: Mechanic, id: string): RoadNode => ({ id, mechanic, ...DEFS[mechanic] });
+  return [
+    ...BASE.map((mechanic, stage) => [nodeOf(mechanic, String(stage))]),
+    ...(tail ?? LEGACY_TAIL).map((mechanics, i) =>
+      mechanics.map((mechanic, k) =>
+        nodeOf(mechanic, mechanics.length === 1 ? String(BASE_STAGES + i) : `${BASE_STAGES + i}${"abc"[k]}`),
+      ),
+    ),
+  ];
+}
+
 /** The tile the player took at this stage, or the only tile there was. */
-export function chosenAt(stage: number, path: Record<string, string>): string | undefined {
-  const nodes = ROAD[stage];
+export function chosenAt(road: RoadNode[][], stage: number, path: Record<string, string>): string | undefined {
+  const nodes = road[stage];
   if (!nodes) return undefined;
   return nodes.length === 1 ? nodes[0].id : path[String(stage)];
 }
 
-export function nodeById(stage: number, id: string | undefined): RoadNode {
-  const nodes = ROAD[stage];
+export function nodeById(road: RoadNode[][], stage: number, id: string | undefined): RoadNode {
+  const nodes = road[stage];
   return nodes.find((node) => node.id === id) ?? nodes[0];
 }
 
@@ -80,36 +127,47 @@ export function nodeById(stage: number, id: string | undefined): RoadNode {
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
+export interface RoadMapView {
+  unlocked: number;
+  path: Record<string, string>;
+  /** The stage being played right now; its tile gets the ring. */
+  current?: { stage: number; id: string };
+}
+
 /**
  * The road drawn as tiles: done stages behind, the open stage glowing, the
- * rest fogged. Scrolls sideways and keeps the open stage in view. Any tile
- * at or below the open stage can be tapped and played; locked ones say
- * nothing, which is what makes the glowing ones read as the choice.
+ * rest fogged. Pure scenery — nothing here takes a tap, and the strip
+ * scrolls itself to wherever matters: the tile being played, or the
+ * frontier.
  */
-export function renderRoadMap(
-  host: HTMLElement,
-  unlocked: number,
-  path: Record<string, string>,
-  onPick: (stage: number, node: RoadNode) => void,
-): void {
-  const open = Math.min(unlocked, ROAD.length - 1);
+export function renderRoadMap(host: HTMLElement, road: RoadNode[][], view: RoadMapView): void {
+  const open = Math.min(view.unlocked, road.length - 1);
+  const focus = view.current?.stage ?? open;
 
   host.innerHTML = `
     <div class="kmap">
       <div class="kmap-inner">
-        ${ROAD.map((nodes, stage) => {
+        ${road.map((nodes, stage) => {
           const tiles = nodes
             .map((node) => {
-              const walked = stage < unlocked && chosenAt(stage, path) === node.id;
+              const walked = stage < view.unlocked && chosenAt(road, stage, view.path) === node.id;
+              const playing = view.current?.stage === stage && view.current.id === node.id;
               const state =
-                stage < unlocked ? (walked ? "done" : "done-alt") : stage === open && unlocked < ROAD.length ? "open" : stage === open ? "done-alt" : "locked";
+                stage < view.unlocked
+                  ? walked
+                    ? "done"
+                    : "done-alt"
+                  : stage === open && view.unlocked < road.length
+                    ? "open"
+                    : stage === open
+                      ? "done-alt"
+                      : "locked";
               return `
-                <button class="kmap-node ${state}" data-stage="${stage}" data-id="${node.id}"
-                  ${state === "locked" ? "disabled" : ""} title="${escapeAttr(node.detail)}">
+                <div class="kmap-node ${state}${playing ? " current" : ""}" data-stage="${stage}" data-id="${node.id}">
                   <span class="kmap-icon">${node.icon}</span>
                   <span class="kmap-num">${walked ? "✓" : stage}</span>
                   <span class="kmap-name">${node.name}</span>
-                </button>`;
+                </div>`;
             })
             .join("");
           return `<div class="kmap-stage" data-stage="${stage}">${tiles}</div>`;
@@ -121,17 +179,9 @@ export function renderRoadMap(
   const inner = host.querySelector<HTMLDivElement>(".kmap-inner")!;
   const scroller = host.querySelector<HTMLDivElement>(".kmap")!;
 
-  for (const tile of host.querySelectorAll<HTMLButtonElement>(".kmap-node:not(.locked)")) {
-    tile.addEventListener("click", () => {
-      const stage = Number(tile.dataset.stage);
-      onPick(stage, nodeById(stage, tile.dataset.id));
-    });
-  }
-
   // The connecting roads, drawn once the tiles have a size. Every tile links
-  // to every tile of the next stage — that is the promise the map makes: any
-  // glowing tile is reachable from where you stand. The route already walked
-  // is inked solid.
+  // to every tile of the next stage — any open tile is reachable — and the
+  // route already walked is inked solid.
   requestAnimationFrame(() => {
     if (!inner.isConnected) return;
     const svg = document.createElementNS(SVG_NS, "svg");
@@ -139,16 +189,16 @@ export function renderRoadMap(
     svg.setAttribute("width", String(inner.scrollWidth));
     svg.setAttribute("height", String(inner.scrollHeight));
     const innerBox = inner.getBoundingClientRect();
+    // Both rects move together under horizontal scroll, so their
+    // difference is already scroll-proof.
     const center = (el: Element): { x: number; y: number } => {
       const box = el.getBoundingClientRect();
-      // Both rects move together under horizontal scroll, so their
-      // difference is already scroll-proof.
       return {
         x: box.left - innerBox.left + box.width / 2,
         y: box.top - innerBox.top + box.height / 2,
       };
     };
-    for (let stage = 0; stage + 1 < ROAD.length; stage++) {
+    for (let stage = 0; stage + 1 < road.length; stage++) {
       const from = [...inner.querySelectorAll(`.kmap-stage[data-stage="${stage}"] .kmap-node`)];
       const to = [...inner.querySelectorAll(`.kmap-stage[data-stage="${stage + 1}"] .kmap-node`)];
       for (const a of from) {
@@ -157,16 +207,15 @@ export function renderRoadMap(
           const p2 = center(b);
           const line = document.createElementNS(SVG_NS, "path");
           const midX = (p1.x + p2.x) / 2;
-          line.setAttribute(
-            "d",
-            `M ${p1.x} ${p1.y} C ${midX} ${p1.y}, ${midX} ${p2.y}, ${p2.x} ${p2.y}`,
-          );
+          line.setAttribute("d", `M ${p1.x} ${p1.y} C ${midX} ${p1.y}, ${midX} ${p2.y}, ${p2.x} ${p2.y}`);
           const walked =
-            stage + 1 < unlocked &&
-            chosenAt(stage, path) === (a as HTMLElement).dataset.id &&
-            chosenAt(stage + 1, path) === (b as HTMLElement).dataset.id;
+            stage + 1 < view.unlocked &&
+            chosenAt(road, stage, view.path) === (a as HTMLElement).dataset.id &&
+            chosenAt(road, stage + 1, view.path) === (b as HTMLElement).dataset.id;
           const leading =
-            stage + 1 === unlocked && unlocked < ROAD.length && chosenAt(stage, path) === (a as HTMLElement).dataset.id;
+            stage + 1 === view.unlocked &&
+            view.unlocked < road.length &&
+            chosenAt(road, stage, view.path) === (a as HTMLElement).dataset.id;
           line.setAttribute("class", walked ? "walked" : leading ? "leading" : "");
           svg.appendChild(line);
         }
@@ -174,15 +223,23 @@ export function renderRoadMap(
     }
     inner.prepend(svg);
 
-    // Keep the frontier in the window: the road behind matters less than
-    // the choice ahead.
-    const target = inner.querySelector<HTMLElement>(`.kmap-stage[data-stage="${open}"]`);
+    // Keep what matters in the window: the tile being played, or the choice
+    // ahead. The strip does its own walking — it is not scrollable by hand.
+    const target = inner.querySelector<HTMLElement>(`.kmap-stage[data-stage="${focus}"]`);
     if (target) {
-      scroller.scrollLeft = Math.max(0, target.offsetLeft - scroller.clientWidth / 2 + target.offsetWidth / 2);
+      scroller.scrollTo({
+        left: Math.max(0, target.offsetLeft - scroller.clientWidth / 2 + target.offsetWidth / 2),
+        behavior: "smooth",
+      });
     }
   });
 }
 
-function escapeAttr(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+function shuffle<T>(items: T[]): T[] {
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
 }
