@@ -226,7 +226,11 @@ function runQuiz(body: HTMLDivElement, index: number, progress: Progress, isCurr
         } <span class="glosses">${escapeHtml(question.why)}</span>
           <div class="glosses">Enter (or tap) to continue</div>`;
         void showReaction(body.querySelector("#lq-cheer"), good ? "correct" : "wrong");
-        if (question.jp) void speak(spokenOf(question.jp).replace(/＿/g, ""), { rate: 0.85 }).catch(() => undefined);
+        // A line with a gap in it would be read out with the answer missing,
+        // which sounds like broken Japanese — whole lines only.
+        if (question.jp && !question.jp.includes("＿")) {
+          void speak(spokenOf(question.jp), { rate: 0.85 }).catch(() => undefined);
+        }
         const advance = (): void => {
           if (!body.isConnected) return;
           at++;
