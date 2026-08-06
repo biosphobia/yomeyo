@@ -3808,3 +3808,82 @@ button.gram-swap-line:hover {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
+
+/* ---------------- fishing ---------------- */
+
+.kana-pond {
+  position: relative;
+  height: 250px;
+  margin: 6px 0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, #4c9be5 12%, var(--panel-2)),
+    color-mix(in srgb, #2456a0 22%, var(--panel-2))
+  );
+  border: 1px solid color-mix(in srgb, #4c9be5 30%, transparent);
+}
+
+.kana-fish {
+  position: absolute;
+  left: -20%;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 8px;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  font-size: 1.15rem;
+  font-weight: 600;
+  animation: kana-swim linear infinite;
+  cursor: pointer;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.55);
+}
+
+.kana-fish.rev {
+  animation-name: kana-swim-back;
+}
+
+/* 🐠 faces left, 🐟 faces right — each swims the way it looks. */
+.kana-fish .kana-fish-body {
+  font-size: 1.5rem;
+}
+
+@keyframes kana-swim {
+  from {
+    left: -20%;
+  }
+  to {
+    left: 105%;
+  }
+}
+
+@keyframes kana-swim-back {
+  from {
+    left: 105%;
+  }
+  to {
+    left: -20%;
+  }
+}
+
+/* A settled question stills the water. */
+.kana-pond.frozen .kana-fish {
+  animation-play-state: paused;
+}
+
+.kana-fish.caught {
+  transition: transform 0.5s ease, opacity 0.5s ease;
+  transform: translateY(-60px) rotate(-20deg);
+  opacity: 0;
+}
+
+.kana-fish.right span[lang="ja"] {
+  color: var(--good);
+}
+
+.kana-fish.wrong span[lang="ja"] {
+  color: var(--bad);
+}

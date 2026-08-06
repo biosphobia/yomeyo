@@ -111,9 +111,9 @@ const CAPS: Record<Mechanic, number> = {
   alien: 10,
   onebehind: 16,
   dictation: 10,
-  missing: 12,
   speed: 20,
   whichmissing: 10,
+  fishing: 10,
 };
 
 /** Seconds per question, where a mechanic runs on a clock. */
@@ -122,6 +122,7 @@ const TIMERS: Partial<Record<Mechanic, number>> = {
   "words-timed": 10,
   sort: 4,
   sharpshooter: 10,
+  fishing: 10,
 };
 
 /** Speed ladder: where the clock starts, how it shrinks, where it stops. */
@@ -508,8 +509,6 @@ interface Item {
   show?: string;
   /** One behind: the opening question, where shown and asked are the same. */
   lead?: boolean;
-  /** Missing piece: which segment of `kana` is the hole. */
-  gap?: number;
 }
 
 /**
@@ -694,12 +693,12 @@ async function runLevel(
       return;
     }
     items = words;
-  } else if (mechanic === "dictation" || mechanic === "missing") {
-    // Word games at heart: real words where the pool can spell enough of
+  } else if (mechanic === "dictation") {
+    // A word game at heart: real words where the pool can spell enough of
     // them, made-up ones where it cannot — the listening is the same drill.
     const words = await wordsFor(game, pool, CAPS[mechanic]).catch(() => null);
     if (!isCurrent() || !body.isConnected) return;
-    items = await listeningItems(mechanic, words, pool, rules);
+    items = await dictationItems(words, pool, rules);
   } else {
     items = await kanaItems(pool, mechanic, rules);
   }
@@ -919,8 +918,8 @@ async function runLevel(
 
     // What sits where the big kana normally goes. The sound-first games
     // hide the glyph and put a speaker (and progress dots) in its place;
-    // sharpshooter shows the SOUND large; missing shows the word with its
-    // hole; one behind shows the NEXT kana while asking for the last.
+    // sharpshooter and fishing show the SOUND large; one behind shows the
+    // NEXT kana while asking for the last.
     const hearButton = rules.oneListen
       ? `<div class="kana-hear kana-hear-once" title="One listen only">👂</div>`
       : `<button class="kana-hear" id="kana-hear" title="Play it again" aria-label="Play it again">🔊</button>`;
@@ -936,11 +935,9 @@ async function runLevel(
              <div class="kana-gloss">build what you heard, tile by tile</div>`
           : mechanic === "whichmissing"
             ? `${hearButton}<div class="kana-gloss">three sounds played — tap the tile that was NOT one of them</div>`
-            : mechanic === "missing"
-              ? `<div class="kana-big" lang="ja">${kanaSegments(item.kana)
-                  .map((seg, i) => (i === item.gap ? `<span class="kana-gap">◻</span>` : escapeHtml(seg)))
-                  .join("")}</div>
-                 ${item.gloss ? `<div class="kana-gloss">${escapeHtml(item.gloss)}</div>` : ""}`
+            : mechanic === "fishing"
+              ? `<div class="kana-big">${escapeHtml(itemAnswer(item))}</div>
+                 <div class="kana-gloss">hook the fish that says it</div>`
               : mechanic === "sharpshooter"
                 ? `<div class="kana-big">${escapeHtml(itemAnswer(item))}</div>
                    <div class="kana-gloss">tap every tile that says it — ${item.hits!.length} of them</div>`
@@ -971,8 +968,22 @@ async function runLevel(
             .join("")}</div>`
         : mechanic === "echo"
           ? glyphChoices(echoChoicesFor(item, pool))
-          : mechanic === "missing" || mechanic === "whichmissing"
+          : mechanic === "whichmissing"
             ? glyphChoices(item.grid!)
+            : mechanic === "fishing"
+              ? `<div class="kana-pond" id="kana-pond">${item
+                  .grid!.map((kana, i) => {
+                    const duration = (8 + Math.random() * 7).toFixed(1);
+                    const delay = (-Math.random() * 12).toFixed(1);
+                    const top = 4 + Math.random() * 78;
+                    const reversed = Math.random() < 0.5;
+                    return `<button class="kana-fish${reversed ? " rev" : ""}" data-i="${i}"
+                      style="top:${top}%;animation-duration:${duration}s;animation-delay:${delay}s">
+                      <span class="kana-fish-body">${reversed ? "🐟" : "🐠"}</span>
+                      <span lang="ja">${escapeHtml(kana)}</span>
+                    </button>`;
+                  })
+                  .join("")}</div>`
             : mechanic === "sort"
               ? `<div class="kana-buckets" id="kana-buckets">${item
                   .buckets!.map((label) => `<button data-choice="${escapeHtml(label)}">🗂️<span>${escapeHtml(label)}</span></button>`)
@@ -1113,19 +1124,13 @@ async function runLevel(
       ev.stopPropagation();
       say();
     });
-    if (["echo", "simon", "dictation", "missing", "whichmissing"].includes(mechanic)) setTimeout(say, 250);
+    if (["echo", "simon", "dictation", "whichmissing", "fishing"].includes(mechanic)) setTimeout(say, 250);
 
-    if (useChoices || mechanic === "echo" || mechanic === "missing" || mechanic === "whichmissing") {
+    if (useChoices || mechanic === "echo" || mechanic === "whichmissing") {
       // The same buttons shape, pointed several ways: choice shows kana and
-      // offers romaji; echo plays a sound and offers glyphs; missing wants
-      // the glyph that fills the hole; the silent one wants the glyph that
-      // was never played.
-      const glyphAnswer =
-        mechanic === "missing"
-          ? kanaSegments(item.kana)[item.gap!]
-          : mechanic === "echo" || mechanic === "whichmissing"
-            ? item.kana
-            : null;
+      // offers romaji; echo plays a sound and offers glyphs; the silent one
+      // wants the glyph that was never played.
+      const glyphAnswer = mechanic === "echo" || mechanic === "whichmissing" ? item.kana : null;
       for (const button of body.querySelectorAll<HTMLButtonElement>("#kana-choices button")) {
         button.addEventListener("click", () => {
           if (settled) return;
@@ -1142,9 +1147,7 @@ async function runLevel(
             const label =
               mechanic === "whichmissing"
                 ? `✗ <b lang="ja">${escapeHtml(choice)}</b> was spoken — the quiet one was <b lang="ja">${escapeHtml(item.kana)}</b>`
-                : mechanic === "missing"
-                  ? `✗ the missing piece was <b lang="ja">${escapeHtml(glyphAnswer!)}</b> — ${escapeHtml(item.kana)} (${escapeHtml(itemAnswer(item))})`
-                  : `✗ ${escapeHtml(item.kana)} = <b>${escapeHtml(itemAnswer(item))}</b>`;
+                : `✗ ${escapeHtml(item.kana)} = <b>${escapeHtml(itemAnswer(item))}</b>`;
             miss(label, choice);
           }
         });
@@ -1271,6 +1274,32 @@ async function runLevel(
             }
             miss(
               `✗ ${escapeHtml(item.grid![index])} isn't <b>${escapeHtml(itemAnswer(item))}</b>`,
+              item.grid![index],
+            );
+          }
+        });
+      }
+    } else if (mechanic === "fishing") {
+      // One right fish in the school. Hooking it freezes the pond and lands
+      // the catch; hooking anything else freezes the pond around the one
+      // that got away.
+      const pond = body.querySelector<HTMLDivElement>("#kana-pond")!;
+      const wanted = new Set(item.hits!);
+      for (const fish of pond.querySelectorAll<HTMLButtonElement>(".kana-fish")) {
+        fish.addEventListener("click", () => {
+          if (settled) return;
+          const index = Number(fish.dataset.i);
+          pond.classList.add("frozen");
+          if (wanted.has(index)) {
+            fish.classList.add("caught");
+            succeed();
+          } else {
+            fish.classList.add("wrong");
+            for (const hit of wanted) {
+              pond.querySelector<HTMLButtonElement>(`.kana-fish[data-i="${hit}"]`)?.classList.add("right");
+            }
+            miss(
+              `✗ that one isn't <b>${escapeHtml(itemAnswer(item))}</b> — it was <b lang="ja">${escapeHtml(item.kana)}</b>`,
               item.grid![index],
             );
           }
@@ -1416,6 +1445,7 @@ async function kanaItems(pool: KanaEntry[], mechanic: Mechanic, rules: LevelRule
   if (mechanic === "alien") return alienItems(pool, weights, cap, rules.alienExtra);
   if (mechanic === "onebehind") return onebehindItems(pool, weights, cap);
   if (mechanic === "whichmissing") return whichMissingItems(pool, weights, cap);
+  if (mechanic === "fishing") return fishingItems(pool, weights, cap, rules.crowded);
 
   const target = Math.min(cap, pool.length * 2);
   const distinct = drawByNeed(pool, weights, Math.min(pool.length, target));
@@ -1598,17 +1628,12 @@ function whichMissingItems(pool: KanaEntry[], weights: Map<string, number>, cap:
 }
 
 /**
- * Dictation and the missing piece: word games for the ears. Real words
- * where the pool can spell enough of them; made-up ones where it cannot —
- * the listening is the same drill either way.
+ * Dictation: a word game for the ears. Real words where the pool can spell
+ * enough of them; made-up ones where it cannot — the listening is the same
+ * drill either way.
  */
-async function listeningItems(
-  mechanic: "dictation" | "missing",
-  words: Item[] | null,
-  pool: KanaEntry[],
-  rules: LevelRules,
-): Promise<Item[]> {
-  const cap = CAPS[mechanic];
+async function dictationItems(words: Item[] | null, pool: KanaEntry[], rules: LevelRules): Promise<Item[]> {
+  const cap = CAPS.dictation;
   const stats = await kanaStats().catch(() => ({}) as Record<string, KanaStat>);
   const weights = new Map(pool.map((entry) => [entry.kana, needOf(stats[entry.kana])]));
   const base: Item[] =
@@ -1616,32 +1641,36 @@ async function listeningItems(
       ? words.slice(0, cap)
       : alienItems(pool, weights, cap).map((item) => ({ ...item, gloss: "a made-up word" }));
 
-  if (mechanic === "dictation") {
-    return base.map((word) => {
-      const seq = kanaSegments(word.kana);
-      const tiles = new Set(seq);
-      const wanted = tiles.size + 3 + rules.decoys;
-      for (const entry of shuffle([...pool])) {
-        if (tiles.size >= wanted) break;
-        tiles.add(entry.kana);
-      }
-      return { ...word, seq, grid: shuffle([...tiles]) };
-    });
-  }
-
   return base.map((word) => {
-    const segments = kanaSegments(word.kana);
-    const gap = Math.floor(Math.random() * segments.length);
-    const answer = segments[gap];
-    const seen = new Set([primaryRomaji(answer)]);
-    const choices = [answer];
+    const seq = kanaSegments(word.kana);
+    const tiles = new Set(seq);
+    const wanted = tiles.size + 3 + rules.decoys;
     for (const entry of shuffle([...pool])) {
-      if (choices.length >= 4) break;
-      if (entry.kana === answer || seen.has(entry.romaji[0])) continue;
-      seen.add(entry.romaji[0]);
-      choices.push(entry.kana);
+      if (tiles.size >= wanted) break;
+      tiles.add(entry.kana);
     }
-    return { ...word, gap, grid: shuffle(choices) };
+    return { ...word, seq, grid: shuffle([...tiles]) };
+  });
+}
+
+/**
+ * Fishing: a school of kana, exactly one wearing the called sound. The
+ * school is drawn distinct by sound, so no fish can honestly claim to be
+ * the catch — and a full pond deals half again as many.
+ */
+function fishingItems(pool: KanaEntry[], weights: Map<string, number>, cap: number, crowded: boolean): Item[] {
+  const school = crowded ? 9 : 6;
+  return drawByNeed(pool, weights, Math.min(cap, pool.length)).map((target) => {
+    const seen = new Set([target.romaji[0]]);
+    const foils: string[] = [];
+    for (const entry of shuffle([...pool])) {
+      if (foils.length >= school - 1) break;
+      if (seen.has(entry.romaji[0])) continue;
+      seen.add(entry.romaji[0]);
+      foils.push(entry.kana);
+    }
+    const grid = shuffle([target.kana, ...foils]);
+    return { kana: target.kana, entry: target, grid, hits: [grid.indexOf(target.kana)] };
   });
 }
 

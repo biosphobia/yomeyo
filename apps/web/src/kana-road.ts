@@ -36,9 +36,9 @@ export type Mechanic =
   | "alien"
   | "onebehind"
   | "dictation"
-  | "missing"
   | "speed"
-  | "whichmissing";
+  | "whichmissing"
+  | "fishing";
 
 // ---------------- modifiers ----------------
 
@@ -112,8 +112,9 @@ export const MODIFIERS: Modifier[] = [
   { id: "greased", name: "Greased buckets", icon: "🧈", tier: 2, applies: ["sort"], detail: "The clock runs a quarter faster.", effects: { timerScale: 0.75, payout: 1.5 } },
   { id: "fourbuckets", name: "Four buckets", icon: "🗃️", tier: 3, applies: ["sort"], detail: "A fourth bucket joins the line.", effects: { buckets: 4, payout: 2 } },
   { id: "crowded", name: "Crowded range", icon: "🎪", tier: 2, applies: ["sharpshooter"], detail: "More targets, hiding in a fuller wall.", effects: { crowded: true, payout: 1.5 } },
-  { id: "onelisten", name: "One listen", icon: "👂", tier: 2, applies: ["echo", "simon", "dictation", "missing", "whichmissing"], detail: "It plays once. There is no replay button.", effects: { oneListen: true, payout: 1.5 } },
+  { id: "onelisten", name: "One listen", icon: "👂", tier: 2, applies: ["echo", "simon", "dictation", "whichmissing"], detail: "It plays once. There is no replay button.", effects: { oneListen: true, payout: 1.5 } },
   { id: "noisy", name: "Noisy line", icon: "📢", tier: 2, applies: ["dictation"], detail: "Three extra decoy tiles muddy the board.", effects: { decoys: 3, payout: 1.5 } },
+  { id: "fullpond", name: "Full pond", icon: "🐠", tier: 2, applies: ["fishing"], detail: "Half again as many fish, swimming every which way.", effects: { crowded: true, payout: 1.5 } },
 ];
 
 const MODIFIER_BY_ID = new Map(MODIFIERS.map((mod) => [mod.id, mod]));
@@ -145,9 +146,9 @@ const DEFS: Record<Mechanic, { name: string; icon: string; detail: string }> = {
   alien: { name: "Alien names", icon: "👾", detail: "Made-up words from your own kana. No vocabulary to lean on." },
   onebehind: { name: "One behind", icon: "🪞", detail: "Answer the kana BEFORE the one you're looking at." },
   dictation: { name: "Dictation", icon: "✍️", detail: "Hear a word, rebuild it from tiles. Decoys included." },
-  missing: { name: "Missing piece", icon: "🧩", detail: "A word with a hole in it. Hear it whole, tap what's missing." },
   speed: { name: "Speed ladder", icon: "🪜", detail: "The clock shrinks with every right answer. Find your limit." },
   whichmissing: { name: "The silent one", icon: "🤫", detail: "Three sounds play. Four tiles show. Tap the one that stayed quiet." },
+  fishing: { name: "Fishing", icon: "🎣", detail: "Kana swim past. Hook the one that says the sound — before the clock, not the fish, gets away." },
 };
 
 /** The fixed opening stretch, one tile per stage. */
@@ -167,9 +168,9 @@ const TAIL_POOL: Mechanic[] = [
   "alien",
   "onebehind",
   "dictation",
-  "missing",
   "speed",
   "whichmissing",
+  "fishing",
 ];
 
 /**
@@ -284,7 +285,10 @@ export function buildRoad(tail: StoredTail | undefined): RoadNode[][] {
     ...BASE.map((mechanic, stage) => [nodeOf(mechanic, String(stage))]),
     ...(tail ?? LEGACY_TAIL).map((tiles, i) =>
       tiles.map((tile, k) => {
-        const mechanic = typeof tile === "string" ? tile : tile.m;
+        const stored = typeof tile === "string" ? tile : tile.m;
+        // A save may hold a game that has since left the pool; the nearest
+        // living relative stands in rather than a blank tile.
+        const mechanic = stored in DEFS ? stored : ("dictation" as Mechanic);
         const mod = typeof tile === "string" ? undefined : tile.mod;
         return nodeOf(mechanic, tiles.length === 1 ? String(BASE_STAGES + i) : `${BASE_STAGES + i}${"abc"[k]}`, mod);
       }),
