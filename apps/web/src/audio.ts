@@ -267,6 +267,76 @@ export async function playWord(
   return { source: "device" };
 }
 
+// ---------------- single kana, the fast path ----------------
+
+/**
+ * Kana clips decoded once and held in memory as raw audio buffers.
+ *
+ * The drills fire kana sounds rapidly — simon speaks a run of them with
+ * 650ms between notes — and the general path (IndexedDB read, object URL,
+ * a fresh <audio> element, the previous clip cancelled) adds enough
+ * jitter per note to make a melody stutter. A decoded AudioBuffer starts
+ * in microseconds, overlaps freely, and never touches the DOM. `null`
+ * marks a kana whose clip could not be had, so it is asked for once, not
+ * on every play.
+ */
+const kanaBuffers = new Map<string, AudioBuffer | null>();
+let audioContext: AudioContext | null = null;
+
+function contextFor(): AudioContext | null {
+  try {
+    audioContext ??= new (window.AudioContext ??
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+    return audioContext;
+  } catch {
+    return null;
+  }
+}
+
+async function kanaBuffer(kana: string): Promise<AudioBuffer | null> {
+  const text = spokenKana(kana);
+  const key = clipKey(text, text, "tts");
+  const held = kanaBuffers.get(key);
+  if (held !== undefined) return held;
+  try {
+    await cacheReady();
+    let blob = await getMeta<Blob>(key);
+    if (!(blob instanceof Blob) || blob.size === 0) {
+      if (await audioEndpointReady()) {
+        blob = (await fetchEndpointClip(text, text, "tts")) ?? undefined;
+        if (blob) await setMeta(key, blob);
+      }
+    }
+    const context = contextFor();
+    if (!(blob instanceof Blob) || blob.size === 0 || !context) {
+      kanaBuffers.set(key, null);
+      return null;
+    }
+    const buffer = await context.decodeAudioData(await blob.arrayBuffer());
+    kanaBuffers.set(key, buffer);
+    return buffer;
+  } catch {
+    kanaBuffers.set(key, null);
+    return null;
+  }
+}
+
+/**
+ * Decode these kana ahead of time, so the first note of a level is as
+ * instant as the tenth. Quiet about every failure.
+ */
+export async function warmKanaBuffers(kanas: string[]): Promise<void> {
+  const distinct = [...new Set(kanas)].filter(Boolean);
+  const WIDTH = 4;
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < distinct.length) {
+      await kanaBuffer(distinct[next++]).catch(() => undefined);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(WIDTH, distinct.length) }, worker));
+}
+
 /**
  * Say one kana, always synthesised.
  *
@@ -274,8 +344,26 @@ export async function playWord(
  * service has for あ is a person saying whatever they chose to say — a name,
  * a word beginning with it, a whole sentence. Drilling wants the bare sound,
  * identical each time it comes round.
+ *
+ * Plays from the decoded in-memory buffer when one exists — instant, and
+ * never cut short by the next note — and only falls back to the general
+ * word path (and from there the device voice) when it doesn't.
  */
 export async function playKana(kana: string, options: { rate?: number } = {}): Promise<PlayResult> {
+  const buffer = await kanaBuffer(kana);
+  const context = audioContext;
+  if (buffer && context) {
+    try {
+      if (context.state === "suspended") await context.resume();
+      const node = context.createBufferSource();
+      node.buffer = buffer;
+      node.connect(context.destination);
+      node.start();
+      return { source: "cache" };
+    } catch {
+      // Fall through to the general path below.
+    }
+  }
   const text = spokenKana(kana);
   return playWord(text, text, { rate: options.rate ?? 0.8, mode: "tts" });
 }

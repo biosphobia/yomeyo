@@ -1,5 +1,5 @@
 import { getMeta, setMeta } from "./db.js";
-import { playKana, playWord, prefetchAudio, spokenKana } from "./audio.js";
+import { playKana, playWord, prefetchAudio, spokenKana, warmKanaBuffers } from "./audio.js";
 import { cheerBox, preloadReactions, showReaction } from "./feedback.js";
 import { recordQuestEvents } from "./quests.js";
 import { unlockAll } from "./unlock.js";
@@ -116,7 +116,6 @@ const CAPS: Record<Mechanic, number> = {
   simon: 7,
   sharpshooter: 9,
   alien: 10,
-  onebehind: 16,
   dictation: 10,
   speed: 20,
   whichmissing: 10,
@@ -516,10 +515,6 @@ interface Item {
   hits?: number[];
   /** Sort race: the bucket labels, in their fixed on-screen order. */
   buckets?: string[];
-  /** One behind: the kana ON SCREEN — the answer (`kana`) is the previous one. */
-  show?: string;
-  /** One behind: the opening question, where shown and asked are the same. */
-  lead?: boolean;
   /** Taiko: the kana the VOICE says, which may not be the one shown. */
   say?: string;
   /** Taiko: do the shown kana and the spoken one match? */
@@ -1010,6 +1005,14 @@ async function runLevel(
     }),
     warming,
   );
+  // And decode the single-kana clips up front: simon's melody and every
+  // answer chime start from memory, not from a disk read.
+  void warmKanaBuffers(
+    items.flatMap((item) => [
+      ...(item.seq ?? (item.entry ? [item.kana] : [])),
+      ...(item.say ? [item.say] : []),
+    ]),
+  );
   let timer: ReturnType<typeof setInterval> | null = null;
   bestStreak = (await getMeta<number>(BEST_STREAK_KEY)) ?? bestStreak;
 
@@ -1207,8 +1210,7 @@ async function runLevel(
 
     // What sits where the big kana normally goes. The sound-first games
     // hide the glyph and put a speaker (and progress dots) in its place;
-    // sharpshooter and fishing show the SOUND large; one behind shows the
-    // NEXT kana while asking for the last.
+    // sharpshooter and fishing show the SOUND large.
     const hearButton = rules.oneListen
       ? `<div class="kana-hear kana-hear-once" title="One listen only">👂</div>`
       : `<button class="kana-hear" id="kana-hear" title="Play it again" aria-label="Play it again">🔊</button>`;
@@ -1247,9 +1249,6 @@ async function runLevel(
         case "ghost":
           return `<div class="kana-big kana-ghostly${rules.ghostShy ? " shy" : ""}${mirrorCls}" id="kana-big" lang="ja">${escapeHtml(item.kana)}</div>
             <div class="kana-gloss">name it the moment you see it</div>`;
-        case "onebehind":
-          return `<div class="kana-big${rules.fade ? " kana-fading" : ""}${mirrorCls}" id="kana-big" lang="ja">${escapeHtml(item.show ?? item.kana)}</div>
-            <div class="kana-gloss">${item.lead ? "type THIS one — and remember it" : "type the one you saw BEFORE this"}</div>`;
         default:
           return `<div class="kana-big${mechanic === "flash" ? " kana-flashable" : ""}${rules.fade ? " kana-fading" : ""}${mirrorCls}" id="kana-big" lang="ja">${escapeHtml(item.kana)}</div>
             ${item.gloss ? `<div class="kana-gloss">${escapeHtml(item.gloss)}</div>` : ""}`;
@@ -1861,7 +1860,6 @@ async function kanaItems(pool: KanaEntry[], mechanic: Mechanic, rules: LevelRule
   if (mechanic === "simon") return simonItems(pool, weights, rules.seqExtra);
   if (mechanic === "sharpshooter") return sharpshooterItems(pool, weights, cap, rules.crowded);
   if (mechanic === "alien") return alienItems(pool, weights, cap, rules.alienExtra);
-  if (mechanic === "onebehind") return onebehindItems(pool, weights, cap);
   if (mechanic === "whichmissing") return whichMissingItems(pool, weights, cap);
   if (mechanic === "fishing") return fishingItems(pool, weights, cap, rules.crowded);
   if (mechanic === "taiko") return taikoItems(pool, weights, cap);
@@ -1999,26 +1997,6 @@ function alienItems(pool: KanaEntry[], weights: Map<string, number>, cap: number
     items.push({ kana: seq.join(""), gloss: "an alien's name", ambiguous: true, invented: true });
   }
   return items;
-}
-
-/**
- * One behind: every question shows the NEXT kana while asking for the one
- * before it. Each item carries its own shown/asked pair, so a missed one
- * can come round again without breaking anybody's chain.
- */
-function onebehindItems(pool: KanaEntry[], weights: Map<string, number>, cap: number): Item[] {
-  const drawn: KanaEntry[] = [];
-  while (drawn.length < cap) {
-    for (const entry of drawByNeed(pool, weights, pool.length)) {
-      drawn.push(entry);
-      if (drawn.length >= cap) break;
-    }
-  }
-  return drawn.map((entry, i) =>
-    i === 0
-      ? { kana: entry.kana, entry, show: entry.kana, lead: true }
-      : { kana: drawn[i - 1].kana, entry: drawn[i - 1], show: entry.kana },
-  );
 }
 
 /**

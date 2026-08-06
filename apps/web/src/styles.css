@@ -4507,3 +4507,57 @@ button.gram-swap-line:hover {
     transform: translateX(-50%);
   }
 }
+
+/* ---------------- desktop proportions ----------------
+   The compact pass was tuned on a phone; a laptop has room. And with the
+   sidebar on, the viewport's centre is not the content's — the reaction
+   shifts by half the sidebar to sit under the quiz it belongs to. */
+
+.kmap-inner {
+  margin-inline: auto;
+}
+
+@media (min-width: 860px) {
+  .cheer {
+    left: calc(50% + 108px);
+  }
+
+  .cheer img {
+    width: 230px;
+    height: 145px;
+  }
+
+  .kana-big {
+    font-size: 4.6rem;
+    margin: 12px 0;
+  }
+
+  .kmap .kmap-node {
+    width: 52px;
+    padding: 6px 3px;
+  }
+
+  .kmap .kmap-icon {
+    font-size: 1rem;
+  }
+
+  .kmap .kmap-num {
+    font-size: 0.6rem;
+  }
+
+  .kmap-inner {
+    gap: 18px;
+  }
+
+  .kana-sky {
+    height: 200px;
+  }
+
+  .kana-pond {
+    height: 230px;
+  }
+
+  #kana-duel .duel-stage {
+    height: 140px;
+  }
+}

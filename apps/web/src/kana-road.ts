@@ -35,7 +35,6 @@ export type Mechanic =
   | "simon"
   | "sharpshooter"
   | "alien"
-  | "onebehind"
   | "dictation"
   | "speed"
   | "whichmissing"
@@ -118,7 +117,7 @@ export const MODIFIERS: Modifier[] = [
   { id: "highstakes", name: "High stakes", icon: "🎰", tier: 3, detail: "150 ¥ on the table. Clear it and it pays two and a half times over.", effects: { toll: 150, payout: 2.5 } },
   // ---- game-specific ----
   { id: "longnames", name: "Long names", icon: "👽", tier: 1, applies: ["alien"], detail: "The names grow a sound longer.", effects: { alienExtra: 1, payout: 1.25 } },
-  { id: "fading", name: "Fading ink", icon: "🌫️", tier: 2, applies: ["alien", "onebehind"], detail: "The name starts vanishing the moment it appears.", effects: { fade: true, payout: 1.5 } },
+  { id: "fading", name: "Fading ink", icon: "🌫️", tier: 2, applies: ["alien"], detail: "The name starts vanishing the moment it appears.", effects: { fade: true, payout: 1.5 } },
   { id: "epics", name: "Alien epics", icon: "📜", tier: 3, applies: ["alien"], detail: "Longer names, and they fade as you read.", effects: { alienExtra: 2, fade: true, payout: 2 } },
   { id: "onemorenote", name: "One more note", icon: "🎵", tier: 2, applies: ["simon"], detail: "Every sequence runs one sound longer.", effects: { seqExtra: 1, payout: 1.5 } },
   { id: "longsong", name: "Long song", icon: "🎼", tier: 3, applies: ["simon"], detail: "Every sequence runs two sounds longer.", effects: { seqExtra: 2, payout: 2 } },
@@ -130,7 +129,7 @@ export const MODIFIERS: Modifier[] = [
   { id: "onelisten", name: "One listen", icon: "👂", tier: 2, applies: ["echo", "simon", "dictation", "whichmissing"], detail: "It plays once. There is no replay button.", effects: { oneListen: true, payout: 1.5 } },
   { id: "noisy", name: "Noisy line", icon: "📢", tier: 2, applies: ["dictation"], detail: "Three extra decoy tiles muddy the board.", effects: { decoys: 3, payout: 1.5 } },
   { id: "fullpond", name: "Full pond", icon: "🐠", tier: 2, applies: ["fishing"], detail: "Half again as many fish, swimming every which way.", effects: { crowded: true, payout: 1.5 } },
-  { id: "mirror", name: "Mirror world", icon: "🪞", tier: 3, applies: ["type", "lives", "timed", "flash", "speed", "onebehind", "choice", "ghost"], detail: "Every kana appears mirror-flipped. Read through the glass.", effects: { mirror: true, payout: 2 } },
+  { id: "mirror", name: "Mirror world", icon: "🪞", tier: 3, applies: ["type", "lives", "timed", "flash", "speed", "choice", "ghost"], detail: "Every kana appears mirror-flipped. Read through the glass.", effects: { mirror: true, payout: 2 } },
   { id: "quickmoles", name: "Quick moles", icon: "⛏️", tier: 2, applies: ["whack"], detail: "They barely surface before they're gone.", effects: { timerScale: 0.7, payout: 1.5 } },
   { id: "downpour", name: "Downpour", icon: "🌧️", tier: 3, applies: ["rain"], detail: "It falls hard and fast.", effects: { timerScale: 0.7, payout: 2 } },
   { id: "uptempo", name: "Uptempo", icon: "🎏", tier: 2, applies: ["taiko"], detail: "The beat quickens.", effects: { timerScale: 0.75, payout: 1.5 } },
@@ -165,7 +164,6 @@ const DEFS: Record<Mechanic, { name: string; icon: string; detail: string }> = {
   simon: { name: "Simon", icon: "🎶", detail: "A spoken sequence, growing longer. Tap it back in order." },
   sharpshooter: { name: "Sharpshooter", icon: "🎯", detail: "One sound, a wall of kana. Tap every tile that says it." },
   alien: { name: "Alien names", icon: "👾", detail: "Made-up words from your own kana. No vocabulary to lean on." },
-  onebehind: { name: "One behind", icon: "🪞", detail: "Answer the kana BEFORE the one you're looking at." },
   dictation: { name: "Dictation", icon: "✍️", detail: "Hear a word, rebuild it from tiles. Decoys included." },
   speed: { name: "Speed ladder", icon: "🪜", detail: "The clock shrinks with every right answer. Find your limit." },
   whichmissing: { name: "The silent one", icon: "🤫", detail: "Three sounds play. Four tiles show. Tap the one that stayed quiet." },
@@ -195,7 +193,6 @@ const TAIL_POOL: Mechanic[] = [
   "simon",
   "sharpshooter",
   "alien",
-  "onebehind",
   "dictation",
   "speed",
   "whichmissing",
@@ -453,36 +450,40 @@ export function renderRoadMap(host: HTMLElement, road: RoadNode[][], view: RoadM
         y: box.top - innerBox.top + box.height / 2,
       };
     };
-    const link = (a: Element, b: Element, cls: string): void => {
-      const p1 = center(a);
-      const p2 = center(b);
+    const link = (p1: { x: number; y: number }, p2: { x: number; y: number }, cls: string): void => {
       const line = document.createElementNS(SVG_NS, "path");
       const midX = (p1.x + p2.x) / 2;
       line.setAttribute("d", `M ${p1.x} ${p1.y} C ${midX} ${p1.y}, ${midX} ${p2.y}, ${p2.x} ${p2.y}`);
       line.setAttribute("class", cls);
       svg.appendChild(line);
     };
+    // One spine through the stage centres, with short stubs out to each
+    // forked tile — a road you can read, instead of the every-tile-to-
+    // every-tile weave that turned three-way forks into macramé.
+    const stageEl = (stage: number): Element | null =>
+      inner.querySelector(`.kmap-stage[data-stage="${stage}"]`);
     for (let stage = 0; stage + 1 < road.length; stage++) {
-      const from = [...inner.querySelectorAll(`.kmap-stage[data-stage="${stage}"] .kmap-node`)];
-      const to = [...inner.querySelectorAll(`.kmap-stage[data-stage="${stage + 1}"] .kmap-node`)];
-      for (const a of from) {
-        for (const b of to) {
-          const walked =
-            stage + 1 < view.unlocked &&
-            chosenAt(road, stage, view.path) === (a as HTMLElement).dataset.id &&
-            chosenAt(road, stage + 1, view.path) === (b as HTMLElement).dataset.id;
-          const leading =
-            stage + 1 === view.unlocked &&
-            view.unlocked < road.length &&
-            chosenAt(road, stage, view.path) === (a as HTMLElement).dataset.id;
-          link(a, b, walked ? "walked" : leading ? "leading" : "");
-        }
+      const a = stageEl(stage);
+      const b = stageEl(stage + 1);
+      if (!a || !b) continue;
+      const walked = stage + 1 < view.unlocked;
+      const leading = stage + 1 === view.unlocked && view.unlocked < road.length;
+      link(center(a), center(b), walked ? "walked" : leading ? "leading" : "");
+    }
+    for (let stage = 0; stage < road.length; stage++) {
+      const holder = stageEl(stage);
+      const nodes = [...(holder?.querySelectorAll(".kmap-node") ?? [])];
+      if (!holder || nodes.length < 2) continue;
+      const hub = center(holder);
+      for (const node of nodes) {
+        const chosen = stage < view.unlocked && chosenAt(road, stage, view.path) === (node as HTMLElement).dataset.id;
+        link(center(node), hub, chosen ? "walked" : "");
       }
     }
     // The road runs on towards the face-down tile, faintly.
-    const last = [...inner.querySelectorAll(`.kmap-stage[data-stage="${road.length - 1}"] .kmap-node`)];
+    const lastStage = stageEl(road.length - 1);
     const boss = inner.querySelector(".kmap-boss");
-    if (boss) for (const a of last) link(a, boss, "");
+    if (boss && lastStage) link(center(lastStage), center(boss), "");
     inner.prepend(svg);
 
     // Keep what matters in the window: the tile being played, or the choice

@@ -22,9 +22,11 @@ import type { LibraryDeck } from "./library.js";
 
 // The library needs Firestore, which is hundreds of kilobytes. Nobody who
 // only reviews should pay for it, so it arrives when this screen asks.
+import { lazyImport } from "./lazy.js";
+
 let library: typeof import("./library.js") | null = null;
 async function loadLibrary(): Promise<typeof import("./library.js")> {
-  library ??= await import("./library.js");
+  library ??= await lazyImport(() => import("./library.js"));
   return library;
 }
 
@@ -102,7 +104,7 @@ async function openEditor(
 ): Promise<void> {
   body.innerHTML = `<div class="card-panel"><div class="msg">Opening ${escapeHtml(deck.name)}…</div></div>`;
   const [{ renderDeckEditor, resetEditor }, account, admin] = await Promise.all([
-    import("./deck-edit.js"),
+    lazyImport(() => import("./deck-edit.js")),
     currentAccount().catch(() => null),
     isAdmin(),
   ]);

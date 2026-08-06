@@ -5,6 +5,7 @@ import { renderWords } from "./words.js";
 import { renderDecks } from "./decks.js";
 import { renderCalendar } from "./calendar.js";
 import { renderKana } from "./kana.js";
+import { lazyImport } from "./lazy.js";
 import { renderGrammar } from "./grammar.js";
 import { renderKanji } from "./kanji.js";
 import { renderSettings } from "./settings.js";
@@ -100,7 +101,7 @@ function route(): void {
       void renderCalendar(main, isCurrent);
       break;
     case "gacha":
-      void import("./gacha.js").then((mod) => mod.renderGacha(main, isCurrent));
+      void lazyImport(() => import("./gacha.js")).then((mod) => mod.renderGacha(main, isCurrent));
       break;
     case "settings":
       void renderSettings(main, isCurrent);
