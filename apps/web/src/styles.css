@@ -4378,3 +4378,132 @@ button.gram-swap-line:hover {
     transform: scale(2);
   }
 }
+
+/* ---------------- playground: tap the word to bend it ---------------- */
+
+/* The glowing end of the word: where conjugation happens. */
+.pg-endcap {
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  border: 2px dashed color-mix(in srgb, var(--accent) 55%, transparent);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
+.pg-endcap.on,
+.pg-block.pg-added.on {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.pg-endcap.pulse {
+  animation: pg-pulse 1.6s ease-in-out infinite;
+}
+
+.pg-block.pg-added {
+  cursor: pointer;
+}
+
+/* The choice panel: one row per thing the word can become. */
+.pg-panel {
+  margin: 6px 0 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.pg-panel-title {
+  font-weight: 700;
+  font-size: 0.85rem;
+  margin-top: 4px;
+}
+
+.pg-opt {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  grid-template-areas:
+    "jp name preview"
+    "job job job";
+  align-items: baseline;
+  column-gap: 10px;
+  text-align: left;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--panel-2);
+  border: 1px solid #ffffff14;
+  color: var(--text);
+}
+
+.pg-opt:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.pg-opt .pg-opt-jp {
+  grid-area: jp;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.pg-opt .pg-opt-name {
+  grid-area: name;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.pg-opt .pg-opt-preview {
+  grid-area: preview;
+  justify-self: end;
+  color: var(--good);
+  font-size: 0.95rem;
+}
+
+.pg-opt .pg-opt-job {
+  grid-area: job;
+  color: var(--muted);
+  font-size: 0.72rem;
+  margin-top: 2px;
+}
+
+/* ---------------- the reaction floats ----------------
+   Out of the page flow entirely: it hovers above the bottom bar, so the
+   quiz never grows past the viewport and nothing needs scrolling. */
+
+.cheer {
+  position: fixed;
+  left: 50%;
+  bottom: calc(78px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  margin: 0;
+  z-index: 30;
+  pointer-events: none;
+  width: max-content;
+  max-width: 90vw;
+}
+
+.cheer img {
+  width: min(170px, 44vw);
+  height: min(110px, 30vw);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+}
+
+.cheer-text {
+  font-size: 0.95rem;
+  margin-top: 2px;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9);
+}
+
+/* Re-rooted keyframes: the pop must keep the horizontal centering. */
+@keyframes cheer-pop {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.7) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%);
+  }
+}

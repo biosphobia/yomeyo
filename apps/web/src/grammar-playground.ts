@@ -20,20 +20,24 @@ import {
 } from "./grammar-conjugate.js";
 
 /**
- * The grammar playground: type a word, then snap endings onto it like lego.
+ * The grammar playground: type a word, then bend it by tapping the part
+ * that can bend.
  *
- * The point is the feel of it. Conjugation taught as tables is a wall of
- * forms; conjugation felt as pieces is three moves — ない, then た, and
- * たべなかった builds itself in front of you, each step shown. Pieces that
- * don't fit the current ending are right there but dimmed, and tapping one
- * says why, because which pieces fit WHERE is the actual system being
- * learned.
+ * The word sits on screen as blocks. Its end — the only part of a
+ * Japanese word that conjugates — wears a glowing ＋. Tap it and the
+ * choices appear, each with what it means and a preview of the word it
+ * would make: 〜ます · polite · → たべます. Tap a choice and the word
+ * rebuilds. Tap any piece already on the word to break it off there, or
+ * swap it for something else that fits that spot. No tray, no dragging,
+ * nothing to know in advance: the word itself is the interface, and it
+ * only ever offers what is really possible.
  *
  * The word is looked up in the on-device dictionary for its reading, its
- * meaning and its group; the learner can overrule the group with one tap.
- * When the site can reach Claude (the same grammar.php the practice tab
- * uses), the built form is translated live; without it, the meaning recipe
- * — "eat · not · in the past" — still tells the story.
+ * meaning and its group; the learner can overrule the group with one tap
+ * — but only to groups the word's shape can honestly be. When the site
+ * can reach Claude (the same grammar.php the course uses), the built form
+ * is translated live; without it, the meaning recipe — "eat · not · in
+ * the past" — still tells the story.
  */
 
 const LAST_KEY = "playgroundLast";
@@ -59,6 +63,8 @@ interface Saved {
 let word: PlayWord | null = null;
 /** Piece ids, in the order they were snapped on. */
 let chain: string[] = [];
+/** What the panel is talking about: a piece on the word, or the open end. */
+let focusAt: number | "end" = "end";
 
 /** Translations already asked for, so replaying a chain is free. */
 const translations = new Map<string, { en: string; note?: string }>();
@@ -173,6 +179,7 @@ function draw(body: HTMLDivElement): void {
     }
     word = found;
     chain = [];
+    focusAt = "end";
     msg.textContent = "";
     void setMeta(LAST_KEY, { typed: word.typed, kind: word.kind, chain } satisfies Saved);
     draw(body);
@@ -193,9 +200,9 @@ function draw(body: HTMLDivElement): void {
     out.innerHTML = `
       <div class="card-panel pg-empty">
         <div class="big">🧱</div>
-        <p>Type any word — an action word, a describing word, a thing — and
-        snap endings onto it like lego. Every piece shows what it does, and
-        the word rebuilds itself in front of you.</p>
+        <p>Type any word — an action word, a describing word, a thing — then
+        tap the glowing ＋ on its end to see everything it can become. Every
+        choice shows the word it would make before you commit.</p>
       </div>`;
     return;
   }
@@ -203,14 +210,22 @@ function draw(body: HTMLDivElement): void {
   drawBoard(out, body);
 }
 
-/** Undoes the previous board's window-level drag listeners before redrawing. */
-let undoDrag: (() => void) | null = null;
+/** One tappable choice: the piece, its name, and the word it would make. */
+function optionRow(piece: Piece, from: ChainState, action: "add" | "swap"): string {
+  const preview = piece.apply(from).kana;
+  return `
+    <button class="pg-opt tone-${piece.tone}" data-${action}="${piece.id}">
+      <span class="pg-opt-jp" lang="ja">${escapeHtml(piece.label)}</span>
+      <span class="pg-opt-name">${escapeHtml(piece.name)}</span>
+      <span class="pg-opt-preview" lang="ja">→ ${escapeHtml(preview)}</span>
+      <span class="pg-opt-job">${escapeHtml(piece.job)}</span>
+    </button>`;
+}
 
 function drawBoard(out: HTMLDivElement, body: HTMLDivElement): void {
-  undoDrag?.();
-  undoDrag = null;
   const w = word!;
-  const { steps, state } = walkChain();
+  const { start, steps, state } = walkChain();
+  if (focusAt !== "end" && (typeof focusAt !== "number" || focusAt >= steps.length)) focusAt = "end";
   void setMeta(LAST_KEY, { typed: w.typed, kind: w.kind, chain } satisfies Saved);
 
   // Only the kinds this word's shape can honestly be: ねこ is never a verb,
@@ -226,20 +241,38 @@ function drawBoard(out: HTMLDivElement, body: HTMLDivElement): void {
     })
     .join("");
 
-  const blockHtml = (label: string, sub: string, cls: string, at?: number): string => `
-    <div class="pg-block ${cls}" ${at !== undefined ? `data-at="${at}"` : ""} ${
-      at !== undefined ? `title="Tap to break the chain here"` : ""
-    }>
-      <span class="pg-block-jp" lang="ja">${escapeHtml(label)}</span>
-      <span class="pg-block-sub">${escapeHtml(sub)}</span>
-    </div>`;
-
   const trail =
     steps.length === 0
       ? ""
       : `<div class="pg-trail">${[w.kana, ...steps.map((s) => s.state.kana)]
           .map((kana, i) => (i === 0 ? `<span lang="ja">${escapeHtml(kana)}</span>` : `<span class="pg-arrow">→</span><span lang="ja">${escapeHtml(kana)}</span>`))
           .join("")}</div>`;
+
+  // The panel under the word: choices for the open end, or the story of a
+  // tapped piece — what it does, how to take it off, what could stand there
+  // instead.
+  const fitsNow = PIECES.filter((piece) => piece.fits(state));
+  const panelHtml = ((): string => {
+    if (focusAt === "end") {
+      if (fitsNow.length === 0) {
+        return `<div class="glosses">${escapeHtml(formHint(state.form))}. Tap a coloured piece on the word to break it off and keep building.</div>`;
+      }
+      return `
+        <div class="pg-panel-title">Tap what the word should become:</div>
+        ${fitsNow.map((piece) => optionRow(piece, state, "add")).join("")}`;
+    }
+    const at = focusAt;
+    const step = steps[at];
+    const before = at === 0 ? start : steps[at - 1].state;
+    const alternatives = PIECES.filter((piece) => piece.id !== step.piece.id && piece.fits(before));
+    return `
+      <div class="pg-panel-title"><span lang="ja">${escapeHtml(step.piece.label)}</span> — ${escapeHtml(step.piece.name)}</div>
+      <div class="glosses">${escapeHtml(step.piece.job)}</div>
+      <div class="row-actions" style="margin:8px 0">
+        <button id="pg-break" class="secondary">Take it off (and everything after)</button>
+      </div>
+      ${alternatives.length > 0 ? `<div class="pg-panel-title">…or swap it for:</div>${alternatives.map((piece) => optionRow(piece, before, "swap")).join("")}` : ""}`;
+  })();
 
   out.innerHTML = `
     <div class="card-panel">
@@ -255,7 +288,7 @@ function drawBoard(out: HTMLDivElement, body: HTMLDivElement): void {
       ${w.sure ? "" : `<div class="glosses pg-unsure">The dictionary wasn't sure of the group — tap the right one if this looks off.</div>`}
     </div>
 
-    <div class="card-panel pg-board" id="pg-board">
+    <div class="card-panel pg-board">
       <div class="pg-result">
         <button class="speaker" id="pg-say" title="Say it" aria-label="Say it">🔊</button>
         <div class="pg-result-jp" lang="ja">${escapeHtml(state.kana)}</div>
@@ -263,157 +296,78 @@ function drawBoard(out: HTMLDivElement, body: HTMLDivElement): void {
         <div class="pg-result-en" id="pg-en">${recipeHtml(w, steps)}</div>
       </div>
       <div class="pg-chain">
-        ${blockHtml(w.kana, w.gloss || WORD_KIND_INFO[w.kind].name, "pg-base")}
-        ${steps.map((s, i) => blockHtml(s.piece.label, s.piece.name, `tone-${s.piece.tone} pg-added`, i)).join("")}
-        <div class="pg-socket${steps.length === 0 ? " pulse" : ""}" id="pg-socket">＋</div>
+        <div class="pg-block pg-base">
+          <span class="pg-block-jp" lang="ja">${escapeHtml(w.kana)}</span>
+          <span class="pg-block-sub">${escapeHtml(w.gloss || WORD_KIND_INFO[w.kind].name)}</span>
+        </div>
+        ${steps
+          .map(
+            (step, i) => `
+          <button class="pg-block tone-${step.piece.tone} pg-added${focusAt === i ? " on" : ""}" data-at="${i}"
+            title="Tap to change or remove this piece">
+            <span class="pg-block-jp" lang="ja">${escapeHtml(step.piece.label)}</span>
+            <span class="pg-block-sub">${escapeHtml(step.piece.name)}</span>
+          </button>`,
+          )
+          .join("")}
+        <button class="pg-endcap${focusAt === "end" ? " on" : ""}${steps.length === 0 && fitsNow.length > 0 ? " pulse" : ""}"
+          id="pg-endcap" title="Tap to conjugate" ${fitsNow.length === 0 && focusAt === "end" ? "" : ""}>＋</button>
       </div>
       ${trail}
-      <div class="glosses pg-form-hint">${escapeHtml(formHint(state.form))}</div>
+      <div class="pg-panel" id="pg-panel">${panelHtml}</div>
       <div class="row-actions">
-        <button id="pg-undo" class="secondary" ${steps.length === 0 ? "disabled" : ""}>Break off the last piece</button>
         <button id="pg-clear" class="ghost" ${steps.length === 0 ? "disabled" : ""}>Start over</button>
       </div>
-    </div>
-
-    <div class="card-panel">
-      <b>The pieces</b>
-      <div class="glosses" style="margin:4px 0 10px">Drag one onto the word — or just tap it. Dim pieces don't fit the current ending.</div>
-      <div class="pg-tray" id="pg-tray">
-        ${PIECES.map((p) => {
-          const ok = p.fits(state);
-          return `<div class="pg-piece tone-${p.tone}${ok ? "" : " dim"}" data-id="${p.id}">
-            <span class="pg-block-jp" lang="ja">${escapeHtml(p.label)}</span>
-            <span class="pg-block-sub">${escapeHtml(p.name)}</span>
-          </div>`;
-        }).join("")}
-      </div>
-      <div class="pg-nudge" id="pg-nudge"></div>
     </div>
   `;
 
   out.querySelector("#pg-say")!.addEventListener("click", () => {
     void speak(state.kana, { rate: 0.85 }).catch(() => undefined);
   });
-  out.querySelector("#pg-undo")!.addEventListener("click", () => {
-    chain.pop();
-    drawBoard(out, body);
-  });
   out.querySelector("#pg-clear")!.addEventListener("click", () => {
     chain = [];
+    focusAt = "end";
     drawBoard(out, body);
   });
   for (const chip of out.querySelectorAll<HTMLButtonElement>(".pg-kind")) {
     chip.addEventListener("click", () => {
       word = { ...w, kind: chip.dataset.kind as WordKind, sure: true };
+      focusAt = "end";
       drawBoard(out, body);
     });
   }
-  // Tapping a snapped-on piece breaks the chain there: that piece and
-  // everything after it come off, like pulling a lego tower apart.
-  for (const block of out.querySelectorAll<HTMLElement>(".pg-added")) {
-    block.addEventListener("click", () => {
-      chain = chain.slice(0, Number(block.dataset.at));
-      drawBoard(out, body);
-    });
-  }
-
-  const nudge = out.querySelector<HTMLDivElement>("#pg-nudge")!;
-  const board = out.querySelector<HTMLDivElement>("#pg-board")!;
-  const tray = out.querySelector<HTMLDivElement>("#pg-tray")!;
-
-  const attach = (piece: Piece): void => {
-    if (!piece.fits(state)) {
-      nudge.innerHTML = `<b lang="ja">${escapeHtml(piece.label)}</b> doesn't fit here — ${escapeHtml(
-        wontFitWhy(piece, state),
-      )}`;
-      return;
-    }
-    chain.push(piece.id);
+  out.querySelector("#pg-endcap")!.addEventListener("click", () => {
+    focusAt = "end";
     drawBoard(out, body);
-  };
-
-  // ---- dragging, on pointer events so it works on a touchscreen ----
-  // A press that never moves is a tap and attaches directly; a drag has to
-  // land on the board. Same pattern as the sentence-building drill.
-  let drag: { el: HTMLElement; float: HTMLElement; piece: Piece; moved: boolean; dx: number; dy: number } | null = null;
-
-  tray.addEventListener("pointerdown", (ev) => {
-    const el = (ev.target as HTMLElement).closest<HTMLElement>(".pg-piece");
-    if (!el) return;
-    ev.preventDefault();
-    const piece = PIECES.find((p) => p.id === el.dataset.id)!;
-    const box = el.getBoundingClientRect();
-    const float = el.cloneNode(true) as HTMLElement;
-    float.className = `${el.className} pg-piece-float`;
-    float.style.width = `${box.width}px`;
-    float.style.left = `${box.left}px`;
-    float.style.top = `${box.top}px`;
-    document.body.appendChild(float);
-    drag = { el, float, piece, moved: false, dx: ev.clientX - box.left, dy: ev.clientY - box.top };
-    (ev.target as HTMLElement).setPointerCapture?.(ev.pointerId);
+  });
+  for (const block of out.querySelectorAll<HTMLButtonElement>(".pg-added")) {
+    block.addEventListener("click", () => {
+      focusAt = Number(block.dataset.at);
+      drawBoard(out, body);
+    });
+  }
+  const panel = out.querySelector<HTMLDivElement>("#pg-panel")!;
+  for (const option of panel.querySelectorAll<HTMLButtonElement>("[data-add]")) {
+    option.addEventListener("click", () => {
+      chain.push(option.dataset.add!);
+      focusAt = "end";
+      drawBoard(out, body);
+    });
+  }
+  for (const option of panel.querySelectorAll<HTMLButtonElement>("[data-swap]")) {
+    option.addEventListener("click", () => {
+      chain = [...chain.slice(0, focusAt as number), option.dataset.swap!];
+      focusAt = "end";
+      drawBoard(out, body);
+    });
+  }
+  panel.querySelector("#pg-break")?.addEventListener("click", () => {
+    chain = chain.slice(0, focusAt as number);
+    focusAt = "end";
+    drawBoard(out, body);
   });
 
-  const onMove = (ev: PointerEvent): void => {
-    if (!drag) return;
-    ev.preventDefault();
-    drag.moved = true;
-    drag.float.style.left = `${ev.clientX - drag.dx}px`;
-    drag.float.style.top = `${ev.clientY - drag.dy}px`;
-    const box = board.getBoundingClientRect();
-    board.classList.toggle(
-      "is-target",
-      ev.clientY > box.top - 20 && ev.clientY < box.bottom + 20 && drag.piece.fits(state),
-    );
-  };
-  const onUp = (ev: PointerEvent): void => {
-    if (!drag) return;
-    const { float, piece, moved } = drag;
-    drag = null;
-    float.remove();
-    board.classList.remove("is-target");
-    if (!moved) {
-      attach(piece);
-      return;
-    }
-    const box = board.getBoundingClientRect();
-    if (ev.clientY > box.top - 20 && ev.clientY < box.bottom + 20) attach(piece);
-  };
-  window.addEventListener("pointermove", onMove, { passive: false });
-  window.addEventListener("pointerup", onUp);
-  window.addEventListener("pointercancel", onUp);
-  undoDrag = () => {
-    window.removeEventListener("pointermove", onMove);
-    window.removeEventListener("pointerup", onUp);
-    window.removeEventListener("pointercancel", onUp);
-    drag?.float.remove();
-  };
-
   void translate(out, w, steps, state);
-}
-
-/** Why a dim piece is dim, in the terms the playground teaches. */
-function wontFitWhy(piece: Piece, state: ChainState): string {
-  if (state.form === "done") return "this ending is finished. Break a piece off first.";
-  switch (piece.id) {
-    case "masu":
-    case "tai":
-    case "potential":
-      return "it needs a plain action word before it.";
-    case "you":
-      return "it needs a plain action word, or ます.";
-    case "iru":
-    case "kudasai":
-      return "it snaps onto a て piece. Add 〜て first.";
-    case "da":
-      return "only a plain thing takes だ.";
-    case "desu":
-      return "it needs a thing or an い-word before it.";
-    case "te":
-    case "ba":
-      return "the current ending can't take it.";
-    default:
-      return "the current ending can't take it.";
-  }
 }
 
 /** The meaning built by hand, shown when there is no translator to ask. */
@@ -426,7 +380,7 @@ function recipeHtml(w: PlayWord, steps: Step[]): string {
 
 /**
  * The built form, translated by Claude when the site can ask. Debounced a
- * moment so snapping three pieces in a row costs one request, not three,
+ * moment so tapping three pieces in a row costs one request, not three,
  * and sequence-checked so a slow answer never overwrites a newer one.
  */
 async function translate(out: HTMLDivElement, w: PlayWord, steps: Step[], state: ChainState): Promise<void> {
