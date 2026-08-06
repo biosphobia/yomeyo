@@ -9,6 +9,7 @@ import { renderKanaStats } from "./kana-stats-view.js";
 import { screenHeader } from "./screen.js";
 import { assetUrl, loadDictionary } from "./store.js";
 import { KANA_GROUPS, isCorrect, type KanaEntry, type KanaGroup } from "./kana-data.js";
+import type { DictEntry } from "@yomeyo/core";
 import {
   BASE_STAGES,
   buildRoad,
@@ -189,6 +190,22 @@ function romajiMatches(input: string, kana: string): boolean {
     return false;
   };
   return walk(0, 0);
+}
+
+/**
+ * The same sounds, written in katakana.
+ *
+ * Only for handing to a synthesiser: the learner still sees the kana they
+ * chose. Hiragana and katakana sit one block apart in Unicode, so this is a
+ * shift of every character in that block and a no-op for everything else.
+ */
+function katakana(text: string): string {
+  return [...text]
+    .map((ch) => {
+      const code = ch.codePointAt(0)!;
+      return code >= 0x3041 && code <= 0x3096 ? String.fromCodePoint(code + 0x60) : ch;
+    })
+    .join("");
 }
 
 /** The primary spelling of a kana string, for showing corrections. */
@@ -429,6 +446,8 @@ interface Item {
   /** For words: this spelling is several different words, so nobody's
    *  recording of it is reliably the one on screen. */
   ambiguous?: boolean;
+  /** Not a word at all — an alien name. Said as a name, not read as text. */
+  invented?: boolean;
   /** Simon: the spoken sequence, in order. `kana` is the sequence joined. */
   seq?: string[];
   /** Simon and sharpshooter: the tiles on the board, in display order. */
@@ -449,6 +468,15 @@ interface Item {
  * way, which is how a drill on いこう came back saying something else.
  * Where the spelling is several different words, no recording of it is
  * reliably the right one, so those are read out instead.
+ *
+ * Everything that ends up synthesised is asked for in katakana. A synthesiser
+ * reads Japanese by working out which words it is looking at, and あいあう is
+ * not one word to it — it is あい and あう, said as two, with the join you can
+ * hear. Handed the same sounds in katakana it has nothing to parse and simply
+ * says them, which is what katakana is for in Japanese too: names and things
+ * from nowhere. An alien's name is exactly that, and a spelling that could be
+ * any of three words has no reading worth parsing for either — they all sound
+ * the same, which is why it is being synthesised rather than looked up.
  */
 function audioFor(item: Item): { term: string; reading: string; mode?: "tts" } {
   // A lone kana is asked for by the spelling that makes an engine say it —
@@ -458,7 +486,10 @@ function audioFor(item: Item): { term: string; reading: string; mode?: "tts" } {
     const text = spokenKana(item.kana);
     return { term: text, reading: text, mode: "tts" };
   }
-  if (item.ambiguous) return { term: item.kana, reading: item.kana, mode: "tts" };
+  if (item.ambiguous || item.invented) {
+    const text = katakana(item.kana);
+    return { term: text, reading: text, mode: "tts" };
+  }
   return { term: item.term ?? item.kana, reading: item.kana };
 }
 
@@ -1322,7 +1353,7 @@ function alienItems(pool: KanaEntry[], weights: Map<string, number>, cap: number
       if (seq[seq.length - 1] === next && pool.length > 1) continue;
       seq.push(next);
     }
-    items.push({ kana: seq.join(""), gloss: "an alien's name", ambiguous: true });
+    items.push({ kana: seq.join(""), gloss: "an alien's name", ambiguous: true, invented: true });
   }
   return items;
 }
@@ -1395,9 +1426,9 @@ async function wordsFor(game: GameState, pool: KanaEntry[], count: number): Prom
   const allowed = new Set(pool.flatMap((entry) => [...entry.kana]));
   const signature = [...game.groups].sort().join(",");
   try {
+    const dictionary = await loadDictionary();
     let ranked = candidateCache?.groups === signature ? candidateCache.words : null;
     if (!ranked) {
-      const dictionary = await loadDictionary();
       const best = new Map<string, Word>();
       for (const entry of dictionary.wordsMadeOf(allowed, 2, 4)) {
         const gloss = entry.glosses[0];
@@ -1442,16 +1473,38 @@ async function wordsFor(game: GameState, pool: KanaEntry[], count: number): Prom
       kana,
       gloss: word.gloss,
       term: word.term,
-      // いこう is 意向, 移行 and 以降; はし is chopsticks, a bridge and an
-      // edge, each said with its own pitch. No recording of that spelling is
-      // reliably the word on screen, so those get read out instead.
-      ambiguous: [...word.forms].filter((form) => form !== kana).length > 1,
+      // Two ways of being unsure, and either one means asking for a recording
+      // is a gamble the learner loses.
+      //
+      // One reading, several spellings: いこう is 意向, 移行 and 以降; はし is
+      // chopsticks, a bridge and an edge, each said with its own pitch.
+      //
+      // One spelling, several readings — the one this missed. 青魚 is あおうお
+      // here and あおざかな at least as often, and what came back was a
+      // recording of a real speaker saying the other one. A recording is only
+      // safe when the writing can be read one way.
+      ambiguous:
+        [...word.forms].filter((form) => form !== kana).length > 1 ||
+        readAnotherWay(dictionary, word.term, kana),
     }));
   } catch {
     // A failed download or an unreadable dictionary both mean no words. The
     // caller says so on screen; what it must never do is wait forever.
     return null;
   }
+}
+
+/**
+ * Can this spelling be read some other way?
+ *
+ * The dictionary is keyed by written form as well as by reading, so asking
+ * it about the spelling gives back every word written that way — and if any
+ * of them is said differently, a recording of "that spelling" may be any of
+ * them.
+ */
+function readAnotherWay(dictionary: { lookupExact(text: string): DictEntry[] }, term: string, reading: string): boolean {
+  if (term === reading) return false; // written in kana: it reads as it looks
+  return dictionary.lookupExact(term).some((entry) => entry.term === term && entry.reading !== reading);
 }
 
 /**
