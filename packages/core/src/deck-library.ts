@@ -42,6 +42,12 @@ export interface DeckInfo {
   publishedAt?: number;
   /** Set on a local deck once it has been published, so the app can say so. */
   shared?: boolean;
+  /**
+   * When this record last changed, so two devices holding the same deck can
+   * agree on which copy is the later one. Absent on records written before
+   * decks synced at all, which is the same as "as old as it gets".
+   */
+  updatedAt?: number;
 }
 
 /**
@@ -130,6 +136,55 @@ export function fromSharedCards(shared: SharedCard[], deckId: string, now: numbe
       updatedAt: now,
       ...newCardSchedule(now),
     }));
+}
+
+// ---------------- one account's decks, across its devices ----------------
+
+/** A deck removed on some device, and when — so it stays removed. */
+export interface DeckGone {
+  id: string;
+  at: number;
+}
+
+/**
+ * Fold two devices' deck lists into one.
+ *
+ * Cards have always merged; the *records* of the decks they belong to are
+ * merged here, by the same principle — a deck present on either side is
+ * kept, and where both have it the later record wins. Removals are the part
+ * that needs remembering: without a tombstone, a deck deleted on the phone
+ * is handed straight back by the laptop on the next sync, for ever. A
+ * tombstone loses only to a record written after it, which is what makes
+ * adding a deck back again work.
+ */
+export function mergeDeckLists(
+  local: DeckInfo[],
+  remote: DeckInfo[],
+  goneLocal: DeckGone[] = [],
+  goneRemote: DeckGone[] = [],
+): { decks: DeckInfo[]; gone: DeckGone[] } {
+  const gone = new Map<string, number>();
+  for (const stone of [...goneLocal, ...goneRemote]) {
+    gone.set(stone.id, Math.max(gone.get(stone.id) ?? 0, stone.at));
+  }
+
+  const best = new Map<string, DeckInfo>();
+  for (const deck of [...local, ...remote]) {
+    // The mining deck is never a record: it is every card that has no deck.
+    if (deck.id === MINING_DECK_ID) continue;
+    const removedAt = gone.get(deck.id);
+    if (removedAt !== undefined && (deck.updatedAt ?? 0) <= removedAt) continue;
+    const held = best.get(deck.id);
+    if (!held || (deck.updatedAt ?? 0) > (held.updatedAt ?? 0)) best.set(deck.id, deck);
+  }
+
+  // A deck that came back is no longer removed.
+  for (const id of best.keys()) gone.delete(id);
+
+  return {
+    decks: [...best.values()],
+    gone: [...gone.entries()].map(([id, at]) => ({ id, at })).sort((a, b) => b.at - a.at),
+  };
 }
 
 // ---------------- moving a deck through a document store ----------------

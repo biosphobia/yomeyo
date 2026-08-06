@@ -74,10 +74,39 @@ async function fetchProfile(uid: string): Promise<Profile | null> {
   return snapshot.exists?.() ? asProfile(snapshot.data?.()) : null;
 }
 
+/**
+ * Write the profile, without erasing what this device does not know about.
+ *
+ * `merge` matters more than it looks. The picture is set on one device and
+ * the name changed on another, and a plain write sends whatever this device
+ * happens to hold — which, if its copy predates the picture, quietly deletes
+ * the picture for everybody. Merging means a write can only ever add or
+ * replace the fields it actually carries.
+ */
 async function writeProfile(uid: string, profile: Profile): Promise<void> {
   const { db, storeApi } = await firestoreApi();
-  await storeApi.setDoc(storeApi.doc(db, "profiles", uid), profile);
+  await storeApi.setDoc(storeApi.doc(db, "profiles", uid), profile, { merge: true });
   await setMeta(CACHE_KEY, profile);
+}
+
+/**
+ * Read the profile from the server and keep it.
+ *
+ * The cache is what screens draw from, and it is a cache — the account's
+ * profile lives in the cloud, changes on other devices, and would otherwise
+ * never be seen again on this one. Returns the profile when it differed from
+ * what was held, so a screen can redraw, and null when nothing changed or
+ * there is nobody signed in.
+ */
+export async function refreshProfile(): Promise<Profile | null> {
+  const uid = await signedInUid();
+  if (!uid) return null;
+  const fresh = await fetchProfile(uid).catch(() => null);
+  if (!fresh) return null;
+  const held = await getMeta<Profile>(CACHE_KEY);
+  await setMeta(CACHE_KEY, fresh);
+  const same = held?.name === fresh.name && held?.photo === fresh.photo;
+  return same ? null : fresh;
 }
 
 /**
@@ -157,7 +186,9 @@ export async function changeUsername(rawName: string): Promise<Profile> {
   if (!isValidUsername(name)) {
     throw new Error("3–20 characters: lowercase letters, numbers, - and _ (starting with a letter or number).");
   }
-  const current = await ensureProfile();
+  // From the server's copy, not this device's: a rename built on a stale
+  // cache used to carry a profile with no picture in it.
+  const current = (await refreshProfile()) ?? (await ensureProfile());
   if (current.name === name) return current;
 
   const uid = await signedInUid();
@@ -186,7 +217,7 @@ export async function changeUsername(rawName: string): Promise<Profile> {
  * nothing more — so what is stored is a few kilobytes, not the original.
  */
 export async function setProfilePhoto(file: File): Promise<Profile> {
-  const current = await ensureProfile();
+  const current = (await refreshProfile()) ?? (await ensureProfile());
   const photo = await squareThumbnail(file, 128);
   if (photo.length > 100000) throw new Error("Could not shrink that image. Try another.");
   const next: Profile = { ...current, photo };

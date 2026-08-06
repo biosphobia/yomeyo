@@ -38,6 +38,17 @@ export async function renderDecks(main: HTMLElement, isCurrent: () => boolean = 
   const config = await getFirebaseConfig();
   if (!isCurrent()) return;
 
+  // Which decks this account has is itself something to sync — the cards
+  // arrive on a new device without any record of the decks they belong to,
+  // which is what "no decks added" over six thousand words was. Done while
+  // the screen draws, and the screen is drawn again if it brought anything.
+  void import("./deck-sync.js")
+    .then((mod) => mod.syncDecks())
+    .then((changed) => {
+      if (changed && isCurrent()) void renderDecks(main, isCurrent);
+    })
+    .catch(() => undefined);
+
   main.innerHTML = `
     ${screenHeader("Decks")}
     <div class="segmented" id="deck-tabs">

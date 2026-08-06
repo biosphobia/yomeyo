@@ -4,6 +4,7 @@ import {
   deckOf,
   fromSharedCards,
   MINING_DECK_ID,
+  mergeDeckLists,
   newDeckId,
   orderOf,
   ownerOfDeckId,
@@ -12,6 +13,7 @@ import {
   toSharedCards,
   unpackDeck,
   type Card,
+  type DeckInfo,
   type SharedCard,
 } from "../src/index.js";
 
@@ -73,6 +75,62 @@ describe("where a card sits in its deck", () => {
       expect(middle).toBeLessThan(orderOf(high));
       low = card({ id: "a", order: middle });
     }
+  });
+});
+
+describe("one account's decks across its devices", () => {
+  const deck = (id: string, over: Partial<DeckInfo> = {}): DeckInfo => ({
+    id,
+    name: id,
+    kind: "premade",
+    cardCount: 0,
+    ...over,
+  });
+
+  it("gives a device that has none the ones the account has", () => {
+    // The reported bug: cards arrived, their decks did not, and the screen
+    // said "no decks added" over the top of six thousand words.
+    const merged = mergeDeckLists([], [deck("core2k"), deck("n5")]);
+    expect(merged.decks.map((d) => d.id).sort()).toEqual(["core2k", "n5"]);
+  });
+
+  it("keeps what each side has that the other does not", () => {
+    const merged = mergeDeckLists([deck("here")], [deck("there")]);
+    expect(merged.decks.map((d) => d.id).sort()).toEqual(["here", "there"]);
+  });
+
+  it("takes the later record when both hold the same deck", () => {
+    const merged = mergeDeckLists(
+      [deck("d", { name: "old", updatedAt: 100 })],
+      [deck("d", { name: "new", updatedAt: 200 })],
+    );
+    expect(merged.decks).toHaveLength(1);
+    expect(merged.decks[0].name).toBe("new");
+  });
+
+  it("never resurrects a deck somebody removed", () => {
+    const merged = mergeDeckLists([], [deck("gone", { updatedAt: 100 })], [{ id: "gone", at: 200 }]);
+    expect(merged.decks).toEqual([]);
+    expect(merged.gone).toEqual([{ id: "gone", at: 200 }]);
+  });
+
+  it("lets a deck added back beat its own tombstone", () => {
+    const merged = mergeDeckLists([deck("again", { updatedAt: 300 })], [], [{ id: "again", at: 200 }]);
+    expect(merged.decks.map((d) => d.id)).toEqual(["again"]);
+    expect(merged.gone).toEqual([]);
+  });
+
+  it("carries both devices' removals, newest first", () => {
+    const merged = mergeDeckLists([], [], [{ id: "a", at: 100 }], [{ id: "b", at: 300 }]);
+    expect(merged.gone).toEqual([
+      { id: "b", at: 300 },
+      { id: "a", at: 100 },
+    ]);
+  });
+
+  it("leaves the mining deck out of it — it is not a record", () => {
+    const merged = mergeDeckLists([deck(MINING_DECK_ID)], [deck(MINING_DECK_ID)]);
+    expect(merged.decks).toEqual([]);
   });
 });
 

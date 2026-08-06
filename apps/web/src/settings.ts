@@ -22,7 +22,7 @@ import {
 } from "@yomeyo/core";
 import { getAdvancedMode, setAdvancedMode } from "./prefs.js";
 import { levelState } from "./levels.js";
-import { changeUsername, ensureProfile, setProfilePhoto } from "./profile.js";
+import { changeUsername, ensureProfile, refreshProfile, setProfilePhoto } from "./profile.js";
 import { toast } from "./toast.js";
 import { setUnlockAll, unlockAll, unlockAllNow } from "./unlock.js";
 import { getDeckConfig, resetDeckConfig, saveDeckConfig } from "./deck.js";
@@ -143,6 +143,17 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
     // name, picture and XP live in the local database until there is an
     // account to carry them further.
     const profile = await ensureProfile().catch(() => null);
+    // What was just drawn came from a cache. The profile itself lives in the
+    // cloud and changes on other devices — a picture set on the phone was
+    // never going to appear on the laptop while the laptop only ever read
+    // its own copy. Checked in the background; the screen redraws if it was
+    // out of date, and `refreshProfile` answers null when it was not, so
+    // this cannot loop.
+    void refreshProfile()
+      .then((fresh) => {
+        if (fresh && isCurrent()) void renderSettings(main, isCurrent);
+      })
+      .catch(() => undefined);
     const level = await levelState();
     await unlockAll();
     const isAdmin = account

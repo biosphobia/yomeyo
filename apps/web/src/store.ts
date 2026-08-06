@@ -315,5 +315,9 @@ export async function syncNow(): Promise<SyncOutcome> {
 
   await putCards([...appliedStored, ...cleared]);
   await setMeta(cursorKey, result.cursor);
+  // The cards are only half of it: which decks they belong to travels too.
+  if (mode === "firebase") {
+    await import("./deck-sync.js").then((mod) => mod.syncDecks()).catch(() => undefined);
+  }
   return { pushed: result.pushed, pulled: result.pulled };
 }

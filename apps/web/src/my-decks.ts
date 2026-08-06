@@ -1,4 +1,4 @@
-import { MINING_DECK_ID, deckOf, type Card, type DeckInfo } from "@yomeyo/core";
+import { MINING_DECK_ID, deckOf, type Card, type DeckGone, type DeckInfo } from "@yomeyo/core";
 import { getMeta, onAccountChange, setMeta } from "./db.js";
 import { loadCards } from "./store.js";
 
@@ -12,10 +12,24 @@ import { loadCards } from "./store.js";
  */
 
 const DECKS_KEY = "deckList";
+/**
+ * Decks removed here, so removing one on this device is not undone by the
+ * next sync from a device that still has it. Kept small: a tombstone is only
+ * needed until every device has seen it.
+ */
+const GONE_KEY = "deckTombstones";
+const GONE_MAX = 60;
+
+/** What a deck is called when its record has been lost but its words survive. */
+export const UNNAMED = "Unnamed deck";
+
+export type { DeckGone } from "@yomeyo/core";
 
 let cached: DeckInfo[] | null = null;
+let goneCache: DeckGone[] | null = null;
 onAccountChange(() => {
   cached = null;
+  goneCache = null;
 });
 
 async function stored(): Promise<DeckInfo[]> {
@@ -35,6 +49,28 @@ export async function listDecks(): Promise<DeckInfo[]> {
   for (const card of cards) counts.set(deckOf(card), (counts.get(deckOf(card)) ?? 0) + 1);
 
   const premade = (await stored()).map((deck) => ({ ...deck, cardCount: counts.get(deck.id) ?? 0 }));
+
+  /*
+   * Words whose deck nothing here has a record of.
+   *
+   * Cards have always synced and, until recently, the record of the deck
+   * they belong to did not — so a second device could hold six thousand
+   * words under an id it knew nothing about, and show an empty Decks screen
+   * over the top of them. The record is what carries the name, so these have
+   * none until one arrives; what they do have is the words, and an unnamed
+   * deck you can open and rename beats a deck you cannot see.
+   */
+  const known = new Set([MINING_DECK_ID, ...premade.map((deck) => deck.id)]);
+  const orphans: DeckInfo[] = [...counts.keys()]
+    .filter((id) => !known.has(id))
+    .map((id) => ({
+      id,
+      name: UNNAMED,
+      kind: "premade" as const,
+      cardCount: counts.get(id) ?? 0,
+      description: "Found on this device without a name. Rename it in Edit words.",
+    }));
+
   return [
     {
       id: MINING_DECK_ID,
@@ -44,6 +80,7 @@ export async function listDecks(): Promise<DeckInfo[]> {
       description: "The words you saved yourself while reading.",
     },
     ...premade,
+    ...orphans,
   ];
 }
 
@@ -56,13 +93,35 @@ export async function rememberDeck(deck: DeckInfo): Promise<void> {
   const decks = await stored();
   const at = decks.findIndex((d) => d.id === deck.id);
   const next = decks.slice();
-  if (at >= 0) next[at] = { ...next[at], ...deck };
-  else next.push(deck);
+  // Stamped, so a sync can tell which of two copies of a deck is the later.
+  const stamped = { ...deck, updatedAt: deck.updatedAt ?? Date.now() };
+  if (at >= 0) next[at] = { ...next[at], ...stamped };
+  else next.push(stamped);
   await write(next);
+  // Adding a deck back undoes its removal.
+  const gone = (await tombstones()).filter((t) => t.id !== deck.id);
+  await setMeta(GONE_KEY, gone);
+  goneCache = gone;
 }
 
 export async function forgetDeck(id: string): Promise<void> {
   await write((await stored()).filter((deck) => deck.id !== id));
+  const gone = [{ id, at: Date.now() }, ...(await tombstones()).filter((t) => t.id !== id)].slice(0, GONE_MAX);
+  await setMeta(GONE_KEY, gone);
+  goneCache = gone;
+}
+
+/** Decks removed on this device, newest first. */
+export async function tombstones(): Promise<DeckGone[]> {
+  goneCache ??= (await getMeta<DeckGone[]>(GONE_KEY)) ?? [];
+  return goneCache;
+}
+
+/** Replace the whole record, after a sync has merged it with another device. */
+export async function replaceDecks(decks: DeckInfo[], gone: DeckGone[]): Promise<void> {
+  await write(decks);
+  goneCache = gone.slice(0, GONE_MAX);
+  await setMeta(GONE_KEY, goneCache);
 }
 
 /** Whether this device already has the library deck with this id. */
