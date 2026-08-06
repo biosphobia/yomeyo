@@ -19,6 +19,7 @@
     "node": ">=20"
   },
   "devDependencies": {
-    "gifsicle": "^7.0.1"
+    "gifsicle": "^7.0.1",
+    "sharp": "^0.35.3"
   }
 }

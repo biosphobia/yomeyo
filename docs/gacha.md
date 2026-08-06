@@ -97,15 +97,26 @@ that have been pulled the more varied the answering gets. `text` is that
 gif's own line and travels with it: when this gif comes up, this is the line
 under it, never another prize's.
 
-`image` is a filename in `public/gacha/` (put gifs in `public/gacha/gifs/`),
-a path like `../feedback/correct.gif`, or a full `https://` URL. Any size
-works: reactions are drawn in a box of their own.
+`image` is a filename in `public/gacha/` (put pictures in
+`public/gacha/gifs/`), a path like `../feedback/correct.gif`, or a full
+`https://` URL. Gif, animated webp, png or jpeg all work, and any size does:
+reactions are drawn in a box of their own.
 
-**After adding gifs, run `node scripts/optimize-gifs.mjs`.** It squeezes
-every one to the same budget — longest side 320px, 260 KB — so a tall gif
-and a wide gif cost the same to fetch. Frames are the last thing it touches,
-because a gif with half its frames gone looks worse than one drawn slightly
-smaller. Anything already inside the budget is left alone.
+**Nothing to run.** Every deploy squeezes each reaction to the same budget —
+longest side 320px, 260 KB — so a tall picture and a wide one cost the same
+to fetch on a phone. It happens to the *built* copy, so what you uploaded
+stays in the repository untouched; upload the original and let the build
+worry about the weight. Gifs go through gifsicle, which gives up size and
+palette before it drops frames, because a gif missing half its frames looks
+worse than one drawn slightly smaller; everything else goes through sharp,
+which gives up size before quality for the same reason. An animation keeps
+its frames, its timing and its loop. Anything already inside the budget is
+left alone, and anything that will not fit is deployed as small as it would
+go rather than failing the build.
+
+To see what a deploy will do to a picture, run the same pass by hand:
+`node scripts/shrink-media.mjs path/to/it.webp` — though note that one
+rewrites the file you point it at.
 
 ## Admin pulls
 
