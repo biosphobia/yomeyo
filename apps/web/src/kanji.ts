@@ -1,3 +1,4 @@
+import { screenHeader } from "./screen.js";
 import {
   extractKanji,
   gradeLabel,
@@ -53,7 +54,7 @@ let activeTab: Tab = "mine";
 
 export async function renderKanji(main: HTMLElement, isCurrent: () => boolean = () => true): Promise<void> {
   main.innerHTML = `
-    <h1>Kanji</h1>
+    ${screenHeader("Kanji")}
     <div class="seg" role="tablist">
       <button data-tab="mine" class="seg-btn">From my words</button>
       <button data-tab="joyo" class="seg-btn">Jōyō</button>

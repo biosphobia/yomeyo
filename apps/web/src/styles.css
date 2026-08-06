@@ -49,10 +49,58 @@ h1 {
   margin-bottom: 4px;
 }
 
+/*
+ * A screen's heading: centred, with the purse beside it where there is one.
+ *
+ * Centred on every width. The chip sits to the right of the title without
+ * moving it off centre — it is absolutely placed for exactly that reason, so
+ * "Kana" is in the middle of the screen whether or not there is a balance to
+ * show and whatever that balance has grown to.
+ */
+.screen-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  min-height: 32px;
+}
+
+.screen-head h1 {
+  margin: 0;
+  text-align: center;
+}
+
+.yen-chip {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px solid #ffffff12;
+  color: var(--warn);
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 380px) {
+  .yen-chip {
+    font-size: 0.72rem;
+    padding: 3px 8px;
+  }
+}
+
 .subtitle {
   color: var(--muted);
   font-size: 0.9rem;
   margin-bottom: 20px;
+  /* Under a centred title, and centred with it. */
+  text-align: center;
+  margin-top: -8px;
 }
 
 /* Navigation: a bottom tab bar on phones, a grouped sidebar on wide screens.
@@ -2080,20 +2128,32 @@ button.gram-swap-line:hover {
 .kana-quiz-top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
 }
 
-/* Hearts and the streak stay on one line; the level name gives way first. */
-.kana-quiz-top > :first-child {
-  min-width: 0;
+/*
+ * The level name is the only thing here that may be cut short.
+ *
+ * It used to carry the question count inside it, which meant a narrow phone
+ * ellipsised "Level 1: Multiple choice 3/30" down to the level name alone and
+ * the count — the one number that says how much is left — was never seen.
+ * Everything but the name is now its own child, and nothing but the name
+ * shrinks.
+ */
+.quiz-level {
+  flex: 0 1 auto;
+  min-width: 2.5em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.kana-quiz-top > :nth-child(2) {
+.quiz-right {
   flex: none;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   white-space: nowrap;
 }
 

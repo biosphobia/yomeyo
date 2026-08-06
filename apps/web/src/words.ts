@@ -1,4 +1,5 @@
 import type { Card } from "@yomeyo/core";
+import { screenHeader } from "./screen.js";
 import { getMeta, setMeta } from "./db.js";
 import { liveCards, resetCards, saveCard } from "./store.js";
 import { speakerButton } from "./audio.js";
@@ -34,7 +35,7 @@ export async function renderWords(main: HTMLElement, isCurrent: () => boolean = 
   if (!isCurrent()) return; // a newer render has taken over
 
   main.innerHTML = `
-    <h1>Words</h1>
+    ${screenHeader("Words")}
     <p class="subtitle">${seen.length} seen · ${all.length} word${all.length === 1 ? "" : "s"}</p>
     <div class="row-actions" style="margin-bottom:14px" id="deck-bar">
       <label class="unseen-toggle">

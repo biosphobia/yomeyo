@@ -1,3 +1,4 @@
+import { screenHeader } from "./screen.js";
 import {
   buildQueue,
   deckStats,
@@ -39,7 +40,7 @@ export async function renderReview(main: HTMLElement, isCurrent: () => boolean =
   const newLeft = Math.max(0, config.newPerDay - counts.introduced);
 
   main.innerHTML = `
-    <h1>Review</h1>
+    ${screenHeader("Review")}
     <p class="subtitle">${
       // The scheduler's name is jargon anyone in basic mode never chose to see.
       !advanced

@@ -69,7 +69,10 @@ export async function renderKanaStats(body: HTMLDivElement): Promise<void> {
 
     <div class="card-panel">
       <b>Every kana</b>
-      <div class="glosses">Stars rise with practice and fall on their own.</div>
+      <div class="glosses">Stars rise with practice, fall on a miss, and fade on their own.
+        This is also what decides the questions: the fewer stars, the more often that kana
+        comes up — up to six times as often as one you know. Five stars still appears, so
+        nothing is ever dropped, and if it slips the stars fall and it comes straight back.</div>
       <div id="stat-kana"></div>
     </div>
 

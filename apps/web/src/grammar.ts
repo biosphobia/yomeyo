@@ -1,4 +1,5 @@
 import { getMeta, setMeta } from "./db.js";
+import { screenHeader } from "./screen.js";
 import { speak } from "./audio.js";
 import { cheerBox, preloadReactions, showReaction } from "./feedback.js";
 import {
@@ -59,7 +60,7 @@ export async function renderGrammar(main: HTMLElement, isCurrent: () => boolean 
   if (!isCurrent()) return;
 
   main.innerHTML = `
-    <h1>Grammar</h1>
+    ${screenHeader("Grammar", await yennies())}
     <div class="segmented">
       <button data-view="practice" class="${view === "practice" ? "on" : ""}">Practice</button>
       <button data-view="parse" class="${view === "parse" ? "on" : ""}">Parse</button>

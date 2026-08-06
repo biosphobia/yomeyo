@@ -34,6 +34,16 @@ export type ReactionKind = "correct" | "wrong";
 interface Pop {
   image: string;
   texts: string[];
+  /**
+   * The picture itself, fetched and decoded ahead of time and kept.
+   *
+   * A reaction is on screen for about a second. A gif that starts
+   * downloading when it is shown arrives after it has gone — the line lands,
+   * the frame stays empty, and it reads as "the gif did not come up". So the
+   * element is made once when the drill opens, held here, and moved into the
+   * box when its turn comes: no fetch, no decode, no empty frame.
+   */
+  img?: HTMLImageElement;
 }
 
 type Reactions = Record<ReactionKind, Pop[]>;
@@ -163,14 +173,48 @@ function pick<T>(items: T[]): T {
 }
 
 /**
- * Warm the reactions and their images, so the first one of a run is on screen
- * the instant it is asked for. Safe to call whenever a drill opens.
+ * Warm the reactions and their pictures, so the first one of a run is on
+ * screen the instant it is asked for. Safe to call whenever a drill opens.
  */
 export async function preloadReactions(): Promise<void> {
   const all = await build();
   for (const kind of ["correct", "wrong"] as const) {
-    for (const pop of all[kind]) new Image().src = reactionUrl(pop.image);
+    for (const pop of all[kind]) warm(pop);
   }
+}
+
+/** The picture, made once and kept, ready to be moved into a box. */
+function warm(pop: Pop): HTMLImageElement {
+  if (!pop.img) {
+    const img = new Image();
+    img.alt = "";
+    img.src = reactionUrl(pop.image);
+    // A picture that will not load leaves a hole where the joke was; the line
+    // still lands, so the element is dropped and the pop goes on without it.
+    img.addEventListener("error", () => (pop.img = undefined), { once: true });
+    pop.img = img;
+  }
+  return pop.img;
+}
+
+/** Has this one actually arrived, or is it still coming down the wire? */
+function arrived(pop: Pop): boolean {
+  const img = pop.img;
+  return img !== undefined && img.complete && img.naturalWidth > 0;
+}
+
+/**
+ * Pick one, preferring a picture that is already here.
+ *
+ * The pool is warmed when the drill opens, but a 250 KB gif on a slow phone
+ * can still be in flight when the first answer lands. Rather than show an
+ * empty frame, the choice is made among the ones that have arrived — falling
+ * back to the whole pool only when none has, which is the one case where
+ * there is nothing better to do.
+ */
+function choose(pops: Pop[]): Pop {
+  const here = pops.filter(arrived);
+  return pick(here.length > 0 ? here : pops);
 }
 
 /** The markup a screen drops in where reactions should appear. */
@@ -188,29 +232,21 @@ export function cheerBox(id: string): string {
 export function showReaction(box: HTMLElement | null, kind: ReactionKind): void {
   if (!box) return;
   if (ready) {
-    paint(box, pick(ready[kind]));
+    paint(box, choose(ready[kind]));
     return;
   }
   void build().then((all) => {
-    if (box.isConnected) paint(box, pick(all[kind]));
+    if (box.isConnected) paint(box, choose(all[kind]));
   });
 }
 
 function paint(box: HTMLElement, pop: Pop): void {
-  box.innerHTML = `
-    <img src="${reactionUrl(pop.image).replace(/"/g, "&quot;")}" alt="" />
-    <div class="cheer-text">${escapeHtml(pick(pop.texts))}</div>
-  `;
-  // An image that will not load leaves a grey rectangle where the joke was;
-  // the line under it still lands, so drop the frame and keep the line.
-  const img = box.querySelector("img")!;
-  img.addEventListener("error", () => img.remove(), { once: true });
+  const line = document.createElement("div");
+  line.className = "cheer-text";
+  line.textContent = pick(pop.texts);
+  box.replaceChildren(warm(pop), line);
   box.classList.remove("show");
   // Restart the animation even when the same box pops twice in a row.
   void box.offsetWidth;
   box.classList.add("show");
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }

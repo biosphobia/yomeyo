@@ -6,6 +6,7 @@ import { unlockAll, unlockAllNow } from "./unlock.js";
 import { PER_CORRECT, earnYennies, formatYennies, yennies } from "./yennies.js";
 import { kanaStats, startGameSession, type GameSession, type KanaStat } from "./kana-stats.js";
 import { renderKanaStats } from "./kana-stats-view.js";
+import { screenHeader } from "./screen.js";
 import { assetUrl, loadDictionary } from "./store.js";
 import { KANA_GROUPS, isCorrect, type KanaEntry, type KanaGroup } from "./kana-data.js";
 
@@ -106,9 +107,15 @@ const RECENT_WORDS = 240;
 let streak = 0;
 let bestStreak = 0;
 
+/**
+ * The running streak, for the quiz header.
+ *
+ * Just the number: the best-ever belongs on the Stats screen, and on a phone
+ * "🔥 13 · best 13" was long enough to push the question count off the row.
+ */
 function streakHtml(): string {
-  if (streak === 0 && bestStreak === 0) return "";
-  return `<span class="kana-streak">🔥 ${streak}${bestStreak > 0 ? ` · best ${bestStreak}` : ""}</span>`;
+  if (streak === 0) return "";
+  return `<span class="kana-streak">🔥 ${streak}</span>`;
 }
 
 async function getGame(): Promise<GameState | null> {
@@ -183,7 +190,7 @@ export async function renderKana(main: HTMLElement, isCurrent: () => boolean = (
   if (!isCurrent()) return;
 
   main.innerHTML = `
-    <h1>Kana</h1>
+    ${screenHeader("Kana", await yennies())}
     <div class="segmented">
       <button data-view="play" class="${view === "play" ? "on" : ""}">Play</button>
       <button data-view="stats" class="${view === "stats" ? "on" : ""}">Stats</button>
@@ -633,10 +640,12 @@ async function runLevel(
     body.innerHTML = `
       <div class="card-panel kana-quiz">
         <div class="kana-quiz-top">
-          <span class="glosses">Level ${level}: ${LEVELS[level].name}
-            <span class="kana-count">${done + 1}/${total}</span></span>
-          <span>${streakHtml()} ${useLives ? heartsHtml(health) : ""}</span>
-          <button id="kana-quit" class="quiz-stop" title="Stop" aria-label="Stop">✕</button>
+          <span class="glosses quiz-level">Level ${level}: ${LEVELS[level].name}</span>
+          <span class="kana-count">${done + 1}/${total}</span>
+          <span class="quiz-right">
+            ${streakHtml()}${useLives ? heartsHtml(health) : ""}
+            <button id="kana-quit" class="quiz-stop" title="Stop" aria-label="Stop">✕</button>
+          </span>
         </div>
         <div class="kana-bar"><div class="kana-bar-fill" style="width:${percent}%"></div></div>
         ${timerSec > 0 ? `<div class="kana-timer"><div class="kana-timer-fill" id="kana-timer-fill"></div></div>` : ""}
@@ -801,42 +810,93 @@ async function runLevel(
 // ---------------- which kana this run asks about ----------------
 
 /**
- * The questions for one non-word level: which kana, and how many.
+ * How badly this kana needs to come up, from everything ever answered.
  *
- * Two rules, in this order. Anything never answered comes first — there is
- * no point drilling さ for the fifth time while ぬ has never been seen. After
- * that, weakest mastery first, with enough jitter that two runs in a row are
- * not the same list in the same order.
+ * The whole system in one number. A kana's mastery is a 0–5 rank that rises
+ * with every right answer — by less and less as it climbs — falls hard on a
+ * wrong one, and decays on its own as days pass, faster the lower it already
+ * is. That rank is a live measure of struggle, and this turns it into how
+ * often the kana is asked about:
+ *
+ *   never answered  8.0     the point of the whole exercise
+ *   0 stars         6.0     six times as often as a kana you know
+ *   1 star          4.2
+ *   2 stars         2.8
+ *   3 stars         1.8
+ *   4 stars         1.2
+ *   5 stars         1.0     still there, never dropped
+ *
+ * Squared, so the curve is steep where it matters: a kana you keep missing
+ * crowds out the ones you have, and one that improves quietly steps back
+ * without ever leaving. The floor of 1 is the important half of the promise —
+ * a five-star kana still turns up, so it is never forgotten, and if it is,
+ * decay drops its rank and it comes straight back to the front.
+ *
+ * A miss is felt at once: mastery loses half a star on the spot, so the kana
+ * that just went wrong is markedly likelier in the very next level.
+ */
+function needOf(stat: KanaStat | undefined): number {
+  if (!stat) return 8;
+  const known = Math.max(0, Math.min(5, stat.mastery)) / 5;
+  return 1 + 5 * (1 - known) ** 2;
+}
+
+/**
+ * Draw `count` of them, by need, without repeats.
+ *
+ * Weighted rather than ranked: a straight "weakest first" list is the same
+ * list every time, which teaches the order as much as the kana. This gives
+ * the struggling ones most of the questions while leaving every kana a real
+ * chance of appearing, so no two runs are alike.
+ */
+function drawByNeed(pool: KanaEntry[], weights: Map<string, number>, count: number): KanaEntry[] {
+  const left = [...pool];
+  const out: KanaEntry[] = [];
+  let total = left.reduce((sum, entry) => sum + (weights.get(entry.kana) ?? 1), 0);
+  while (out.length < count && left.length > 0) {
+    let ticket = Math.random() * total;
+    let at = left.length - 1;
+    for (let i = 0; i < left.length; i++) {
+      ticket -= weights.get(left[i].kana) ?? 1;
+      if (ticket <= 0) {
+        at = i;
+        break;
+      }
+    }
+    const [taken] = left.splice(at, 1);
+    total -= weights.get(taken.kana) ?? 1;
+    out.push(taken);
+  }
+  return out;
+}
+
+/**
+ * The questions for one non-word level: which kana, and how many.
  *
  * Within the cap, kana come up twice where there is room, which is what the
  * old "every kana at least twice" was for; a pool small enough for that to
- * fit is unchanged by any of this.
+ * fit is unchanged by any of this. Where there is not room, the questions go
+ * where they are needed — see `needOf`.
  */
 async function kanaItems(pool: KanaEntry[], level: number): Promise<Item[]> {
   const cap = QUESTION_CAP[level] ?? 24;
   const stats = await kanaStats().catch(() => ({}) as Record<string, KanaStat>);
-
-  // Never answered sorts below zero mastery: unmet kana are the point of the
-  // whole exercise. The jitter is smaller than the gap between stars, so it
-  // shuffles equals rather than reordering the ranking.
-  const need = (entry: KanaEntry): number => {
-    const stat = stats[entry.kana];
-    return (stat ? stat.mastery : -1) + Math.random() * 0.4;
-  };
-  const byNeed = [...pool].sort((a, b) => need(a) - need(b));
+  const weights = new Map(pool.map((entry) => [entry.kana, needOf(stats[entry.kana])]));
 
   if (level === 0) {
     // The tutorial: the ones least known, but shown in their natural row
     // order, so it reads as a tour of the syllabary rather than a jumble.
-    const chosen = new Set(byNeed.slice(0, cap).map((entry) => entry.kana));
+    const chosen = new Set(drawByNeed(pool, weights, cap).map((entry) => entry.kana));
     return pool.filter((entry) => chosen.has(entry.kana)).map((entry) => ({ kana: entry.kana, entry }));
   }
 
   const target = Math.min(cap, pool.length * 2);
-  const distinct = byNeed.slice(0, Math.min(pool.length, target));
+  const distinct = drawByNeed(pool, weights, Math.min(pool.length, target));
   const items = distinct.map((entry) => ({ kana: entry.kana, entry }));
-  // Room left over goes to the weakest of the chosen, a second time each.
-  for (const entry of distinct.slice(0, target - distinct.length)) {
+  // Room left over goes round a second time, again by need — so in a small
+  // pool, where everything fits twice over, the hard ones are still the ones
+  // that come up three times.
+  for (const entry of drawByNeed(distinct, weights, target - distinct.length)) {
     items.push({ kana: entry.kana, entry });
   }
   return shuffle(items);
@@ -928,7 +988,12 @@ async function wordsFor(game: GameState, pool: KanaEntry[], count: number): Prom
     // stopped being a filter and started being the whole dictionary. Let it
     // go rather than serve the same handful of leftovers.
     const source = fresh.length >= count * 2 ? fresh : ranked;
-    const chosen = drawByFrequency(source, count);
+    // Words are chosen for being common, then narrowed to the ones that
+    // happen to be spelt with the kana you are struggling with — so the word
+    // levels practise the same weak spots the kana levels do, without ever
+    // reaching for an obscure word to do it.
+    const stats = await kanaStats().catch(() => ({}) as Record<string, KanaStat>);
+    const chosen = byWeakestKana(drawByFrequency(source, count * 3), stats, count);
     await setMeta(RECENT_WORDS_KEY, [...chosen.map(([kana]) => kana), ...recent].slice(0, RECENT_WORDS));
 
     return chosen.map(([kana, word]) => ({
@@ -955,6 +1020,26 @@ async function wordsFor(game: GameState, pool: KanaEntry[], count: number): Prom
  * mostly common ones, but which common ones is different every time, and a
  * long tail still turns up often enough to be worth having.
  */
+/**
+ * Of these words, the ones made of the kana that need the practice.
+ *
+ * The need of a word is the need of its neediest letter, not the average:
+ * a word is worth showing for the one kana in it you keep missing, and
+ * averaging would hide that behind four you know.
+ */
+function byWeakestKana(
+  words: [string, Word][],
+  stats: Record<string, KanaStat>,
+  count: number,
+): [string, Word][] {
+  const scored = words.map((word) => {
+    const need = [...word[0]].reduce((most, kana) => Math.max(most, needOf(stats[kana])), 0);
+    return { word, need };
+  });
+  scored.sort((a, b) => b.need - a.need);
+  return shuffle(scored.slice(0, count).map((s) => s.word));
+}
+
 function drawByFrequency<T>(ranked: T[], count: number): T[] {
   const taken = new Set<number>();
   const out: T[] = [];

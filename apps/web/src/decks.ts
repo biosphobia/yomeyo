@@ -1,4 +1,5 @@
 import { MINING_DECK_ID, fromSharedCards, type DeckInfo } from "@yomeyo/core";
+import { screenHeader } from "./screen.js";
 import { currentAccount, getFirebaseConfig, type AccountInfo } from "./cloud.js";
 import { cardsInDeck, forgetDeck, listDecks, rememberDeck } from "./my-decks.js";
 import { deleteCards, importCards } from "./store.js";
@@ -38,7 +39,7 @@ export async function renderDecks(main: HTMLElement, isCurrent: () => boolean = 
   if (!isCurrent()) return;
 
   main.innerHTML = `
-    <h1>Decks</h1>
+    ${screenHeader("Decks")}
     <div class="segmented" id="deck-tabs">
       <button data-tab="premade" class="${tab === "premade" ? "on" : ""}">Premade</button>
       <button data-tab="mine" class="${tab === "mine" ? "on" : ""}">Mine (${mine.length})</button>

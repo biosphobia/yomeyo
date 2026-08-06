@@ -1,4 +1,5 @@
 import { isJapaneseChar, lookup } from "@yomeyo/core";
+import { screenHeader } from "./screen.js";
 import { activeDictionary } from "./store.js";
 import { closePopup, showLookupPopup } from "./popup.js";
 
@@ -14,7 +15,7 @@ const DEMO_TEXT =
 
 export function renderReader(main: HTMLElement, sharedText?: string): void {
   main.innerHTML = `
-    <h1>Reader</h1>
+    ${screenHeader("Reader")}
     <div class="card-panel">
       <textarea id="reader-input" placeholder="ここに日本語のテキストを貼り付けてください…" lang="ja"></textarea>
       <div class="row-actions">

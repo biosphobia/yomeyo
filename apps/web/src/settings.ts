@@ -1,3 +1,4 @@
+import { screenHeader } from "./screen.js";
 import {
   configIsFromEnv,
   currentAccount,
@@ -60,7 +61,7 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
   if (!isCurrent()) return; // a newer render has taken over
 
   main.innerHTML = `
-    <h1>Settings</h1>
+    ${screenHeader("Settings")}
 
     <div class="card-panel">
       <b>Account</b>

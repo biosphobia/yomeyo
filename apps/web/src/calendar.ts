@@ -1,4 +1,5 @@
 import { dateKey, dayStreak, eventsOf, planForDay, questProgress } from "./quests.js";
+import { screenHeader } from "./screen.js";
 import { levelState } from "./levels.js";
 
 /**
@@ -33,7 +34,7 @@ export async function renderCalendar(main: HTMLElement, isCurrent: () => boolean
   if (!isCurrent()) return;
 
   main.innerHTML = `
-    <h1>Calendar</h1>
+    ${screenHeader("Calendar")}
     <div class="cal-head">
       <button id="cal-prev" class="ghost" aria-label="Previous month">‹</button>
       <div class="cal-month">${MONTHS[viewMonth]} ${viewYear}</div>
