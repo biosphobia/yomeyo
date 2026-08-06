@@ -3686,3 +3686,125 @@ button.gram-swap-line:hover {
   border-color: var(--bad);
   color: var(--bad);
 }
+
+/* ---------------- modifiers and the road to 20 ---------------- */
+
+/* The rule-bend banner under the quiz header. */
+.kana-mod {
+  text-align: center;
+  font-size: 0.78rem;
+  padding: 5px 10px;
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.kana-mod.tier-1,
+.kmap-modline.tier-1 {
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+}
+
+.kana-mod.tier-2,
+.kmap-modline.tier-2 {
+  color: #e58a4b;
+  background: color-mix(in srgb, #e58a4b 12%, transparent);
+}
+
+.kana-mod.tier-3,
+.kmap-modline.tier-3 {
+  color: var(--bad);
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
+}
+
+/* The bend's badge in a map tile's corner. */
+.kmap-mod {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  font-size: 0.8rem;
+  border-radius: 50%;
+  padding: 1px 3px;
+  background: var(--panel-2);
+  border: 1px solid #ffffff22;
+}
+
+.kmap-node {
+  position: relative;
+}
+
+/* The bend's line on a fork-choice tile. */
+.kmap-modline {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  margin-top: 4px;
+}
+
+/* The face-down tile past the end of the road. */
+.kmap-boss {
+  border-style: dashed;
+}
+
+/* Missing piece: the hole in the word. */
+.kana-gap {
+  color: var(--accent);
+  margin: 0 2px;
+}
+
+/* Fading ink: the big text dissolves as it is read. Lifted with the answer. */
+.kana-fading {
+  animation: kana-fade-out 4.5s linear forwards;
+}
+
+@keyframes kana-fade-out {
+  0% {
+    opacity: 1;
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* One listen: the ear where the replay button would be. */
+.kana-hear-once {
+  display: grid;
+  place-items: center;
+  margin: 14px auto;
+  font-size: 2rem;
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: var(--panel-2);
+  border: 1px dashed #ffffff2a;
+  opacity: 0.7;
+}
+
+/* Sort race: the kana is a card in the hand. */
+.kana-draggable {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.kana-draggable.is-dragging {
+  opacity: 0.35;
+}
+
+.kana-drag-float {
+  position: fixed;
+  z-index: 40;
+  pointer-events: none;
+  opacity: 0.95;
+  text-align: center;
+  text-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+}
+
+.kana-buckets button.is-target {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
