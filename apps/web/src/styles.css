@@ -3448,3 +3448,234 @@ button.gram-swap-line:hover {
   color: var(--muted);
   font-size: 0.85rem;
 }
+
+/* ---------------- the kana road map ----------------
+   The ladder drawn as a road of tiles: cleared behind, the open stage
+   glowing ahead, forks stacked vertically. Scrolls sideways and keeps the
+   frontier in view. */
+
+.kmap {
+  overflow-x: auto;
+  margin-bottom: 16px;
+  padding: 4px 2px 8px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.kmap-inner {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: 26px;
+  min-height: 210px;
+  width: max-content;
+  padding: 4px 8px;
+}
+
+.kmap-links {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.kmap-links path {
+  fill: none;
+  stroke: #ffffff1c;
+  stroke-width: 3;
+}
+
+.kmap-links path.walked {
+  stroke: color-mix(in srgb, var(--good) 70%, transparent);
+}
+
+.kmap-links path.leading {
+  stroke: color-mix(in srgb, var(--accent) 60%, transparent);
+  stroke-dasharray: 6 5;
+}
+
+.kmap-stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  z-index: 1;
+}
+
+.kmap-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  width: 88px;
+  padding: 8px 6px;
+  border-radius: 12px;
+  background: var(--panel);
+  border: 1px solid #ffffff1c;
+  color: var(--text);
+  font-size: 0.72rem;
+}
+
+.kmap-icon {
+  font-size: 1.25rem;
+}
+
+.kmap-num {
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 700;
+}
+
+.kmap-name {
+  font-weight: 600;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.kmap-node.done {
+  border-color: color-mix(in srgb, var(--good) 55%, transparent);
+  background: color-mix(in srgb, var(--good) 10%, var(--panel));
+}
+
+.kmap-node.done .kmap-num {
+  color: var(--good);
+}
+
+.kmap-node.done-alt {
+  opacity: 0.75;
+}
+
+.kmap-node.open {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 35%, transparent);
+  animation: kmap-glow 1.8s ease-in-out infinite;
+}
+
+@keyframes kmap-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 25%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 50%, transparent);
+  }
+}
+
+.kmap-node.locked {
+  opacity: 0.32;
+  filter: grayscale(0.6);
+}
+
+/* The fork chooser on a level-clear screen: the same tiles, but roomier,
+   with the one-line pitch under each name. */
+.kmap-fork {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.kmap-fork .kmap-node {
+  width: 150px;
+  padding: 12px 10px;
+}
+
+.kmap-detail {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 0.68rem;
+  line-height: 1.25;
+  margin-top: 3px;
+}
+
+/* ---------------- the new kana mechanics ---------------- */
+
+/* Flash: the kana veils itself after a blink. The box keeps its size so
+   nothing jumps when the glyph goes. */
+.kana-big.kana-veiled {
+  color: transparent;
+  text-shadow: 0 0 26px color-mix(in srgb, var(--text) 55%, transparent);
+}
+
+/* Echo and simon: the speaker where the kana would be. */
+.kana-hear {
+  display: block;
+  margin: 14px auto;
+  font-size: 2rem;
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: var(--panel-2);
+  border: 1px solid #ffffff1c;
+}
+
+.kana-hear:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+/* Echo's kana options and the simon/sharpshooter boards share tile styling. */
+.kana-glyph-choices button,
+.kana-grid button {
+  font-size: 1.35rem;
+  min-width: 56px;
+}
+
+.kana-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(52px, 1fr));
+  gap: 8px;
+  max-width: 340px;
+  margin: 0 auto;
+}
+
+.kana-simon-dots {
+  display: flex;
+  justify-content: center;
+  gap: 7px;
+  margin-bottom: 10px;
+}
+
+.kana-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ffffff22;
+}
+
+.kana-dot.on {
+  background: var(--good);
+}
+
+/* Sort race: three big buckets. */
+.kana-buckets {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.kana-buckets button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 88px;
+  padding: 12px 10px;
+  font-size: 1rem;
+  font-weight: 700;
+  background: var(--panel-2);
+  border: 1px solid #ffffff1c;
+  border-radius: 12px;
+  color: var(--text);
+}
+
+.kana-buckets button.right {
+  border-color: var(--good);
+  color: var(--good);
+}
+
+.kana-buckets button.wrong {
+  border-color: var(--bad);
+  color: var(--bad);
+}
