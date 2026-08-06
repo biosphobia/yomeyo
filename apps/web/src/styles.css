@@ -56,7 +56,10 @@ h1 {
 }
 
 /* Navigation: a bottom tab bar on phones, a grouped sidebar on wide screens.
-   Same markup for both; the groups flatten away on the phone bar. */
+   Same markup for both; the groups flatten away on the phone bar, which
+   carries four destinations and a More button — nine tabs across a phone is
+   44px each, narrower than the finger aiming at them. Everything else is in
+   the sheet the More button opens. */
 nav {
   position: fixed;
   bottom: 0;
@@ -67,7 +70,8 @@ nav {
   backdrop-filter: blur(12px);
   border-top: 1px solid #ffffff14;
   padding-bottom: env(safe-area-inset-bottom);
-  z-index: 50;
+  /* Above the sheet it opens, so the bar never disappears under it. */
+  z-index: 70;
 }
 
 nav .nav-group {
@@ -97,6 +101,144 @@ nav a .icon {
 
 nav a.active {
   color: var(--accent);
+}
+
+/* The phone bar: four destinations, then More. */
+nav a:not([data-primary]) {
+  display: none;
+}
+
+.nav-more {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 12px 0 10px;
+  border-radius: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.nav-more .icon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.nav-more.active {
+  color: var(--accent);
+}
+
+/* The sheet: every destination, grouped as the sidebar groups them. */
+body.sheet-open {
+  overflow: hidden;
+}
+
+.nav-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+}
+
+.nav-sheet[hidden] {
+  display: none;
+}
+
+.nav-sheet-scrim {
+  position: absolute;
+  inset: 0;
+  background: #000000a8;
+  animation: sheet-fade 0.16s ease-out;
+}
+
+.nav-sheet-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 80dvh;
+  overflow-y: auto;
+  background: color-mix(in srgb, var(--panel) 96%, black);
+  border-top: 1px solid #ffffff18;
+  border-radius: 20px 20px 0 0;
+  /* Clear of the bar, which stays above the sheet: More opened it, so More
+     is where a thumb goes to close it again. */
+  padding: 8px 14px calc(74px + env(safe-area-inset-bottom));
+  animation: sheet-rise 0.2s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.nav-sheet-grip {
+  width: 40px;
+  height: 4px;
+  margin: 4px auto 12px;
+  border-radius: 2px;
+  background: #ffffff2e;
+}
+
+.nav-sheet-group + .nav-sheet-group {
+  margin-top: 14px;
+}
+
+.nav-sheet-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+  opacity: 0.8;
+  padding: 0 4px 8px;
+}
+
+.nav-sheet-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 8px;
+}
+
+.nav-sheet a.nav-sheet-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 14px 6px;
+  border-radius: 14px;
+  background: var(--panel-2);
+  border: 1px solid #ffffff0d;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 0.82rem;
+}
+
+.nav-sheet a.nav-sheet-item .icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.nav-sheet a.nav-sheet-item.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+@keyframes sheet-rise {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes sheet-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-sheet-panel,
+  .nav-sheet-scrim {
+    animation: none;
+  }
 }
 
 @media (min-width: 860px) {
@@ -157,6 +299,17 @@ nav a.active {
   nav .nav-tail {
     margin-top: auto;
     margin-bottom: 0;
+  }
+
+  /* Room for everything: the sidebar shows all nine, so neither the More
+     button nor the sheet it opens has anything to do. */
+  .nav-more,
+  .nav-sheet {
+    display: none !important;
+  }
+
+  nav a:not([data-primary]) {
+    display: flex;
   }
 
   nav a {
@@ -1763,6 +1916,17 @@ button.gram-swap-line:hover {
   margin-left: 8px;
 }
 
+/* How far through the level. A miss puts its question back, so the total
+   can grow — which is the honest thing for it to do. */
+.kana-count {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------------- the Calendar ---------------- */
 
 .cal-head {
@@ -2621,12 +2785,14 @@ button.gram-swap-line:hover {
   color: var(--accent);
 }
 
-/* Seven tabs on a narrow phone: let the labels shrink rather than wrap. */
+/* Five slots on a narrow phone: let the labels shrink rather than wrap. */
 @media (max-width: 400px) {
-  nav a {
-    font-size: 0.68rem;
+  nav a,
+  .nav-more {
+    font-size: 0.7rem;
   }
-  nav a .icon {
+  nav a .icon,
+  .nav-more .icon {
     font-size: 1.15rem;
   }
 }

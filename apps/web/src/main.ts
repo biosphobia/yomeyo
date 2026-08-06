@@ -15,10 +15,12 @@ import { completeRedirectSignIn, currentAccount, getFirebaseConfig } from "./clo
 import { restoreAccount } from "./accounts.js";
 import { activeAccount, onAccountChange } from "./db.js";
 import { toast } from "./toast.js";
+import { markNavActive, mountNav, navHtml, navSheetHtml } from "./nav.js";
 
 /**
  * Hash-routed SPA shell. The nav is a bottom tab bar on phones and a grouped
- * sidebar on wide screens; the same markup serves both, CSS does the rest.
+ * sidebar on wide screens; the same list of destinations serves both, and on
+ * the phone the ones that do not fit live one tap away in a sheet.
  */
 
 // Before anything reads storage: point it at whoever was signed in last time,
@@ -32,28 +34,11 @@ await import("./skins.js").then((mod) => mod.applySkin()).catch(() => undefined)
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 app.innerHTML = `
-  <nav>
-    <div class="brand" aria-hidden="true">読めよ<span>Yomeyo</span></div>
-    <div class="nav-group" data-label="Study">
-      <a href="#review" data-route="review"><span class="icon">🗂️</span>Review</a>
-      <a href="#words" data-route="words"><span class="icon">📚</span>Words</a>
-      <a href="#decks" data-route="decks"><span class="icon">📦</span>Decks</a>
-    </div>
-    <div class="nav-group" data-label="Learn">
-      <a href="#kana" data-route="kana"><span class="icon">あ</span>Kana</a>
-      <a href="#grammar" data-route="grammar"><span class="icon">文</span>Grammar</a>
-      <a href="#kanji" data-route="kanji"><span class="icon">漢</span>Kanji</a>
-    </div>
-    <div class="nav-group" data-label="Plan">
-      <a href="#calendar" data-route="calendar"><span class="icon">📅</span>Calendar</a>
-      <a href="#gacha" data-route="gacha"><span class="icon">🎁</span>Gacha</a>
-    </div>
-    <div class="nav-group nav-tail">
-      <a href="#settings" data-route="settings"><span class="icon">⚙️</span>Settings</a>
-    </div>
-  </nav>
+  ${navHtml()}
   <main id="main"></main>
+  ${navSheetHtml()}
 `;
+mountNav(app);
 
 const main = document.querySelector<HTMLElement>("#main")!;
 
@@ -88,9 +73,7 @@ function route(): void {
   const isCurrent = () => gen === generation;
 
   const hash = location.hash.replace("#", "") || "review";
-  document.querySelectorAll("nav a").forEach((a) => {
-    a.classList.toggle("active", (a as HTMLAnchorElement).dataset.route === hash);
-  });
+  markNavActive(app, hash);
   switch (hash) {
     // No tab leads here any more: the Reader exists only for text shared to
     // the app from Android, which still lands on this route.

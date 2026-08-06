@@ -109,19 +109,30 @@ function clip_urls($payload): array {
 
 // Recorded voices first; synthesis only when nobody has recorded the word.
 //
+// The two want different things asked of them, which is why each source set
+// below carries the term to ask it with:
+//
+//  - A recording is found by the written form. 意向 and 移行 are both いこう
+//    and are recorded separately, so asking for the bare reading invites
+//    whichever of them the service happens to list first.
+//  - Synthesis is the opposite: handed 一日 an engine says *ichinichi*, and
+//    the word on screen may well be ついたち. Handed the reading it can only
+//    say the reading, which is by definition the sound being taught.
+//
 // A single kana asks for `mode=tts` instead. Recordings of one letter are
 // people saying it however they chose — a name, a word it starts, a whole
 // sentence — and a learner drilling あ needs the sound itself, said the same
-// way every time. Whole words are the opposite: a real speaker beats
-// synthesis, so they take the default chain.
+// way every time.
 $synthesis = "openai,elevenlabs,polly";
-$sourceSets = (($_GET["mode"] ?? "") === "tts") ? [$synthesis] : ["forvo", $synthesis];
+$sourceSets = (($_GET["mode"] ?? "") === "tts")
+  ? [[$synthesis, $reading]]
+  : [["forvo", $term], [$synthesis, $reading]];
 $listBase = "https://allaudio.animecards.site/audio/list?language=ja";
 
-foreach ($sourceSets as $sources) {
+foreach ($sourceSets as [$sources, $asked]) {
   $listUrl = $listBase
     . "&sources=" . rawurlencode($sources)
-    . "&term=" . rawurlencode($term)
+    . "&term=" . rawurlencode($asked)
     . "&reading=" . rawurlencode($reading)
     . "&apiKey=" . rawurlencode($key);
   $list = fetch_bytes($listUrl, 1000000);

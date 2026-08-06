@@ -1,10 +1,10 @@
 import { getMeta, setMeta } from "./db.js";
-import { playKana, playWord, prefetchAudio } from "./audio.js";
+import { playKana, playWord, prefetchAudio, spokenKana } from "./audio.js";
 import { cheerBox, preloadReactions, showReaction } from "./feedback.js";
 import { recordQuestEvents } from "./quests.js";
 import { unlockAll, unlockAllNow } from "./unlock.js";
 import { PER_CORRECT, earnYennies, formatYennies, yennies } from "./yennies.js";
-import { startGameSession, type GameSession } from "./kana-stats.js";
+import { kanaStats, startGameSession, type GameSession, type KanaStat } from "./kana-stats.js";
 import { renderKanaStats } from "./kana-stats-view.js";
 import { assetUrl, loadDictionary } from "./store.js";
 import { KANA_GROUPS, isCorrect, type KanaEntry, type KanaGroup } from "./kana-data.js";
@@ -16,19 +16,23 @@ import { KANA_GROUPS, isCorrect, type KanaEntry, type KanaGroup } from "./kana-d
  * either syllabary. Then the game runs through levels of increasing
  * difficulty over exactly that pool:
  *
- *   0  learn      — meet each kana once, with its sound
- *   1  choice     — multiple choice, three options, every kana twice
+ *   0  learn      — meet the kana, with their sounds
+ *   1  choice     — multiple choice, three options
  *   2  type       — type the romaji
  *   3  lives      — typing, five hearts, a miss costs one
  *   4  timed      — typing, hearts, and a clock
  *   5  words      — short dictionary words spelt only with the chosen kana
- *   6  words+time — the same, on the clock
+ *   6  words+time — different words again, on the clock
  *
  * A missed item goes back into the queue, so a level is only done when
  * everything has been answered correctly; the progress bar shows how far
  * that is. Completing a level unlocks the next and restores one heart.
  * Every answer is spoken, and right/wrong pop the reactions from
  * `public/feedback/`, which stay editable on GitHub.
+ *
+ * No two runs of a level are the same. Which kana it asks about is drawn
+ * from the permanent record, weakest first; which words it asks are drawn
+ * fresh from the dictionary every time.
  */
 
 const GAME_KEY = "kanaGame";
@@ -52,14 +56,31 @@ const MAX_HEALTH = 5;
  */
 const RESTART_AT = 1;
 const LEVELS = [
-  { name: "Learn", detail: "Meet each kana once, with its sound." },
-  { name: "Multiple choice", detail: "Three options; every kana at least twice." },
+  { name: "Learn", detail: "Meet your kana, the ones you know least first." },
+  { name: "Multiple choice", detail: "Three options." },
   { name: "Type it", detail: "Type the romaji yourself." },
   { name: "Lives", detail: "Typing, five hearts. A miss costs one." },
   { name: "Timed", detail: "Hearts, and six seconds a question." },
   { name: "Real words", detail: "Short dictionary words from your kana. No clock." },
-  { name: "Words, timed", detail: "The words again, ten seconds each." },
+  { name: "Words, timed", detail: "Different words, ten seconds each." },
 ] as const;
+
+/**
+ * How many questions a level asks, by level.
+ *
+ * "Every kana at least twice" is honest for a row or two and punishing for a
+ * whole syllabary: all of hiragana and katakana is 92 kana, so 184 questions,
+ * four levels running. Nobody finishes that, and a drill nobody finishes
+ * teaches nothing.
+ *
+ * So a level is capped, and the questions inside the cap go to the kana this
+ * device knows least — the permanent record already knows which those are.
+ * A small pool is unaffected: eight kana still come up twice each. A large
+ * one is practised across sittings instead of all in one, which is how
+ * practice works anyway. The later levels are shorter than the earlier ones
+ * because they ask more of you per question.
+ */
+const QUESTION_CAP = [36, 30, 28, 24, 20] as const;
 
 /**
  * The correct-answer streak: consecutive right answers, across levels,
@@ -69,15 +90,19 @@ const LEVELS = [
 const BEST_STREAK_KEY = "kanaBestStreak";
 
 /**
- * The word levels draw from the dictionary afresh each time.
+ * The word levels draw from the dictionary afresh every single time.
  *
- * How many words a game asks, how deep into the frequency list it may reach
- * for them, and how many of the last games' words it tries to avoid.
+ * Both word levels run their own search and their own draw, so the words on
+ * level 6 are not the words from level 5 a minute earlier, and neither is
+ * what you saw last night. `WORD_CANDIDATES` is how deep into the frequency
+ * list a draw may reach — deep enough that fourteen words are a real choice
+ * rather than a shuffle of the same three hundred — and the recent list is
+ * long enough to hold several games' worth out of the way.
  */
-const WORDS_PER_GAME = 14;
-const WORD_POOL = 300;
+const WORDS_PER_LEVEL: Record<number, number> = { 5: 14, 6: 12 };
+const WORD_CANDIDATES = 1200;
 const RECENT_WORDS_KEY = "kanaRecentWords";
-const RECENT_WORDS = 60;
+const RECENT_WORDS = 240;
 let streak = 0;
 let bestStreak = 0;
 
@@ -354,7 +379,14 @@ interface Item {
  * reliably the right one, so those are read out instead.
  */
 function audioFor(item: Item): { term: string; reading: string; mode?: "tts" } {
-  if (item.entry || item.ambiguous) return { term: item.kana, reading: item.kana, mode: "tts" };
+  // A lone kana is asked for by the spelling that makes an engine say it —
+  // handed は on its own, one says "wa". `playKana` does the same, so the
+  // clip warmed here is the clip played.
+  if (item.entry) {
+    const text = spokenKana(item.kana);
+    return { term: text, reading: text, mode: "tts" };
+  }
+  if (item.ambiguous) return { term: item.kana, reading: item.kana, mode: "tts" };
   return { term: item.term ?? item.kana, reading: item.kana };
 }
 
@@ -408,7 +440,7 @@ async function runLevel(
       const line = body.querySelector("#kana-loading");
       if (line) line.textContent = "Downloading the dictionary… this happens once.";
     }, 4000);
-    const words = await wordsFor(pool);
+    const words = await wordsFor(game, pool, WORDS_PER_LEVEL[level] ?? 12);
     clearTimeout(slow);
     if (left || !isCurrent() || !body.isConnected) return;
     if (words === null || words.length < 5) {
@@ -436,11 +468,8 @@ async function runLevel(
       return;
     }
     items = words;
-  } else if (learning) {
-    items = pool.map((entry) => ({ kana: entry.kana, entry }));
   } else {
-    // Every kana at least twice, in random order.
-    items = shuffle(pool.flatMap((entry) => [{ kana: entry.kana, entry }, { kana: entry.kana, entry }]));
+    items = await kanaItems(pool, level);
   }
 
   const queue = learning ? [...items] : shuffle([...items]);
@@ -465,7 +494,7 @@ async function runLevel(
     : startGameSession({
         level,
         groups: game.groups,
-        poolSize: level >= 5 ? items.length : pool.length,
+        poolSize: level >= 5 ? items.length : new Set(items.map((item) => item.kana)).size,
         words: level >= 5,
       });
 
@@ -600,7 +629,8 @@ async function runLevel(
     body.innerHTML = `
       <div class="card-panel kana-quiz">
         <div class="kana-quiz-top">
-          <span class="glosses">Level ${level}: ${LEVELS[level].name}</span>
+          <span class="glosses">Level ${level}: ${LEVELS[level].name}
+            <span class="kana-count">${done + 1}/${total}</span></span>
           <span>${streakHtml()} ${useLives ? heartsHtml(health) : ""}</span>
           <button id="kana-quit" class="quiz-stop" title="Stop" aria-label="Stop">✕</button>
         </div>
@@ -764,6 +794,50 @@ async function runLevel(
   draw();
 }
 
+// ---------------- which kana this run asks about ----------------
+
+/**
+ * The questions for one non-word level: which kana, and how many.
+ *
+ * Two rules, in this order. Anything never answered comes first — there is
+ * no point drilling さ for the fifth time while ぬ has never been seen. After
+ * that, weakest mastery first, with enough jitter that two runs in a row are
+ * not the same list in the same order.
+ *
+ * Within the cap, kana come up twice where there is room, which is what the
+ * old "every kana at least twice" was for; a pool small enough for that to
+ * fit is unchanged by any of this.
+ */
+async function kanaItems(pool: KanaEntry[], level: number): Promise<Item[]> {
+  const cap = QUESTION_CAP[level] ?? 24;
+  const stats = await kanaStats().catch(() => ({}) as Record<string, KanaStat>);
+
+  // Never answered sorts below zero mastery: unmet kana are the point of the
+  // whole exercise. The jitter is smaller than the gap between stars, so it
+  // shuffles equals rather than reordering the ranking.
+  const need = (entry: KanaEntry): number => {
+    const stat = stats[entry.kana];
+    return (stat ? stat.mastery : -1) + Math.random() * 0.4;
+  };
+  const byNeed = [...pool].sort((a, b) => need(a) - need(b));
+
+  if (level === 0) {
+    // The tutorial: the ones least known, but shown in their natural row
+    // order, so it reads as a tour of the syllabary rather than a jumble.
+    const chosen = new Set(byNeed.slice(0, cap).map((entry) => entry.kana));
+    return pool.filter((entry) => chosen.has(entry.kana)).map((entry) => ({ kana: entry.kana, entry }));
+  }
+
+  const target = Math.min(cap, pool.length * 2);
+  const distinct = byNeed.slice(0, Math.min(pool.length, target));
+  const items = distinct.map((entry) => ({ kana: entry.kana, entry }));
+  // Room left over goes to the weakest of the chosen, a second time each.
+  for (const entry of distinct.slice(0, target - distinct.length)) {
+    items.push({ kana: entry.kana, entry });
+  }
+  return shuffle(items);
+}
+
 /** Three romaji options: the right one and two lookalikes from the pool. */
 function choicesFor(item: Item, pool: KanaEntry[]): string[] {
   const correct = itemAnswer(item);
@@ -783,53 +857,74 @@ function choicesFor(item: Item, pool: KanaEntry[]): string[] {
 
 // ---------------- words from the dictionary ----------------
 
+interface Word {
+  /** The commonest way this reading is written, for finding a recording. */
+  term: string;
+  gloss: string;
+  freq: number;
+  /** Every distinct written form with this reading — homophones. */
+  forms: Set<string>;
+}
+
+/**
+ * Everything the chosen kana can spell, worked out once per pool.
+ *
+ * The search walks the dictionary's whole key index, which is fast but not
+ * free, and both word levels want the same answer. Level 6 therefore starts
+ * on the list level 5 built — and draws a different fourteen words out of it.
+ */
+let candidateCache: { groups: string; words: [string, Word][] } | null = null;
+
 /**
  * Short common words written only with the chosen kana, with a short
  * English meaning each. Null when the dictionary cannot be loaded.
+ *
+ * `count` words are drawn at random from the whole candidate list, leaning
+ * towards the commoner end of it rather than taking a fixed slice off the
+ * top: a beginner reading their first hiragana does not need an obscure
+ * botanical term, but neither do they need the same fourteen words every
+ * night. Whatever the last few games used is held back on top of that.
  */
-async function wordsFor(pool: KanaEntry[]): Promise<Item[] | null> {
+async function wordsFor(game: GameState, pool: KanaEntry[], count: number): Promise<Item[] | null> {
   const allowed = new Set(pool.flatMap((entry) => [...entry.kana]));
+  const signature = [...game.groups].sort().join(",");
   try {
-    const dictionary = await loadDictionary();
-
-    interface Word {
-      /** The commonest way this reading is written, for finding a recording. */
-      term: string;
-      gloss: string;
-      freq: number;
-      /** Every distinct written form with this reading — homophones. */
-      forms: Set<string>;
-    }
-    const best = new Map<string, Word>();
-    for (const entry of dictionary.wordsMadeOf(allowed, 2, 4)) {
-      const gloss = entry.glosses[0];
-      if (!gloss || gloss.length > 42) continue;
-      const freq = entry.freq ?? Number.MAX_SAFE_INTEGER;
-      const found = best.get(entry.reading);
-      if (!found) {
-        best.set(entry.reading, { term: entry.term, gloss, freq, forms: new Set([entry.term]) });
-        continue;
+    let ranked = candidateCache?.groups === signature ? candidateCache.words : null;
+    if (!ranked) {
+      const dictionary = await loadDictionary();
+      const best = new Map<string, Word>();
+      for (const entry of dictionary.wordsMadeOf(allowed, 2, 4)) {
+        const gloss = entry.glosses[0];
+        if (!gloss || gloss.length > 42) continue;
+        const freq = entry.freq ?? Number.MAX_SAFE_INTEGER;
+        const found = best.get(entry.reading);
+        if (!found) {
+          best.set(entry.reading, { term: entry.term, gloss, freq, forms: new Set([entry.term]) });
+          continue;
+        }
+        found.forms.add(entry.term);
+        if (freq < found.freq) {
+          found.freq = freq;
+          found.gloss = gloss;
+          found.term = entry.term;
+        }
       }
-      found.forms.add(entry.term);
-      if (freq < found.freq) {
-        found.freq = freq;
-        found.gloss = gloss;
-        found.term = entry.term;
-      }
+      ranked = [...best.entries()]
+        .sort((a, b) => a[1].freq - b[1].freq)
+        .slice(0, WORD_CANDIDATES);
+      candidateCache = { groups: signature, words: ranked };
     }
-
-    // The commonest words these kana can spell. Sampling from the whole of
-    // JMdict would be random in the worst sense — a beginner reading their
-    // first hiragana does not need an obscure botanical term.
-    const ranked = [...best.entries()].sort((a, b) => a[1].freq - b[1].freq).slice(0, WORD_POOL);
     if (ranked.length === 0) return [];
 
-    // Drawn fresh every game, and biased away from the last few games, so
-    // the level teaches reading rather than the answers to fourteen cards.
+    // Held back: the last few games' words, and — because this is called once
+    // per word level — the ones the level before it just used.
     const recent = new Set((await getMeta<string[]>(RECENT_WORDS_KEY)) ?? []);
-    const unseen = ranked.filter(([kana]) => !recent.has(kana));
-    const source = unseen.length >= WORDS_PER_GAME ? unseen : ranked;
-    const chosen = shuffle(source).slice(0, WORDS_PER_GAME);
+    const fresh = ranked.filter(([kana]) => !recent.has(kana));
+    // Once nearly everything has been seen recently, the recent list has
+    // stopped being a filter and started being the whole dictionary. Let it
+    // go rather than serve the same handful of leftovers.
+    const source = fresh.length >= count * 2 ? fresh : ranked;
+    const chosen = drawByFrequency(source, count);
     await setMeta(RECENT_WORDS_KEY, [...chosen.map(([kana]) => kana), ...recent].slice(0, RECENT_WORDS));
 
     return chosen.map(([kana, word]) => ({
@@ -846,6 +941,29 @@ async function wordsFor(pool: KanaEntry[]): Promise<Item[] | null> {
     // caller says so on screen; what it must never do is wait forever.
     return null;
   }
+}
+
+/**
+ * Draw `count` distinct words from a list ordered commonest first.
+ *
+ * Squaring a uniform random number leans the draw towards the front of the
+ * list without ever fencing off the back of it: the words that come up are
+ * mostly common ones, but which common ones is different every time, and a
+ * long tail still turns up often enough to be worth having.
+ */
+function drawByFrequency<T>(ranked: T[], count: number): T[] {
+  const taken = new Set<number>();
+  const out: T[] = [];
+  const wanted = Math.min(count, ranked.length);
+  while (out.length < wanted) {
+    let at = Math.min(ranked.length - 1, Math.floor(Math.random() ** 2 * ranked.length));
+    // Already drawn: walk on to the next free one rather than re-rolling for
+    // ever as the list fills up.
+    while (taken.has(at)) at = (at + 1) % ranked.length;
+    taken.add(at);
+    out.push(ranked[at]);
+  }
+  return shuffle(out);
 }
 
 // ---------------- helpers ----------------

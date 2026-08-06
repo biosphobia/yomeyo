@@ -49,6 +49,9 @@ const DEVICE_KEYS = new Set([
   "extensionToken",
   "extraDictionaries",
   "advancedMode",
+  // Which generation of the audio cache is on this device. It describes the
+  // cache beside it, so it belongs with it rather than with a person.
+  "audioCacheVersion",
 ]);
 const DEVICE_PREFIXES = ["dictData:", "audioClip:"];
 
@@ -234,6 +237,27 @@ export async function setMeta(key: string, value: unknown): Promise<void> {
   const tx = db.transaction("meta", "readwrite");
   tx.objectStore("meta").put(value, key);
   await txDone(tx);
+}
+
+/**
+ * Delete every meta entry whose key starts with `prefix`; returns how many.
+ *
+ * For throwing away a whole cache at once — the audio clips, when what was
+ * cached turns out to have been fetched the wrong way.
+ */
+export async function deleteMetaByPrefix(prefix: string): Promise<number> {
+  const db = await openNamed(metaDbName(prefix));
+  const range = IDBKeyRange.bound(prefix, `${prefix}￿`);
+  const read = db.transaction("meta", "readonly");
+  const keys = await reqResult(
+    read.objectStore("meta").getAllKeys(range) as IDBRequest<IDBValidKey[]>,
+  );
+  if (keys.length === 0) return 0;
+  const tx = db.transaction("meta", "readwrite");
+  const store = tx.objectStore("meta");
+  for (const key of keys) store.delete(key);
+  await txDone(tx);
+  return keys.length;
 }
 
 export async function deleteMeta(key: string): Promise<void> {

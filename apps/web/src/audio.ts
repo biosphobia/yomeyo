@@ -1,5 +1,5 @@
 import { onTap } from "@yomeyo/core";
-import { getMeta, setMeta } from "./db.js";
+import { deleteMetaByPrefix, getMeta, setMeta } from "./db.js";
 import { getMedia } from "./media.js";
 import { assetUrl } from "./store.js";
 
@@ -24,9 +24,56 @@ import { assetUrl } from "./store.js";
 /** `tts` asks for synthesis alone; `voice` prefers a real recording. */
 type Mode = "voice" | "tts";
 
+/**
+ * The generation of the clip cache.
+ *
+ * Clips are cached for ever, which is right while they are right and a trap
+ * when they are not: a clip fetched the wrong way — asking a recording
+ * service for a bare reading and being handed some other word spelt the same,
+ * or synthesising 一日 as *ichinichi* — outlives the fix, because the fix
+ * changes how clips are fetched and nothing re-fetches what is already held.
+ * Raising this number throws the whole cache away once, on the next play,
+ * and everything comes back correct.
+ */
+const CACHE_VERSION = 2;
+const CACHE_VERSION_KEY = "audioCacheVersion";
+const CACHE_PREFIX = "audioClip:";
+
+let cleared: Promise<void> | null = null;
+
+/** Throw away clips cached by an older generation. Once per page load. */
+function cacheReady(): Promise<void> {
+  cleared ??= (async () => {
+    try {
+      if ((await getMeta<number>(CACHE_VERSION_KEY)) === CACHE_VERSION) return;
+      await deleteMetaByPrefix(CACHE_PREFIX);
+      await setMeta(CACHE_VERSION_KEY, CACHE_VERSION);
+    } catch {
+      // A cache that will not clear is not a reason to fall silent.
+    }
+  })();
+  return cleared;
+}
+
+/**
+ * What to actually say for one kana.
+ *
+ * Speech engines read text, and a few kana are read as the particle they
+ * usually are rather than as themselves: は on its own comes out "wa", へ
+ * comes out "e". Particles are always written in hiragana, so the katakana
+ * twin of the same sound can never be mistaken for one — ハ is only ever
+ * "ha". The learner sees the kana they chose; the engine is handed the
+ * spelling that makes it say the right sound.
+ */
+const SPOKEN_KANA: Record<string, string> = { は: "ハ", へ: "ヘ", を: "ヲ" };
+
+export function spokenKana(kana: string): string {
+  return SPOKEN_KANA[kana] ?? kana;
+}
+
 /** Synthesis and recordings cache apart: a word can be held as both. */
 const clipKey = (term: string, reading: string, mode: Mode) =>
-  `audioClip:${mode === "tts" ? "tts:" : ""}${term}\u0000${reading}`;
+  `${CACHE_PREFIX}v${CACHE_VERSION}:${mode === "tts" ? "tts:" : ""}${term}\u0000${reading}`;
 
 // ---------------- device speech (final fallback) ----------------
 
@@ -195,6 +242,7 @@ export async function playWord(
   const spoken = reading?.trim() || term;
   const mode = options.mode ?? "voice";
   stopPlayback();
+  await cacheReady();
 
   const cached = await getMeta<Blob>(clipKey(term, reading, mode));
   if (cached instanceof Blob && cached.size > 0) {
@@ -228,7 +276,8 @@ export async function playWord(
  * identical each time it comes round.
  */
 export async function playKana(kana: string, options: { rate?: number } = {}): Promise<PlayResult> {
-  return playWord(kana, kana, { rate: options.rate ?? 0.8, mode: "tts" });
+  const text = spokenKana(kana);
+  return playWord(text, text, { rate: options.rate ?? 0.8, mode: "tts" });
 }
 
 /**
@@ -247,6 +296,7 @@ export async function prefetchAudio(
   signal?: { aborted: boolean },
 ): Promise<void> {
   if (items.length === 0 || !(await audioEndpointReady())) return;
+  await cacheReady();
 
   // Same word twice in a pool is one download.
   const seen = new Set<string>();
