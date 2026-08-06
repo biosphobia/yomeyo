@@ -16,6 +16,8 @@ import {
   type Sentence,
 } from "./grammar-data.js";
 import { generateSentences } from "./grammar-ai.js";
+import { renderLessons } from "./grammar-lesson-view.js";
+import { renderPlayground } from "./grammar-playground.js";
 import { unlockAll, unlockAllNow } from "./unlock.js";
 import { PER_CORRECT, earnYennies, formatYennies, yennies } from "./yennies.js";
 import { renderParse } from "./parse.js";
@@ -47,7 +49,7 @@ interface GrammarProgress {
   unlocked: number;
 }
 
-let view: "practice" | "dictionary" | "parse" = "practice";
+let view: "learn" | "practice" | "playground" | "dictionary" | "parse" = "learn";
 
 export async function renderGrammar(main: HTMLElement, isCurrent: () => boolean = () => true): Promise<void> {
   // Warmed as the screen opens, not as a drill starts: the reactions have to
@@ -61,8 +63,10 @@ export async function renderGrammar(main: HTMLElement, isCurrent: () => boolean 
 
   main.innerHTML = `
     ${screenHeader("Grammar", await yennies())}
-    <div class="segmented">
+    <div class="segmented gram-segmented">
+      <button data-view="learn" class="${view === "learn" ? "on" : ""}">Learn</button>
       <button data-view="practice" class="${view === "practice" ? "on" : ""}">Practice</button>
+      <button data-view="playground" class="${view === "playground" ? "on" : ""}">Playground</button>
       <button data-view="parse" class="${view === "parse" ? "on" : ""}">Parse</button>
       <button data-view="dictionary" class="${view === "dictionary" ? "on" : ""}">Dictionary</button>
     </div>
@@ -79,6 +83,8 @@ export async function renderGrammar(main: HTMLElement, isCurrent: () => boolean 
   const body = main.querySelector<HTMLDivElement>("#grammar-body")!;
   if (view === "dictionary") renderDictionary(body);
   else if (view === "parse") void renderParse(body);
+  else if (view === "learn") void renderLessons(body, isCurrent);
+  else if (view === "playground") void renderPlayground(body, isCurrent);
   else renderUnits(body, progress, romaji, main, isCurrent);
 }
 

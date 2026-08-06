@@ -8,10 +8,11 @@
  * file (never committed, never published to GitHub Pages), and the app asks
  * here for sentences without ever seeing the key.
  *
- *   GET  grammar.php?probe=1              204 when configured, 404 when not
- *   POST grammar.php {prompt}             practice sentences for a unit
- *   POST grammar.php {prompt, mode:parse} one real sentence, taken apart
- *   POST grammar.php {prompt, mode:deck}  vocabulary cards for a deck
+ *   GET  grammar.php?probe=1                  204 when configured, 404 when not
+ *   POST grammar.php {prompt}                 practice sentences for a unit
+ *   POST grammar.php {prompt, mode:parse}     one real sentence, taken apart
+ *   POST grammar.php {prompt, mode:deck}      vocabulary cards for a deck
+ *   POST grammar.php {prompt, mode:translate} one built word, translated
  *
  * On a host without the key file the app notices and simply uses the
  * sentences that ship with it, so nothing here is ever load-bearing.
@@ -72,6 +73,7 @@ $chunk = [
 $mode = (string) ($req["mode"] ?? "");
 $parse = ($mode === "parse");
 $deck = ($mode === "deck");
+$translate = ($mode === "translate");
 
 // Taking a real sentence apart adds kanji, a reading per piece, and the
 // whole-sentence translations; writing practice sentences does not.
@@ -96,7 +98,21 @@ $cardSchema = [
   "additionalProperties" => false,
 ];
 
-$schema = $deck
+// The playground asks for one thing: what its built word means. Tiny on
+// purpose — one short answer, maybe one note, nothing to go wrong.
+$translateSchema = [
+  "type" => "object",
+  "properties" => [
+    "en" => ["type" => "string"],
+    "note" => ["type" => "string"],
+  ],
+  "required" => ["en"],
+  "additionalProperties" => false,
+];
+
+$schema = $translate
+  ? $translateSchema
+  : ($deck
   ? [
       "type" => "object",
       "properties" => ["cards" => ["type" => "array", "items" => $cardSchema]],
@@ -134,16 +150,22 @@ $schema = $deck
       ],
       "required" => ["sentences"],
       "additionalProperties" => false,
-    ]);
+    ]));
 
 $body = [
   "model" => "claude-sonnet-5",
   "max_tokens" => 16000,
   "output_config" => [
-    "effort" => $parse ? "high" : "medium",
+    "effort" => $parse ? "high" : ($translate ? "low" : "medium"),
     "format" => ["type" => "json_schema", "schema" => $schema],
   ],
-  "system" => $deck
+  "system" => $translate
+    ? "You translate single conjugated Japanese words for a learner's " .
+      "playground. Give the shortest natural English that carries the form — " .
+      "tense, politeness, negation and all. Plain words only, no grammar " .
+      "jargon, and never guess: if the word is not real Japanese, say so in " .
+      "\"en\" plainly."
+    : ($deck
     ? "You build Japanese vocabulary decks. Every card is studied as fact, " .
       "so a wrong reading teaches a wrong reading: give the dictionary form, " .
       "its reading in kana, and short plain-English meanings. Leave a word " .
@@ -154,7 +176,7 @@ $body = [
       "Follow the model and the wording rules in the request exactly."
     : "You write practice sentences for a beginner Japanese course. " .
       "Follow the rules in the request exactly; every sentence is shown to a " .
-      "learner as fact, so a wrong label teaches something wrong."),
+      "learner as fact, so a wrong label teaches something wrong.")),
   "messages" => [["role" => "user", "content" => $prompt]],
 ];
 
