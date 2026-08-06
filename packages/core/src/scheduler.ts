@@ -1,4 +1,5 @@
 import { DEFAULT_DECK_CONFIG, type DeckConfig } from "./deck-config.js";
+import { orderOf } from "./deck-library.js";
 import { RATING, intervalFor, nextMemoryState, type FsrsRating, type MemoryState } from "./fsrs.js";
 import { DEFAULT_SRS_CONFIG, gradeCard as gradeSm2 } from "./srs.js";
 import type { Card, CardState, Grade } from "./types.js";
@@ -175,7 +176,9 @@ export function buildQueue(
     ...learning.sort((a, b) => a.due - b.due),
     ...due.sort((a, b) => a.due - b.due).slice(0, reviewRoom),
     ...ordered
-      .sort((a, b) => a.createdAt - b.createdAt)
+      // The order the words arrived in, unless the deck has been
+      // rearranged, in which case the order somebody chose.
+      .sort((a, b) => orderOf(a) - orderOf(b))
       .slice(0, config.newIgnoresReviewLimit ? newRoom : Math.min(newRoom, Math.max(0, reviewRoom))),
   ];
 }

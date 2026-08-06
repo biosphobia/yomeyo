@@ -107,6 +107,15 @@ export async function saveCard(card: Card): Promise<void> {
   await putCard(stored);
 }
 
+/** Save many cards at once — one transaction, one cache update. */
+export async function saveCards(toSave: Card[]): Promise<void> {
+  if (toSave.length === 0) return;
+  const cards = await loadCards();
+  const stored: StoredCard[] = toSave.map((card) => ({ ...card, dirty: true }));
+  for (const card of stored) cards.set(card.id, card);
+  await putCards(stored);
+}
+
 /**
  * Mark cards deleted, rather than removing them.
  *

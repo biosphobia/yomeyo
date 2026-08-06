@@ -306,6 +306,21 @@ describe("daily limits", () => {
     expect(buildQueue(cards, T0, config).map((c) => c.id)).toEqual(["c0", "c1", "c2", "c3", "c4"]);
   });
 
+  it("introduces them in the order the deck was rearranged into", () => {
+    // A deck someone has put in order: the positions win over the timestamps.
+    const cards = Array.from({ length: 5 }, (_, i) => make(i, "new", T0));
+    // Two cards pulled to the front; the rest keep the order they arrived in.
+    cards[4].order = 1;
+    cards[0].order = 5;
+    expect(buildQueue(cards, T0, config).map((c) => c.id)).toEqual([
+      "c4",
+      "c0",
+      "c1",
+      "c2",
+      "c3",
+    ]);
+  });
+
   it("never limits cards already in learning", () => {
     const learning = Array.from({ length: 40 }, (_, i) => make(i, "learning", T0 - 1000));
     const queue = buildQueue(learning, T0, config, { introducedToday: 20, reviewedToday: 9999 });

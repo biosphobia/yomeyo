@@ -96,6 +96,16 @@ export interface Card {
   sentenceAudio?: string;
   image?: string;
   createdAt: number;
+  /**
+   * Where this card sits in its deck, for the order new cards are met in.
+   *
+   * Absent on nearly every card, and that is the point: the default order is
+   * the order the words arrived in, which is `createdAt`. Only a deck someone
+   * has actually rearranged carries these, and only on the cards that moved —
+   * a card dropped between two others takes a value halfway between theirs,
+   * so moving one word costs one write rather than renumbering the deck.
+   */
+  order?: number;
   /** Last-modified timestamp; drives last-write-wins sync. */
   updatedAt: number;
   /** Soft-delete flag so deletions sync across devices. */

@@ -5,7 +5,9 @@ import {
   fromSharedCards,
   MINING_DECK_ID,
   newDeckId,
+  orderOf,
   ownerOfDeckId,
+  positionBetween,
   packDeck,
   toSharedCards,
   unpackDeck,
@@ -39,6 +41,38 @@ describe("which deck a card is in", () => {
 
   it("reads the deck when there is one", () => {
     expect(deckOf(card({ deckId: "core2k" }))).toBe("core2k");
+  });
+});
+
+describe("where a card sits in its deck", () => {
+  it("falls back to when the word arrived, which is the order it came in", () => {
+    expect(orderOf(card({ createdAt: 42 }))).toBe(42);
+  });
+
+  it("uses the position it was given once it has been moved", () => {
+    expect(orderOf(card({ createdAt: 42, order: 7 }))).toBe(7);
+  });
+
+  it("drops a card halfway between its new neighbours", () => {
+    const before = card({ id: "a", order: 100 });
+    const after = card({ id: "b", order: 200 });
+    expect(positionBetween(before, after)).toBe(150);
+  });
+
+  it("goes clear of the end when there is only one neighbour", () => {
+    expect(positionBetween(undefined, card({ order: 1_000_000 }))).toBeLessThan(1_000_000);
+    expect(positionBetween(card({ order: 1_000_000 }), undefined)).toBeGreaterThan(1_000_000);
+  });
+
+  it("keeps halving without collapsing, however many times a card is moved", () => {
+    let low = card({ id: "a", order: 0 });
+    const high = card({ id: "b", order: 1 });
+    for (let i = 0; i < 30; i++) {
+      const middle = positionBetween(low, high);
+      expect(middle).toBeGreaterThan(orderOf(low));
+      expect(middle).toBeLessThan(orderOf(high));
+      low = card({ id: "a", order: middle });
+    }
   });
 });
 

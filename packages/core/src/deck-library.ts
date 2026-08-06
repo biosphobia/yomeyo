@@ -64,6 +64,32 @@ export function deckOf(card: Card): string {
   return card.deckId ?? MINING_DECK_ID;
 }
 
+/**
+ * Where a card sits in its deck.
+ *
+ * The order words arrive in is the order they are met in, which is what
+ * anybody importing a graded deck expects. Rearranging a deck writes an
+ * explicit position on the cards that moved, and this is where the two meet.
+ */
+export function orderOf(card: Card): number {
+  return card.order ?? card.createdAt;
+}
+
+/**
+ * The position that puts a card between these two neighbours.
+ *
+ * Halfway between them, or clear of the end when there is only one. Doubles
+ * have enough room to halve the gap some fifty times before two positions
+ * collide, which no hand-rearranged deck will ever reach.
+ */
+export function positionBetween(before: Card | undefined, after: Card | undefined): number {
+  const GAP = 60_000; // a minute of createdAt, which is what the scale is
+  if (!before && !after) return Date.now();
+  if (!before) return orderOf(after!) - GAP;
+  if (!after) return orderOf(before) + GAP;
+  return (orderOf(before) + orderOf(after)) / 2;
+}
+
 export function toSharedCards(cards: Card[]): SharedCard[] {
   return cards
     .filter((card) => !card.deleted && card.term.trim().length > 0)

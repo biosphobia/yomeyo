@@ -11,6 +11,7 @@
  *   GET  grammar.php?probe=1              204 when configured, 404 when not
  *   POST grammar.php {prompt}             practice sentences for a unit
  *   POST grammar.php {prompt, mode:parse} one real sentence, taken apart
+ *   POST grammar.php {prompt, mode:deck}  vocabulary cards for a deck
  *
  * On a host without the key file the app notices and simply uses the
  * sentences that ship with it, so nothing here is ever load-bearing.
@@ -68,7 +69,9 @@ $chunk = [
   "required" => ["t", "r", "g", "role", "label"],
   "additionalProperties" => false,
 ];
-$parse = (($req["mode"] ?? "") === "parse");
+$mode = (string) ($req["mode"] ?? "");
+$parse = ($mode === "parse");
+$deck = ($mode === "deck");
 
 // Taking a real sentence apart adds kanji, a reading per piece, and the
 // whole-sentence translations; writing practice sentences does not.
@@ -76,7 +79,31 @@ $chunk["properties"]["k"] = ["type" => "string"];
 $chunkParse = $chunk;
 $chunkParse["required"] = ["t", "r", "g", "role", "label"];
 
-$schema = $parse
+// A deck is vocabulary, not sentences: one object per word, with the fields a
+// flashcard actually carries. Everything but the word itself is optional, so
+// a word the model is unsure about arrives bare rather than invented.
+$cardSchema = [
+  "type" => "object",
+  "properties" => [
+    "term" => ["type" => "string"],
+    "reading" => ["type" => "string"],
+    "glosses" => ["type" => "array", "items" => ["type" => "string"]],
+    "sentence" => ["type" => "string"],
+    "sentenceMeaning" => ["type" => "string"],
+    "notes" => ["type" => "string"],
+  ],
+  "required" => ["term", "reading", "glosses"],
+  "additionalProperties" => false,
+];
+
+$schema = $deck
+  ? [
+      "type" => "object",
+      "properties" => ["cards" => ["type" => "array", "items" => $cardSchema]],
+      "required" => ["cards"],
+      "additionalProperties" => false,
+    ]
+  : ($parse
   ? [
       "type" => "object",
       "properties" => [
@@ -107,7 +134,7 @@ $schema = $parse
       ],
       "required" => ["sentences"],
       "additionalProperties" => false,
-    ];
+    ]);
 
 $body = [
   "model" => "claude-sonnet-5",
@@ -116,13 +143,18 @@ $body = [
     "effort" => $parse ? "high" : "medium",
     "format" => ["type" => "json_schema", "schema" => $schema],
   ],
-  "system" => $parse
+  "system" => $deck
+    ? "You build Japanese vocabulary decks. Every card is studied as fact, " .
+      "so a wrong reading teaches a wrong reading: give the dictionary form, " .
+      "its reading in kana, and short plain-English meanings. Leave a word " .
+      "out rather than guess at it."
+    : ($parse
     ? "You take Japanese sentences apart for a beginner course. Accuracy " .
       "matters more than anything: the learner is shown your answer as fact. " .
       "Follow the model and the wording rules in the request exactly."
     : "You write practice sentences for a beginner Japanese course. " .
       "Follow the rules in the request exactly; every sentence is shown to a " .
-      "learner as fact, so a wrong label teaches something wrong.",
+      "learner as fact, so a wrong label teaches something wrong."),
   "messages" => [["role" => "user", "content" => $prompt]],
 ];
 

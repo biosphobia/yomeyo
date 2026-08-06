@@ -29,6 +29,9 @@ async function loadLibrary(): Promise<typeof import("./library.js")> {
 type Tab = "premade" | "mine";
 let tab: Tab = "premade";
 
+/** The deck open in the editor, if any. Survives a redraw of the screen. */
+let editing: string | null = null;
+
 export async function renderDecks(main: HTMLElement, isCurrent: () => boolean = () => true): Promise<void> {
   const mine = await listDecks();
   const config = await getFirebaseConfig();
@@ -46,13 +49,66 @@ export async function renderDecks(main: HTMLElement, isCurrent: () => boolean = 
   for (const button of main.querySelectorAll<HTMLButtonElement>("#deck-tabs button")) {
     button.addEventListener("click", () => {
       tab = button.dataset.tab as Tab;
+      editing = null;
       void renderDecks(main, isCurrent);
     });
   }
 
   const body = main.querySelector<HTMLDivElement>("#deck-body")!;
-  if (tab === "mine") void renderMine(body, mine, config !== undefined, main, isCurrent);
-  else void renderPremade(body, mine, config !== undefined, main, isCurrent);
+  const open = editing ? mine.find((deck) => deck.id === editing) : undefined;
+  if (open) {
+    main.querySelector<HTMLDivElement>("#deck-tabs")!.style.display = "none";
+    void openEditor(body, open, main, isCurrent);
+  } else if (tab === "mine") {
+    void renderMine(body, mine, config !== undefined, main, isCurrent);
+  } else {
+    void renderPremade(body, mine, config !== undefined, main, isCurrent);
+  }
+}
+
+/**
+ * Whether this account holds the admin seat.
+ *
+ * Asked once and remembered: three panels want to know, and it is a network
+ * round trip. Not knowing costs the admin's own extras, never the screen.
+ */
+async function isAdmin(): Promise<boolean> {
+  if (!(await getFirebaseConfig())) return false;
+  if (!(await currentAccount().catch(() => null))) return false;
+  return (await loadLibrary())
+    .adminState()
+    .then((state) => state.isAdmin)
+    .catch(() => false);
+}
+
+async function openEditor(
+  body: HTMLElement,
+  deck: DeckInfo,
+  main: HTMLElement,
+  isCurrent: () => boolean,
+): Promise<void> {
+  body.innerHTML = `<div class="card-panel"><div class="msg">Opening ${escapeHtml(deck.name)}…</div></div>`;
+  const [{ renderDeckEditor, resetEditor }, account, admin] = await Promise.all([
+    import("./deck-edit.js"),
+    currentAccount().catch(() => null),
+    isAdmin(),
+  ]);
+  if (!isCurrent()) return;
+  void renderDeckEditor(
+    body,
+    deck,
+    {
+      account,
+      isAdmin: admin,
+      onBack: () => {
+        resetEditor();
+        editing = null;
+        tab = "mine";
+        void renderDecks(main, isCurrent);
+      },
+    },
+    isCurrent,
+  );
 }
 
 // ---------------- the shared library ----------------
@@ -228,13 +284,48 @@ async function renderMine(
   main: HTMLElement,
   isCurrent: () => boolean,
 ): Promise<void> {
-  body.innerHTML = `<div class="card-panel" style="padding:6px 14px" id="my-list"></div>`;
+  body.innerHTML = `
+    <div id="deck-new-row"></div>
+    <div class="card-panel" style="padding:6px 14px" id="my-list"></div>`;
   const list = body.querySelector<HTMLDivElement>("#my-list")!;
 
   // Only needed to decide whether a deck of yours can be shared or withdrawn,
   // so a failure here just leaves those actions off rather than the screen.
   const account = configured ? await currentAccount().catch(() => null) : null;
   if (!isCurrent()) return;
+
+  // Building a deck from nothing is the admin's job: these are the decks
+  // everyone else adds with a tap, and one of them is the shared library's
+  // whole contents. Editing what is already here is anybody's.
+  if (await isAdmin()) {
+    if (!isCurrent()) return;
+    const row = body.querySelector<HTMLDivElement>("#deck-new-row")!;
+    row.innerHTML = `
+      <div class="card-panel">
+        <b>Build a deck</b>
+        <div class="glosses">Type the words, or describe the deck and have it drafted.</div>
+        <div class="row-actions" style="margin-top:10px">
+          <input type="text" id="new-deck-name" placeholder="Deck name" style="flex:1;min-width:180px" />
+          <button id="new-deck">Create</button>
+        </div>
+      </div>`;
+    const create = async (): Promise<void> => {
+      const input = row.querySelector<HTMLInputElement>("#new-deck-name")!;
+      const name = input.value.trim();
+      if (!name) {
+        toast("Give the deck a name first.", "error");
+        return;
+      }
+      const id = `local-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+      await rememberDeck({ id, name, kind: "premade", cardCount: 0 });
+      editing = id;
+      void renderDecks(main, isCurrent);
+    };
+    row.querySelector<HTMLButtonElement>("#new-deck")!.addEventListener("click", () => void create());
+    row.querySelector<HTMLInputElement>("#new-deck-name")!.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") void create();
+    });
+  }
 
   for (const deck of decks) {
     const row = document.createElement("div");
@@ -252,12 +343,20 @@ async function renderMine(
         }</div>
         ${deck.description ? `<div class="glosses">${escapeHtml(deck.description)}</div>` : ""}
         <div class="row-actions" style="margin-top:6px">
+          <button class="secondary edit-deck-btn">Edit words</button>
           ${shareable ? `<button class="secondary share-btn">Share with everyone</button>` : ""}
           ${publishedByMe ? `<button class="secondary unshare-btn">Stop sharing</button>` : ""}
         </div>
       </div>
       ${deck.kind === "premade" ? `<button class="ghost remove-btn" title="Remove this deck">✕</button>` : ""}
     `;
+
+    // Every deck on the device opens: rename it, fix a card, reorder the
+    // words, add more. However it arrived — Anki, the library, or typed here.
+    row.querySelector<HTMLButtonElement>(".edit-deck-btn")!.addEventListener("click", () => {
+      editing = deck.id;
+      void renderDecks(main, isCurrent);
+    });
 
     row.querySelector<HTMLButtonElement>(".share-btn")?.addEventListener("click", async (ev) => {
       const button = ev.currentTarget as HTMLButtonElement;
