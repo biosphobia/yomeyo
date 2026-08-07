@@ -5,6 +5,7 @@ import { renderWords } from "./words.js";
 import { renderDecks } from "./decks.js";
 import { renderCalendar } from "./calendar.js";
 import { renderKana } from "./kana.js";
+import { renderArcade } from "./arcade.js";
 import { lazyImport } from "./lazy.js";
 import { renderGrammar } from "./grammar.js";
 import { renderKanji } from "./kanji.js";
@@ -90,6 +91,9 @@ function route(): void {
       break;
     case "kana":
       void renderKana(main, isCurrent);
+      break;
+    case "games":
+      void renderArcade(main, isCurrent);
       break;
     case "grammar":
       void renderGrammar(main, isCurrent);

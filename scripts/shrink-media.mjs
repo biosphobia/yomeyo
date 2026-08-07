@@ -63,10 +63,10 @@ const name = (file) => file.split("/").pop();
  * is how a perfectly good picture ends up reported as corrupt.
  */
 function sniff(file) {
-  const head = Buffer.alloc(16);
+  const head = Buffer.alloc(32);
   const fd = openSync(file, "r");
   try {
-    readSync(fd, head, 0, 16, 0);
+    readSync(fd, head, 0, 32, 0);
   } finally {
     closeSync(fd);
   }
@@ -74,9 +74,10 @@ function sniff(file) {
   if (at(0, 3) === "GIF") return "gif";
   if (at(0, 4) === "RIFF" && at(8, 12) === "WEBP") return "webp";
   if (at(4, 8) === "ftyp") {
-    // `avis` is an image *sequence* — an animated avif. Nothing here can
-    // write one, so those are left exactly as they came.
-    return at(8, 12) === "avis" ? "avif-sequence" : "avif";
+    // `avis` marks an image *sequence* — an animated avif — and it can sit
+    // anywhere in the brand list, not only first. Nothing here can write
+    // one, so those are left exactly as they came.
+    return at(8, 32).includes("avis") ? "avif-sequence" : "avif";
   }
   if (head[0] === 0x89 && at(1, 4) === "PNG") return "png";
   if (head[0] === 0xff && head[1] === 0xd8) return "jpeg";
@@ -237,6 +238,9 @@ async function shrinkRaster(file, kind) {
   if (before <= MAX_KB && Math.max(width, height) <= MAX_SIDE) return null;
 
   // The width that brings the longest side down to the budget.
+  // An avif that turns out to be a sequence after all: sharp would keep
+  // only its first frame, which is how an animation stops animating.
+  if (kind === "avif" && pages > 1) return `${name(file)}: animated avif, left alone (${before} KB)`;
   const scale = Math.min(1, MAX_SIDE / Math.max(width, height, 1));
   let best = null;
   // Smaller beats blurrier. The picture is drawn in a box a phone can cover
@@ -259,7 +263,7 @@ async function shrinkRaster(file, kind) {
     const pipeline = lib(file, { animated: pages > 1 });
     const buffer = await encode(
       (pages > 1 ? pipeline : pipeline.rotate()).resize({ width: px, withoutEnlargement: true }),
-      file,
+      kind,
       quality,
       meta.loop ?? 0,
     ).toBuffer();
