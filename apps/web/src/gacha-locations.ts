@@ -11,7 +11,16 @@
  * because a place you can recognise in one glance is the whole job.
  */
 
-export type LocationId = "city" | "cafe" | "bath" | "aquarium" | "classroom" | "stairwell" | "rooftop" | "campfire";
+export type LocationId =
+  | "city"
+  | "cafe"
+  | "bath"
+  | "aquarium"
+  | "classroom"
+  | "stairwell"
+  | "rooftop"
+  | "campfire"
+  | "library";
 
 export interface Location {
   /** Called every frame with the frame delta and the clock. */
@@ -668,7 +677,102 @@ function campfire(ctx: Ctx): Location {
   };
 }
 
-const BUILDERS: Record<LocationId, (ctx: Ctx) => Location> = { city, cafe, bath, aquarium, classroom, stairwell, rooftop, campfire };
+// ---------------- the library ----------------
+
+/**
+ * A library the end of the world forgot to file a request for. One aisle,
+ * shelf units marching back into the fog, and only the nearest of them
+ * carrying actual painted spines — past the second row everything is
+ * silhouette anyway, which is the fog doing the set dressing for free.
+ *
+ * There is a reading nook on the right: a stack of the thickest books,
+ * promoted to furniture.
+ */
+function library(ctx: Ctx): Location {
+  const { THREE, scene } = ctx;
+  const DIM = 0x2f2b26;
+  scene.background = new THREE.Color(DIM);
+  scene.fog = new THREE.FogExp2(DIM, 0.055);
+  lights(ctx, 0xcbb98f, 0x2a241c, 1.2, [2.5, 10, 3]);
+
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), box(THREE, 0x3a2f22, 1));
+  floor.rotation.x = -Math.PI / 2;
+  floor.receiveShadow = true;
+  scene.add(floor);
+
+  const shelfMat = box(THREE, 0x4a3826);
+  const boardMat = box(THREE, 0x35281c);
+  const spines = [0x8a4a3a, 0x6a7a4a, 0x9a8a5a, 0x5a6a8a, 0x7a5a6a, 0x5c4a38];
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 6; i++) {
+      const x = side * 3.0;
+      const z = -1.6 - i * 3.4;
+      slab(ctx, shelfMat, 1.1, 4.4, 3.0, x, 2.2, z);
+      if (i > 1) continue;
+      // Painted spines, three rows of them, only where the camera reads.
+      for (let row = 0; row < 3; row++) {
+        slab(ctx, boardMat, 0.34, 0.06, 2.9, x - side * 0.55, 0.62 + row * 1.1, z);
+        for (let b = 0; b < 7; b++) {
+          slab(
+            ctx,
+            box(THREE, spines[(i * 5 + row * 3 + b) % spines.length], 0.85),
+            0.24,
+            0.36 + ((b + row) % 3) * 0.06,
+            0.1,
+            x - side * 0.62,
+            0.86 + row * 1.1,
+            z - 1.2 + b * 0.38,
+          );
+        }
+      }
+    }
+  }
+
+  // The reading nook: books thick enough to be a chair.
+  for (let i = 0; i < 3; i++) {
+    slab(ctx, box(THREE, spines[(i * 2 + 1) % spines.length], 0.85), 0.72, 0.12, 0.5, 1.35, 0.06 + i * 0.12, -0.6, i * 0.35);
+  }
+  // Strays that never made it back to a shelf.
+  for (let i = 0; i < 5; i++) {
+    slab(
+      ctx,
+      box(THREE, spines[(i * 3 + 2) % spines.length], 0.85),
+      0.44,
+      0.09,
+      0.32,
+      -2.0 + (i % 3) * 1.9,
+      0.045,
+      -3.2 - i * 1.6,
+      i * 1.1,
+    );
+  }
+
+  // Dust, settling out of the skylight shaft. It has had a long time.
+  const dust = drift(ctx, {
+    count: 55,
+    spread: 7,
+    height: 5,
+    speed: 0.05,
+    size: 0.045,
+    colour: 0xd8c8a0,
+    opacity: 0.32,
+    up: false,
+    z: [-12, 2],
+  });
+  return { ambient: (dt) => dust(dt), focusY: 1.0 };
+}
+
+const BUILDERS: Record<LocationId, (ctx: Ctx) => Location> = {
+  city,
+  cafe,
+  bath,
+  aquarium,
+  classroom,
+  stairwell,
+  rooftop,
+  campfire,
+  library,
+};
 
 export function buildLocation(id: LocationId, THREE: any, scene: any): Location {
   return (BUILDERS[id] ?? city)({ THREE, scene });

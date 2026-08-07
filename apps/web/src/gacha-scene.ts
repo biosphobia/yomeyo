@@ -221,6 +221,15 @@ function pose(walker: Walker | undefined, name: string, amount: number, t = 0): 
       set(b.Head, -0.62);
       set(b.Spine, -0.14);
       break;
+    case "read":
+      // Both forearms up, holding a book that matters. Head down in it.
+      set(b.LeftArm, -1.05, 0, -0.3);
+      set(b.RightArm, -1.05, 0, 0.3);
+      set(b.LeftForeArm, -1.15);
+      set(b.RightForeArm, -1.15);
+      set(b.Head, 0.45);
+      set(b.Spine, 0.1);
+      break;
     case "flat":
       set(b.LeftArm, 0, 0, -1.9);
       set(b.RightArm, 0, 0, 1.9);
@@ -1069,6 +1078,143 @@ export const SCENARIOS: Scenario[] = [
       // The tank concedes.
       s.once("surface", 12.4, () => s.sfx.splash());
       s.once("pop", 12.8, () => s.sfx.open());
+    },
+  },
+
+  {
+    /**
+     * A library survived, and Chito is going to read all of it, in order.
+     * The one hazard in the entire building is her own to-read pile,
+     * parked in the middle of the aisle — and Yuuri browses with her eyes
+     * on the shelves and nothing at all on the floor. Crate-free: the
+     * prize is under the landslide.
+     */
+    id: "books",
+    location: "library",
+    seconds: 16.5,
+    opensAt: 14.2,
+    reveal: () => [0, 0.35, -0.3],
+    shots: [
+      // Down the aisle: shelves into the fog, the reader in her nook.
+      { at: 0, from: [0, 1.55, 5.2], look: [0, 1.7, -8], to: [0, 1.45, 4.0] },
+      // The reader, close, mid-sentence of a very long book.
+      { at: 3.2, from: [0.1, 1.15, 0.8], look: (s) => posOf(s.cast[1], 1.05), fov: 28 },
+      // Tracking the browser, whose eyes are anywhere but down.
+      {
+        at: 5.2,
+        from: (s) => {
+          const p = s.cast[0]?.root.position;
+          return [(p?.x ?? 0) - 1.7, 1.4, (p?.z ?? 0) + 1.9];
+        },
+        look: (s) => posOf(s.cast[0], 1.35),
+        fov: 34,
+      },
+      // The pile, waiting, in the exact centre of the aisle.
+      { at: 7.2, from: [0.6, 0.4, 0.3], look: [-0.55, 0.3, -1.1], fov: 26 },
+      // Wide for the landslide.
+      { at: 8.1, from: [-2.6, 1.5, 3.0], look: [0, 0.55, -0.7], shake: 0.05 },
+      // The librarian's verdict.
+      { at: 10.9, from: [0.4, 1.35, 0.6], look: (s) => posOf(s.cast[1], 1.15), fov: 26 },
+      // Down at the wreckage, in for the glow.
+      { at: 13.2, from: [0, 1.6, 2.8], look: [0, 0.35, -0.3], to: [0, 1.15, 1.7] },
+    ],
+    lines: [
+      { at: 1.0, seconds: 2.4, who: "Chito", text: "A whole floor of books survived" },
+      { at: 3.8, seconds: 2.0, who: "Chito", text: "I'm reading them in order" },
+      { at: 5.6, seconds: 2.0, who: "Yuuri", text: "do they taste different?" },
+      { at: 7.0, seconds: 1.1, who: "", text: "(she is not watching the floor)" },
+      { at: 8.5, seconds: 1.4, who: "", text: "(the to-read pile fights back)" },
+      { at: 10.3, seconds: 2.2, who: "Yuuri", text: "...the floor wanted them more" },
+      { at: 12.6, seconds: 2.0, who: "Chito", text: "You tripped on human history" },
+      { at: 14.6, seconds: 1.8, who: "Yuuri", text: "history is glowing", loud: true },
+    ],
+    run(t, _dt, s) {
+      const [yuuri, chito] = s.cast;
+      // The reader, installed on her seat of thicker books.
+      if (chito) {
+        chito.root.position.set(1.35, 0.36, -0.6);
+        face(chito, -0.7);
+      }
+      if (t < 8.1) {
+        pose(chito, "sit", 1);
+        pose(chito, "read", 1);
+      }
+      // Her current volume, resting in the crook of the pose.
+      const held = s.spares[8];
+      if (held) {
+        held.visible = true;
+        held.scale.set(0.42, 0.2, 0.3);
+        held.position.set(1.08, 0.62, -0.32);
+        held.rotation.set(-0.5, -0.7, 0);
+      }
+
+      // The to-read pile: six volumes of pure ambush.
+      const PILE_X = -0.5;
+      const PILE_Z = -1.05;
+      for (let i = 0; i < 6; i++) {
+        const book = s.spares[i];
+        if (!book) continue;
+        book.visible = true;
+        book.scale.set(0.46 - (i % 3) * 0.04, 0.2, 0.34);
+        if (t < 8.0) {
+          book.position.set(PILE_X + Math.sin(i * 2.1) * 0.05, 0.075 + i * 0.145, PILE_Z);
+          book.rotation.set(0, i * 0.5, 0);
+        } else {
+          // The landslide: every book gets its own arc out of the pile.
+          const p = smooth(clamp01((t - 8.0) / 0.7));
+          book.position.set(
+            PILE_X + Math.sin(i * 2.7) * 1.1 * p,
+            mix(0.075 + i * 0.145, 0.08, p) + Math.sin(p * Math.PI) * (0.45 + (i % 2) * 0.3),
+            PILE_Z + (0.5 + (i % 3) * 0.45) * p,
+          );
+          book.rotation.set(p * Math.PI * (1 + (i % 2)), i * 0.5 + p * 2.5, 0);
+        }
+      }
+
+      // The browser: eyes on the shelves, feet on autopilot.
+      const walk = clamp01(t / 7.9);
+      if (yuuri && t < 7.9) {
+        s.walking = true;
+        yuuri.root.position.set(-0.5, 0, -13.5 + 12.35 * walk);
+        face(yuuri, Math.sin(t * 1.3) * 0.3);
+        pose(yuuri, "gaze", 0.8);
+      }
+      for (let n = 0; n < Math.floor(walk * 7.9 * 2.2); n++) {
+        s.once(`step${n}`, n / 2.2, () => s.sfx.step());
+      }
+
+      // The trip. Physics files no complaint; the pile had right of way.
+      s.once("clip", 7.9, () => s.sfx.whoosh());
+      s.once("crash", 8.15, () => s.sfx.clatter());
+      s.once("flop", 8.45, () => {
+        s.sfx.thud();
+        s.sfx.clatter();
+      });
+      if (t >= 7.9 && yuuri) {
+        s.walking = false;
+        const p = clamp01((t - 7.9) / 0.6);
+        pose(yuuri, "flat", p);
+        yuuri.root.rotation.x = -smooth(p) * 1.5;
+        yuuri.root.position.set(-0.5, 0, -1.15 + smooth(p) * 0.75);
+        face(yuuri, (1 - p) * 0.3);
+      }
+
+      // The librarian: horror first, then her own book clutched to safety.
+      if (t >= 8.1 && t < 11.2) {
+        pose(chito, "clear", 1);
+        pose(chito, "sit", 1);
+        pose(chito, "hurt", clamp01((t - 8.1) / 0.5) * 0.9);
+      }
+      if (t >= 11.2) {
+        pose(chito, "clear", 1);
+        pose(chito, "sit", 1);
+        pose(chito, "hungry", clamp01((t - 11.2) / 0.7) * 0.75);
+        if (held) held.position.set(1.19, 0.78, -0.42);
+      }
+
+      // Something under the wreckage picks up where the lesson left off.
+      s.once("hum", 13.4, () => s.sfx.menace(1.4));
+      s.once("pop", 14.2, () => s.sfx.open());
     },
   },
 ];
