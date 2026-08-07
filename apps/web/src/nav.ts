@@ -47,7 +47,6 @@ export const NAV: NavGroup[] = [
       { route: "kana", label: "Kana", icon: "あ", primary: true },
       { route: "grammar", label: "Grammar", icon: "文", primary: true },
       { route: "kanji", label: "Kanji", icon: "漢" },
-      { route: "games", label: "Games", icon: "🕹️" },
     ],
   },
   {
@@ -55,6 +54,7 @@ export const NAV: NavGroup[] = [
     items: [
       { route: "calendar", label: "Calendar", icon: "📅" },
       { route: "gacha", label: "Gacha", icon: "🎁" },
+      { route: "games", label: "Games", icon: "🕹️" },
     ],
   },
   {
