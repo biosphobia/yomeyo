@@ -244,13 +244,15 @@ export function startGameSession(info: {
           record.wrong++;
           if (outcome.timeout) record.timeouts++;
         }
-        const stats = await allStats();
-        // A word vouches for each of its kana; a lone kana speaks for itself.
-        const pieces = info.words ? kanaSegments(kana) : [kana];
-        for (const piece of pieces) {
-          applyAnswer((stats[piece] ??= blankStat(now)), outcome, info.words, now);
+        // Words stay out of the mastery record entirely: a word miss says
+        // nothing sure about any one kana in it, and the word levels are
+        // meant to be pure chance, not steered. Only lone kana teach the
+        // record anything.
+        if (!info.words) {
+          const stats = await allStats();
+          applyAnswer((stats[kana] ??= blankStat(now)), outcome, false, now);
+          await setMeta(STATS_KEY, stats);
         }
-        await setMeta(STATS_KEY, stats);
         await setMeta(GAMES_KEY, await allGames());
       });
     },

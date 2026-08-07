@@ -22,7 +22,7 @@ export interface KanaGroup {
   entries: KanaEntry[];
 }
 
-type Row = [detail: string, entries: [kana: string, ...romaji: string[]][]];
+type Row = [detail: string, entries: [kana: string, ...romaji: string[]][], title?: string];
 
 const BASIC_ROWS: Row[] = [
   ["The five vowels.", [["あ", "a"], ["い", "i"], ["う", "u"], ["え", "e"], ["お", "o"]]],
@@ -40,6 +40,10 @@ const BASIC_ROWS: Row[] = [
   ["Combination sounds with small ゃゅょ: k, s and t rows.", [["きゃ", "kya"], ["きゅ", "kyu"], ["きょ", "kyo"], ["しゃ", "sha", "sya"], ["しゅ", "shu", "syu"], ["しょ", "sho", "syo"], ["ちゃ", "cha", "tya"], ["ちゅ", "chu", "tyu"], ["ちょ", "cho", "tyo"]]],
   ["Combination sounds: n, h, m and r rows.", [["にゃ", "nya"], ["にゅ", "nyu"], ["にょ", "nyo"], ["ひゃ", "hya"], ["ひゅ", "hyu"], ["ひょ", "hyo"], ["みゃ", "mya"], ["みゅ", "myu"], ["みょ", "myo"], ["りゃ", "rya"], ["りゅ", "ryu"], ["りょ", "ryo"]]],
   ["Voiced combination sounds. じゃ is ja.", [["ぎゃ", "gya"], ["ぎゅ", "gyu"], ["ぎょ", "gyo"], ["じゃ", "ja", "jya", "zya"], ["じゅ", "ju", "jyu", "zyu"], ["じょ", "jo", "jyo", "zyo"], ["びゃ", "bya"], ["びゅ", "byu"], ["びょ", "byo"], ["ぴゃ", "pya"], ["ぴゅ", "pyu"], ["ぴょ", "pyo"]]],
+  // The small っ has no sound of its own — it is the held breath that
+  // doubles the next one — so this group is drilled through whole words
+  // (きって, ざっし), never as a lone card. See the tsu handling in kana.ts.
+  ["The small っ. No sound of its own — it doubles the sound that follows.", [["っ", "xtu", "xtsu", "ltu", "ltsu"]], "fucked up tsu"],
 ];
 
 /** ぁ..ゖ sit exactly 0x60 below ァ..ヶ, so katakana is a shift, not a copy. */
@@ -53,7 +57,7 @@ function toKatakana(hiragana: string): string {
 }
 
 function groupsFor(script: "hiragana" | "katakana"): KanaGroup[] {
-  return BASIC_ROWS.map(([detail, entries], index) => {
+  return BASIC_ROWS.map(([detail, entries, title], index) => {
     const converted: KanaEntry[] = entries.map(([kana, ...romaji]) => ({
       kana: script === "katakana" ? toKatakana(kana) : kana,
       romaji,
@@ -61,7 +65,9 @@ function groupsFor(script: "hiragana" | "katakana"): KanaGroup[] {
     return {
       id: `${script}-${index + 1}`,
       script,
-      title: converted.map((entry) => entry.romaji[0]).slice(0, 5).join(" ") + (converted.length > 5 ? " …" : ""),
+      title:
+        title ??
+        converted.map((entry) => entry.romaji[0]).slice(0, 5).join(" ") + (converted.length > 5 ? " …" : ""),
       detail,
       entries: converted,
     };
@@ -100,4 +106,14 @@ export function kanaSegments(kana: string): string[] {
     }
   }
   return out;
+}
+
+/** The small tsu, in either dress: no sound of its own, drilled via words. */
+export function isSmallTsu(kana: string): boolean {
+  return kana === "っ" || kana === "ッ";
+}
+
+/** Every kana in every group — the alphabet the tsu words may be spelt with. */
+export function allKanaChars(): Set<string> {
+  return new Set(KANA_GROUPS.flatMap((group) => group.entries.flatMap((entry) => [...entry.kana])));
 }

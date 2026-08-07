@@ -8,7 +8,7 @@ import { kanaStats, startGameSession, type GameSession, type KanaStat } from "./
 import { renderKanaStats } from "./kana-stats-view.js";
 import { screenHeader } from "./screen.js";
 import { assetUrl, loadDictionary } from "./store.js";
-import { KANA_GROUPS, isCorrect, kanaSegments, type KanaEntry, type KanaGroup } from "./kana-data.js";
+import { KANA_GROUPS, isCorrect, isSmallTsu, kanaSegments, type KanaEntry, type KanaGroup } from "./kana-data.js";
 import type { DictEntry } from "@yomeyo/core";
 import {
   BASE_STAGES,
@@ -264,6 +264,24 @@ function romajiMatches(input: string, kana: string): boolean {
   const typed = input.trim().toLowerCase();
   const walk = (ki: number, ti: number): boolean => {
     if (ki === kana.length) return ti === typed.length;
+    // The small っ doubles the next sound: きって is "kitte". Try that first;
+    // the spelled-out forms (xtu…) still work through the map below.
+    if (kana[ki] === "っ" || kana[ki] === "ッ") {
+      for (const length of [2, 1]) {
+        const next = kana.slice(ki + 1, ki + 1 + length);
+        const spellings = next.length === length ? ROMAJI_MAP.get(next) : undefined;
+        if (!spellings) continue;
+        for (const spelling of spellings) {
+          if (
+            typed[ti] === spelling[0] &&
+            typed.startsWith(spelling, ti + 1) &&
+            walk(ki + 1 + length, ti + 1 + spelling.length)
+          ) {
+            return true;
+          }
+        }
+      }
+    }
     // Digraphs (きゃ) first, or the single kana would swallow their start.
     for (const length of [2, 1]) {
       const piece = kana.slice(ki, ki + length);
@@ -299,6 +317,15 @@ function primaryRomaji(kana: string): string {
   let out = "";
   let at = 0;
   while (at < kana.length) {
+    // The small っ shows as the next sound's first letter, doubled.
+    if (kana[at] === "っ" || kana[at] === "ッ") {
+      const following = ROMAJI_MAP.get(kana.slice(at + 1, at + 3)) ?? ROMAJI_MAP.get(kana[at + 1] ?? "");
+      if (following) {
+        out += following[0][0];
+        at += 1;
+        continue;
+      }
+    }
     const digraph = ROMAJI_MAP.get(kana.slice(at, at + 2));
     if (digraph) {
       out += digraph[0];
@@ -586,7 +613,24 @@ async function runLevel(
   main: HTMLElement,
   isCurrent: () => boolean,
 ): Promise<void> {
-  const pool = poolOf(game);
+  const fullPool = poolOf(game);
+  // The small っ never asks a lone question, and every arcade game asks
+  // lone questions — so it steps out of the pool here. The word games take
+  // the full pool and may spell with it.
+  const pool = fullPool.filter((entry) => !isSmallTsu(entry.kana));
+  if (pool.length === 0) {
+    body.innerHTML = `
+      <div class="card-panel kana-quiz">
+        <div class="big">っ</div>
+        <div>The small っ has no sound of its own — it can't play the arcade alone.</div>
+        <div class="glosses" style="margin-top:8px">Add another group and it will ride along inside the words.</div>
+        <div class="row-actions" style="justify-content:center;margin-top:12px">
+          <button id="kana-back" class="secondary">Change groups</button>
+        </div>
+      </div>`;
+    body.querySelector("#kana-back")!.addEventListener("click", () => renderSelection(body, game, main, isCurrent));
+    return;
+  }
   const road = buildRoad(game.road);
   void preloadReactions();
 
@@ -797,7 +841,7 @@ async function runLevel(
       const line = body.querySelector("#kana-loading");
       if (line) line.textContent = "Downloading the dictionary… this happens once.";
     }, 4000);
-    const words = await wordsFor(game, pool, CAPS[mechanic]);
+    const words = await wordsFor(game, fullPool, CAPS[mechanic]);
     clearTimeout(slow);
     if (left || !isCurrent() || !body.isConnected) return;
     if (words === null || words.length < 5) {
@@ -820,7 +864,7 @@ async function runLevel(
   } else if (mechanic === "dictation") {
     // A word game at heart: real words where the pool can spell enough of
     // them, made-up ones where it cannot — the listening is the same drill.
-    const words = await wordsFor(game, pool, CAPS[mechanic]).catch(() => null);
+    const words = await wordsFor(game, fullPool, CAPS[mechanic]).catch(() => null);
     if (!isCurrent() || !body.isConnected) return;
     items = await dictationItems(words, pool, rules);
   } else {

@@ -8,7 +8,7 @@ import { kanaStats, startGameSession, type GameSession, type KanaStat } from "./
 import { renderKanaStats } from "./kana-stats-view.js";
 import { screenHeader } from "./screen.js";
 import { assetUrl, loadDictionary } from "./store.js";
-import { KANA_GROUPS, isCorrect, type KanaEntry, type KanaGroup } from "./kana-data.js";
+import { KANA_GROUPS, allKanaChars, isCorrect, isSmallTsu, type KanaEntry, type KanaGroup } from "./kana-data.js";
 
 /**
  * The kana game.
@@ -143,6 +143,24 @@ function romajiMatches(input: string, kana: string): boolean {
   const typed = input.trim().toLowerCase();
   const walk = (ki: number, ti: number): boolean => {
     if (ki === kana.length) return ti === typed.length;
+    // The small っ doubles the next sound: きって is "kitte". Try that first;
+    // the spelled-out forms (xtu…) still work through the map below.
+    if (kana[ki] === "っ" || kana[ki] === "ッ") {
+      for (const length of [2, 1]) {
+        const next = kana.slice(ki + 1, ki + 1 + length);
+        const spellings = next.length === length ? ROMAJI_MAP.get(next) : undefined;
+        if (!spellings) continue;
+        for (const spelling of spellings) {
+          if (
+            typed[ti] === spelling[0] &&
+            typed.startsWith(spelling, ti + 1) &&
+            walk(ki + 1 + length, ti + 1 + spelling.length)
+          ) {
+            return true;
+          }
+        }
+      }
+    }
     // Digraphs (きゃ) first, or the single kana would swallow their start.
     for (const length of [2, 1]) {
       const piece = kana.slice(ki, ki + length);
@@ -178,6 +196,15 @@ function primaryRomaji(kana: string): string {
   let out = "";
   let at = 0;
   while (at < kana.length) {
+    // The small っ shows as the next sound's first letter, doubled.
+    if (kana[at] === "っ" || kana[at] === "ッ") {
+      const following = ROMAJI_MAP.get(kana.slice(at + 1, at + 3)) ?? ROMAJI_MAP.get(kana[at + 1] ?? "");
+      if (following) {
+        out += following[0][0];
+        at += 1;
+        continue;
+      }
+    }
     const digraph = ROMAJI_MAP.get(kana.slice(at, at + 2));
     if (digraph) {
       out += digraph[0];
@@ -442,15 +469,20 @@ async function runLevel(
   isCurrent: () => boolean,
 ): Promise<void> {
   const pool = poolOf(game);
+  // The small っ has no sound to quiz alone, so it never becomes a lone
+  // card. A selection that is ONLY the tsu group runs every level on real
+  // words containing っ instead — which is the only way っ can be learned.
+  const lonePool = pool.filter((entry) => !isSmallTsu(entry.kana));
+  const tsuFocus = lonePool.length === 0;
   void preloadReactions();
 
   const useLives = level >= 3;
   const timerSec = level === 4 ? 6 : level === 6 ? 10 : 0;
-  const useChoices = level === 1;
+  const useChoices = level === 1 && !tsuFocus;
   const learning = level === 0;
 
   let items: Item[];
-  if (level >= 5) {
+  if (level >= 5 || tsuFocus) {
     // The dictionary may still have to come down the wire, which on mobile
     // data is long enough that a bare line of text reads as a hung screen.
     // So: say what is happening, and always leave a way out.
@@ -470,7 +502,12 @@ async function runLevel(
       const line = body.querySelector("#kana-loading");
       if (line) line.textContent = "Downloading the dictionary… this happens once.";
     }, 4000);
-    const words = await wordsFor(game, pool, WORDS_PER_LEVEL[level] ?? 12);
+    const words = await wordsFor(
+      game,
+      pool,
+      tsuFocus ? Math.min(14, QUESTION_CAP[level] ?? 12) : WORDS_PER_LEVEL[level] ?? 12,
+      tsuFocus,
+    );
     clearTimeout(slow);
     if (left || !isCurrent() || !body.isConnected) return;
     if (words === null || words.length < 5) {
@@ -499,7 +536,7 @@ async function runLevel(
     }
     items = words;
   } else {
-    items = await kanaItems(pool, level);
+    items = await kanaItems(lonePool, level);
   }
 
   const queue = learning ? [...items] : shuffle([...items]);
@@ -527,8 +564,8 @@ async function runLevel(
     : startGameSession({
         level,
         groups: game.groups,
-        poolSize: level >= 5 ? items.length : new Set(items.map((item) => item.kana)).size,
-        words: level >= 5,
+        poolSize: level >= 5 || tsuFocus ? items.length : new Set(items.map((item) => item.kana)).size,
+        words: level >= 5 || tsuFocus,
       });
 
   const stopTimer = (): void => {
@@ -680,7 +717,7 @@ async function runLevel(
                  <button id="kana-next-card">Next (Enter)</button>
                </div>`
             : useChoices
-              ? `<div class="kana-choices" id="kana-choices">${choicesFor(item, pool)
+              ? `<div class="kana-choices" id="kana-choices">${choicesFor(item, lonePool)
                   .map((choice) => `<button data-choice="${escapeHtml(choice)}">${escapeHtml(choice)}</button>`)
                   .join("")}</div>`
               : `<input type="text" id="kana-answer" autocomplete="off" autocapitalize="none"
@@ -971,9 +1008,16 @@ let candidateCache: { groups: string; words: [string, Word][] } | null = null;
  * botanical term, but neither do they need the same fourteen words every
  * night. Whatever the last few games used is held back on top of that.
  */
-async function wordsFor(game: GameState, pool: KanaEntry[], count: number): Promise<Item[] | null> {
-  const allowed = new Set(pool.flatMap((entry) => [...entry.kana]));
-  const signature = [...game.groups].sort().join(",");
+async function wordsFor(
+  game: GameState,
+  pool: KanaEntry[],
+  count: number,
+  tsuLesson = false,
+): Promise<Item[] | null> {
+  // A tsu lesson may spell with the whole syllabary — the point is the っ
+  // inside the word, not the letters around it.
+  const allowed = tsuLesson ? allKanaChars() : new Set(pool.flatMap((entry) => [...entry.kana]));
+  const signature = [...game.groups].sort().join(",") + (tsuLesson ? "+tsu" : "");
   try {
     let ranked = candidateCache?.groups === signature ? candidateCache.words : null;
     if (!ranked) {
@@ -982,6 +1026,7 @@ async function wordsFor(game: GameState, pool: KanaEntry[], count: number): Prom
       for (const entry of dictionary.wordsMadeOf(allowed, 2, 4)) {
         const gloss = entry.glosses[0];
         if (!gloss || gloss.length > 42) continue;
+        if (tsuLesson && !/[っッ]/.test(entry.reading)) continue;
         const freq = entry.freq ?? Number.MAX_SAFE_INTEGER;
         const found = best.get(entry.reading);
         if (!found) {

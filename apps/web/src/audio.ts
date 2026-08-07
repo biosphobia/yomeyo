@@ -35,7 +35,7 @@ type Mode = "voice" | "tts";
  * Raising this number throws the whole cache away once, on the next play,
  * and everything comes back correct.
  */
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;
 const CACHE_VERSION_KEY = "audioCacheVersion";
 const CACHE_PREFIX = "audioClip:";
 
@@ -56,19 +56,22 @@ function cacheReady(): Promise<void> {
 }
 
 /**
- * What to actually say for one kana.
+ * What to actually say for one kana: its katakana twin, always.
  *
- * Speech engines read text, and a few kana are read as the particle they
- * usually are rather than as themselves: は on its own comes out "wa", へ
- * comes out "e". Particles are always written in hiragana, so the katakana
- * twin of the same sound can never be mistaken for one — ハ is only ever
- * "ha". The learner sees the kana they chose; the engine is handed the
- * spelling that makes it say the right sound.
+ * Speech engines read text by deciding what the text IS, and hiragana
+ * invites decisions: は on its own comes out "wa", へ comes out "e", and a
+ * lone vowel can come out as a hum, a hesitation, or nothing at all.
+ * Katakana is Japanese's own spelling for bare sounds — names, noises,
+ * things from nowhere — so the engine is handed the katakana twin and has
+ * nothing to interpret. The learner still sees the kana they chose.
  */
-const SPOKEN_KANA: Record<string, string> = { は: "ハ", へ: "ヘ", を: "ヲ" };
-
 export function spokenKana(kana: string): string {
-  return SPOKEN_KANA[kana] ?? kana;
+  return [...kana]
+    .map((ch) => {
+      const code = ch.codePointAt(0)!;
+      return code >= 0x3041 && code <= 0x3096 ? String.fromCodePoint(code + 0x60) : ch;
+    })
+    .join("");
 }
 
 /** Synthesis and recordings cache apart: a word can be held as both. */
