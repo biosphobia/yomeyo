@@ -341,13 +341,23 @@ function renderSelection(
     // A game whose ladder is already finished starts over. Without this a
     // save written before the rollback existed — or any future way of getting
     // past the end — parks on the last level and never leaves it.
-    const startAt = resuming && game
-      ? game.unlocked >= LEVELS.length
-        ? RESTART_AT
-        : game.unlocked
-      : skipLearn
-        ? 1
-        : 0;
+    // A tsu-only selection has no learn level at all, so it never starts
+    // below 1 — runLevel enforces the same.
+    const tsuOnly =
+      chosen.size > 0 &&
+      [...chosen].every(
+        (id) => KANA_GROUPS.find((group) => group.id === id)?.entries.every((entry) => isSmallTsu(entry.kana)) ?? false,
+      );
+    const startAt = Math.max(
+      tsuOnly ? 1 : 0,
+      resuming && game
+        ? game.unlocked >= LEVELS.length
+          ? RESTART_AT
+          : game.unlocked
+        : skipLearn
+          ? 1
+          : 0,
+    );
     note.textContent =
       chosen.size === 0
         ? "Pick at least one group."
@@ -474,6 +484,13 @@ async function runLevel(
   // words containing っ instead — which is the only way っ can be learned.
   const lonePool = pool.filter((entry) => !isSmallTsu(entry.kana));
   const tsuFocus = lonePool.length === 0;
+  // And no learn level either: there is no sound to meet, only a habit to
+  // build, so the tsu game starts straight at the quiz.
+  if (tsuFocus && level === 0) {
+    game.unlocked = Math.max(game.unlocked, 1);
+    await saveGame(game);
+    return runLevel(body, game, 1, main, isCurrent);
+  }
   void preloadReactions();
 
   const useLives = level >= 3;
@@ -1019,6 +1036,12 @@ async function wordsFor(
   // A tsu lesson may spell with the whole syllabary — the point is the っ
   // inside the word, not the letters around it.
   const allowed = tsuLesson ? allKanaChars() : new Set(pool.flatMap((entry) => [...entry.kana]));
+  // The tsu group lists only ッ, but a mixed selection should still build
+  // words that geminate in hiragana (きって), so both dresses are allowed.
+  if (!tsuLesson && pool.some((entry) => isSmallTsu(entry.kana))) {
+    allowed.add("っ");
+    allowed.add("ッ");
+  }
   const signature = [...game.groups].sort().join(",") + (tsuLesson ? "+tsu" : "");
   try {
     let ranked = candidateCache?.groups === signature ? candidateCache.words : null;

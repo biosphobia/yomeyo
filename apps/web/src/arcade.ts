@@ -2216,6 +2216,11 @@ let candidateCache: { groups: string; words: [string, Word][] } | null = null;
  */
 async function wordsFor(game: GameState, pool: KanaEntry[], count: number): Promise<Item[] | null> {
   const allowed = new Set(pool.flatMap((entry) => [...entry.kana]));
+  // The tsu group lists only ッ, but words geminate in either script.
+  if (pool.some((entry) => isSmallTsu(entry.kana))) {
+    allowed.add("っ");
+    allowed.add("ッ");
+  }
   const signature = [...game.groups].sort().join(",");
   try {
     const dictionary = await loadDictionary();
