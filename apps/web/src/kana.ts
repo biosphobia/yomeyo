@@ -1033,15 +1033,17 @@ async function wordsFor(
   count: number,
   tsuLesson = false,
 ): Promise<Item[] | null> {
-  // A tsu lesson may spell with the whole syllabary — the point is the っ
-  // inside the word, not the letters around it.
-  const allowed = tsuLesson ? allKanaChars() : new Set(pool.flatMap((entry) => [...entry.kana]));
-  // The tsu group lists only ッ, but a mixed selection should still build
-  // words that geminate in hiragana (きって), so both dresses are allowed.
-  if (!tsuLesson && pool.some((entry) => isSmallTsu(entry.kana))) {
-    allowed.add("っ");
-    allowed.add("ッ");
-  }
+  // A tsu lesson may spell with its whole script — the point is the っ (or
+  // ッ) inside the word, not the letters around it. Only the script(s) of
+  // the chosen tsu group(s), though: hiragana tsu drills hiragana words,
+  // katakana tsu katakana words, and they never mix.
+  const allowed = tsuLesson
+    ? new Set(
+        KANA_GROUPS.filter((group) => game.groups.includes(group.id)).flatMap((group) => [
+          ...allKanaChars(group.script),
+        ]),
+      )
+    : new Set(pool.flatMap((entry) => [...entry.kana]));
   const signature = [...game.groups].sort().join(",") + (tsuLesson ? "+tsu" : "");
   try {
     let ranked = candidateCache?.groups === signature ? candidateCache.words : null;

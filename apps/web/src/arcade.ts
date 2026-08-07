@@ -2215,12 +2215,9 @@ let candidateCache: { groups: string; words: [string, Word][] } | null = null;
  * night. Whatever the last few games used is held back on top of that.
  */
 async function wordsFor(game: GameState, pool: KanaEntry[], count: number): Promise<Item[] | null> {
+  // Each tsu group carries its own script's small tsu, so the pool alone
+  // decides which script(s) the words may geminate in.
   const allowed = new Set(pool.flatMap((entry) => [...entry.kana]));
-  // The tsu group lists only ッ, but words geminate in either script.
-  if (pool.some((entry) => isSmallTsu(entry.kana))) {
-    allowed.add("っ");
-    allowed.add("ッ");
-  }
   const signature = [...game.groups].sort().join(",");
   try {
     const dictionary = await loadDictionary();

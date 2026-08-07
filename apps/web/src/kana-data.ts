@@ -71,23 +71,29 @@ function groupsFor(script: "hiragana" | "katakana"): KanaGroup[] {
 }
 
 /**
- * The fucked up tsu: ONE group, katakana section only, no hiragana twin.
+ * The fucked up tsu: one group per script, each keeping to its own script.
  * The small tsu has no sound of its own — it is the held breath that
- * doubles the next one — so it is drilled through whole words (きって,
- * ざっし), never as a lone card, and it gets no learn level either: there
- * is nothing to meet, only a habit to build. See the tsu handling in
- * kana.ts. Words may still wear it in either dress; `allKanaChars` and the
- * word builders take care of that.
+ * doubles the next one — so it is drilled through whole words (きって, or
+ * ベッド on the katakana side), never as a lone card, and it gets no learn
+ * level either: there is nothing to meet, only a habit to build. See the
+ * tsu handling in kana.ts. Hand-written rather than row-generated so the
+ * scripts stay separate: the hiragana group drills hiragana words, the
+ * katakana group katakana words, and neither borrows the other's.
  */
-const TSU_GROUP: KanaGroup = {
-  id: "katakana-16",
-  script: "katakana",
+const tsuGroup = (script: "hiragana" | "katakana"): KanaGroup => ({
+  id: `${script}-16`,
+  script,
   title: "fucked up tsu",
-  detail: "The small ッ. No sound of its own — it doubles the sound that follows.",
-  entries: [{ kana: "ッ", romaji: ["xtu", "xtsu", "ltu", "ltsu"] }],
-};
+  detail: `The small ${script === "hiragana" ? "っ" : "ッ"}. No sound of its own — it doubles the sound that follows.`,
+  entries: [{ kana: script === "hiragana" ? "っ" : "ッ", romaji: ["xtu", "xtsu", "ltu", "ltsu"] }],
+});
 
-export const KANA_GROUPS: KanaGroup[] = [...groupsFor("hiragana"), ...groupsFor("katakana"), TSU_GROUP];
+export const KANA_GROUPS: KanaGroup[] = [
+  ...groupsFor("hiragana"),
+  tsuGroup("hiragana"),
+  ...groupsFor("katakana"),
+  tsuGroup("katakana"),
+];
 
 export function groupById(id: string): KanaGroup | undefined {
   return KANA_GROUPS.find((group) => group.id === id);
@@ -126,11 +132,13 @@ export function isSmallTsu(kana: string): boolean {
   return kana === "っ" || kana === "ッ";
 }
 
-/** Every kana in every group — the alphabet the tsu words may be spelt with. */
-export function allKanaChars(): Set<string> {
-  const chars = new Set(KANA_GROUPS.flatMap((group) => group.entries.flatMap((entry) => [...entry.kana])));
-  // The tsu group lists only ッ, but the words wear either dress.
-  chars.add("っ");
-  chars.add("ッ");
-  return chars;
+/**
+ * Every kana the tsu words may be spelt with — the whole syllabary, or one
+ * script's half of it. The tsu drills pass their group's script here, so
+ * the hiragana group builds hiragana words and the katakana group katakana
+ * words, and the two never mix.
+ */
+export function allKanaChars(script?: "hiragana" | "katakana"): Set<string> {
+  const groups = script ? KANA_GROUPS.filter((group) => group.script === script) : KANA_GROUPS;
+  return new Set(groups.flatMap((group) => group.entries.flatMap((entry) => [...entry.kana])));
 }
