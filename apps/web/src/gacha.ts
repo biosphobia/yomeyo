@@ -331,6 +331,7 @@ async function openCrate(main: HTMLElement, table: PrizeTable, isCurrent: () => 
   // pull happens in the scene rather than after it. Neither part skips.
   const { playCutscene } = await import("./gacha-scene.js");
   const { runRoll } = await import("./gacha-roll.js");
+  void import("./achievements.js").then((m) => m.unlockAchievement("first-pull"));
   const rollBox = stage.querySelector<HTMLDivElement>("#gacha-roll")!;
 
   let rolled: Promise<void> = Promise.resolve();

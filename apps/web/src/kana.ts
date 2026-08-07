@@ -627,6 +627,8 @@ async function runLevel(
     if (!learning) {
       // Awaited, not fired and forgotten: a quest finishing here can cross a
       // level, and the burst that pays has to be in the balance shown below.
+      const { unlockAchievement } = await import("./achievements.js");
+      void unlockAchievement("first-kana-level");
       await recordQuestEvents([
         "kana-level",
         ...(missedAny ? [] : ["kana-level-perfect"]),

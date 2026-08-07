@@ -11,7 +11,7 @@
  * because a place you can recognise in one glance is the whole job.
  */
 
-export type LocationId = "city" | "cafe" | "bath" | "aquarium";
+export type LocationId = "city" | "cafe" | "bath" | "aquarium" | "classroom";
 
 export interface Location {
   /** Called every frame with the frame delta and the clock. */
@@ -383,7 +383,126 @@ function aquarium(ctx: Ctx): Location {
   };
 }
 
-const BUILDERS: Record<LocationId, (ctx: Ctx) => Location> = { city, cafe, bath, aquarium };
+
+// ---------------- the destroyed classroom ----------------
+
+/**
+ * A school nobody dismissed. Half the roof is gone, one wall with it; dust
+ * hangs in the light from the hole. The whiteboard survived, which is how
+ * it goes: everything falls down except the homework.
+ *
+ * The board is a canvas texture, so the chalk on it is drawn, not downloaded
+ * — a big ゆ front and centre, the faded ghosts of older lessons around it.
+ */
+function classroom(ctx: Ctx): Location {
+  const { THREE, scene } = ctx;
+  const DUSK = 0x8f8577;
+  scene.background = new THREE.Color(DUSK);
+  scene.fog = new THREE.FogExp2(DUSK, 0.035);
+  lights(ctx, 0xcfc6b4, 0x4a443c, 1.6, [3.5, 9, 2]);
+
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), box(THREE, 0x8a7358, 1));
+  floor.rotation.x = -Math.PI / 2;
+  floor.receiveShadow = true;
+  scene.add(floor);
+
+  const plaster = box(THREE, 0xb0a692);
+  // Back wall, whole — it holds the board. One side wall whole, the other
+  // broken to a stub with the sky showing through.
+  slab(ctx, plaster, 14, 4.2, 0.3, 0, 2.1, -4.4);
+  slab(ctx, plaster, 0.3, 4.2, 12, -5.2, 2.1, 1);
+  slab(ctx, plaster, 0.3, 1.4, 4, 5.2, 0.7, -2.2);
+  slab(ctx, plaster, 0.3, 2.2, 2.4, 5.2, 1.1, 3.4);
+  // Half a roof: the missing half is where the light comes from.
+  slab(ctx, box(THREE, 0x6e6355), 14, 0.25, 6, 0, 4.25, -1.6);
+
+  // The whiteboard: frame, then the chalk.
+  slab(ctx, box(THREE, 0x54483a), 3.9, 2.2, 0.1, 0, 1.75, -4.24);
+  const canvas = document.createElement("canvas");
+  canvas.width = 1024;
+  canvas.height = 512;
+  const paint = canvas.getContext("2d");
+  if (paint) {
+    paint.fillStyle = "#2e4438";
+    paint.fillRect(0, 0, 1024, 512);
+    // Older lessons, half erased.
+    paint.fillStyle = "rgba(235, 235, 225, 0.16)";
+    paint.font = "64px 'Hiragino Sans', 'Noto Sans JP', sans-serif";
+    paint.fillText("\u306f \u3072 \u3075 \u3078 \u307b", 70, 110);
+    paint.fillText("\u3084  \u3086  \u3088", 620, 430);
+    // Smudges where an eraser gave up.
+    for (let i = 0; i < 7; i++) {
+      paint.fillStyle = "rgba(220, 220, 210, 0.05)";
+      paint.fillRect(80 + i * 130, 180 + (i % 3) * 90, 110, 46);
+    }
+    // Today's lesson, front and centre, pressed hard.
+    paint.fillStyle = "rgba(246, 246, 238, 0.92)";
+    paint.font = "bold 300px 'Hiragino Sans', 'Noto Sans JP', sans-serif";
+    paint.fillText("\u3086", 380, 400);
+    paint.strokeStyle = "rgba(246, 246, 238, 0.75)";
+    paint.lineWidth = 7;
+    paint.beginPath();
+    paint.moveTo(360, 440);
+    paint.lineTo(700, 448);
+    paint.stroke();
+  }
+  const chalk = new THREE.CanvasTexture(canvas);
+  const board = new THREE.Mesh(
+    new THREE.PlaneGeometry(3.6, 1.9),
+    new THREE.MeshBasicMaterial({ map: chalk }),
+  );
+  board.position.set(0, 1.75, -4.18);
+  scene.add(board);
+
+  // Desks: two standing, two thrown. A chair on its side under the hole.
+  const wood = box(THREE, 0x7a6248);
+  const desk = (x: number, z: number, tipped = false): void => {
+    const top = slab(ctx, wood, 0.95, 0.06, 0.6, x, tipped ? 0.34 : 0.66, z);
+    const leg = slab(ctx, wood, 0.08, 0.6, 0.5, x, tipped ? 0.2 : 0.36, z);
+    if (tipped) {
+      top.rotation.z = 1.35;
+      leg.rotation.z = 1.35;
+      top.position.y = 0.5;
+    }
+  };
+  desk(-0.6, -1.6);
+  desk(1.4, -0.9);
+  desk(-2.6, -0.4, true);
+  desk(3.1, 0.9, true);
+  slab(ctx, wood, 0.45, 0.5, 0.45, 4.1, 0.22, -0.8).rotation.z = 1.5;
+
+  // Rubble where the wall used to be.
+  for (let i = 0; i < 9; i++) {
+    const bit = slab(
+      ctx,
+      plaster,
+      0.3 + (i % 3) * 0.25,
+      0.2 + (i % 2) * 0.18,
+      0.3 + ((i + 1) % 3) * 0.2,
+      4.4 + (i % 3) * 0.5,
+      0.12 + (i % 2) * 0.1,
+      0.2 + i * 0.34 - 1.4,
+    );
+    bit.rotation.y = i * 0.7;
+  }
+
+  // Dust, hanging in the light from the missing roof.
+  const dust = drift(ctx, {
+    count: 60,
+    spread: 9,
+    height: 3.8,
+    speed: 0.06,
+    size: 0.045,
+    colour: 0xd8cfb8,
+    opacity: 0.35,
+    up: true,
+    z: [-4, 2],
+  });
+
+  return { ambient: (dt) => dust(dt), focusY: 1.0 };
+}
+
+const BUILDERS: Record<LocationId, (ctx: Ctx) => Location> = { city, cafe, bath, aquarium, classroom };
 
 export function buildLocation(id: LocationId, THREE: any, scene: any): Location {
   return (BUILDERS[id] ?? city)({ THREE, scene });

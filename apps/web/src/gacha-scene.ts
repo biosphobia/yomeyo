@@ -104,8 +104,14 @@ export interface Scenario {
   id: string;
   location: LocationId;
   seconds: number;
-  /** When the crate opens, so the roll can be started against it. */
+  /** When the prize reveals, so the roll can be started against it. */
   opensAt: number;
+  /**
+   * Where the roll unrolls FROM, for a scenario with no crate in it — a
+   * whiteboard, a fish tank, whatever the story made the prize come out
+   * of. Absent, the crate's position is used, as ever.
+   */
+  reveal?: (s: Stage) => Vec3;
   shots: Shot[];
   lines: Line[];
   run: (t: number, dt: number, s: Stage) => void;
@@ -880,6 +886,139 @@ export const SCENARIOS: Scenario[] = [
       if (t >= 12.0) popLid(s, (t - 12.0) / 1.2);
     },
   },
+
+  {
+    /**
+     * School is in session, attendance: one. Chito teaches; Yuuri finds
+     * the curriculum delicious. No crate anywhere — the prize comes out
+     * of the whiteboard, which by then has earned it.
+     */
+    id: "lesson",
+    location: "classroom",
+    seconds: 18,
+    opensAt: 15.8,
+    reveal: () => [0, 1.75, -3.9],
+    shots: [
+      // The whole ruined room, dust in the light, teacher at the board.
+      { at: 0, from: [0, 1.75, 5.2], look: [0, 1.3, -3], to: [0, 1.6, 3.6], lookTo: [0, 1.35, -3.4] },
+      // Over the student's shoulder: the board, and today's enormous ゆ.
+      { at: 3.4, from: [-0.7, 1.35, -0.9], look: [0.1, 1.72, -4.2], fov: 30, to: [-0.4, 1.45, -1.8] },
+      // The teacher, mid-lesson, believing in the lesson.
+      { at: 6.6, from: [-1.7, 1.4, -1.6], look: (s) => posOf(s.cast[1], 1.25), fov: 32 },
+      // The student. In. All the way in.
+      { at: 9.0, from: [-0.6, 1.3, 0.9], look: (s) => posOf(s.cast[0], 1.2), fov: 36, fovTo: 12, to: [-0.6, 1.25, -0.3], shake: 0.02 },
+      // Two-shot from the broken wall, for the verdict.
+      { at: 13.0, from: [3.2, 1.5, 0.6], look: [-0.3, 1.25, -1.8], fov: 34 },
+      // The board takes the last word.
+      { at: 15.6, from: [0, 1.5, -0.4], look: [0, 1.72, -4.2], to: [0, 1.62, -1.5] },
+    ],
+    lines: [
+      { at: 1.2, seconds: 2.6, who: "Chito", text: "Today: this one. It reads yu" },
+      { at: 4.2, seconds: 1.6, who: "Yuuri", text: "Chi-chan" },
+      { at: 6.0, seconds: 1.8, who: "Yuuri", text: "that's a fish" },
+      { at: 7.8, seconds: 1.6, who: "Chito", text: "It's a letter" },
+      { at: 9.8, seconds: 2.2, who: "Yuuri", text: "a tasty fish...", loud: true },
+      { at: 12.0, seconds: 1.2, who: "", text: "(drooling)" },
+      { at: 13.4, seconds: 2.2, who: "Chito", text: "Please don't eat the alphabet" },
+      { at: 16.0, seconds: 1.8, who: "Yuuri", text: "the fish is glowing" },
+    ],
+    run(t, _dt, s) {
+      const [yuuri, chito] = s.cast;
+      // Teacher at the board, student at the one desk still standing.
+      place(s, [
+        [-0.6, -1.3],
+        [1.15, -3.1],
+      ]);
+      pose(yuuri, "sit", 1);
+      face(chito, 0.45); // half to the board, half to the class
+      // The lesson: pointing at the board, with conviction.
+      if (t >= 1.0 && t < 6.4) pose(chito, "point", clamp01((t - 1.0) / 0.5));
+      s.once("tap", 2.2, () => s.sfx.creak());
+      s.once("tap2", 3.1, () => s.sfx.creak());
+
+      // The stomach files its counter-argument.
+      s.once("growl", 9.6, () => s.sfx.growl());
+      s.once("growl2", 11.8, () => s.sfx.growl());
+      if (t >= 9.0 && yuuri) {
+        // She leans towards the board, hypnotised, chair and all.
+        const lean = smooth(clamp01((t - 9.0) / 3.4));
+        pose(yuuri, "sit", 1);
+        pose(yuuri, "reach", clamp01((t - 10.6) / 1.2) * 0.6);
+        yuuri.root.position.z = -1.3 - lean * 0.55;
+        yuuri.root.rotation.x = -lean * 0.22;
+      }
+      if (t >= 13.0 && chito) {
+        pose(chito, "clear", 1);
+        face(chito, -0.15); // turns from the board to look at her student
+      }
+      // The board decides the lesson is over and pays out.
+      s.once("hum", 15.0, () => s.sfx.menace(1.6));
+      s.once("pop", 15.8, () => s.sfx.open());
+    },
+  },
+
+  {
+    /**
+     * Fishing, in a place with the only fish left anywhere, using no rod,
+     * no line and no bait. It works, which is the worst possible outcome
+     * for everyone who owns a rod. Crate-free: the tank hands it over.
+     */
+    id: "fisher",
+    location: "aquarium",
+    seconds: 15,
+    opensAt: 12.8,
+    reveal: () => [0, 2.3, -6.6],
+    shots: [
+      // The tank over their shoulders, one of them dangling an arm in.
+      { at: 0, from: [0, 1.9, 1.6], look: [0, 2.5, -7], fov: 40, to: [0, 1.8, 0.2] },
+      // The technique, such as it is.
+      { at: 3.2, from: [-2.6, 2.0, -2.2], look: (s) => posOf(s.cast[0], 1.35), fov: 30 },
+      // The commentary, delivered without looking up.
+      { at: 6.8, from: [2.2, 1.5, -1.6], look: (s) => posOf(s.cast[1], 1.1), fov: 28 },
+      // The bite.
+      { at: 9.8, from: [0, 1.7, -0.6], look: [0, 2.2, -6.8], shake: 0.05 },
+      // The catch, such as it is.
+      { at: 12.4, from: [0, 1.4, -0.8], look: [0, 2.2, -6.8], to: [0, 1.6, -1.8] },
+    ],
+    lines: [
+      { at: 1.4, seconds: 1.8, who: "Yuuri", text: "I'm fishing" },
+      { at: 3.6, seconds: 2.0, who: "Chito", text: "You don't have a rod" },
+      { at: 6.0, seconds: 1.8, who: "Yuuri", text: "I have patience" },
+      { at: 8.0, seconds: 1.8, who: "Chito", text: "You have neither" },
+      { at: 10.0, seconds: 1.4, who: "", text: "(something bites)" },
+      { at: 11.6, seconds: 2.2, who: "Yuuri", text: "PATIENCE WORKED", loud: true },
+    ],
+    run(t, _dt, s) {
+      const [yuuri, chito] = s.cast;
+      place(s, [
+        [-0.5, -3.6],
+        [1.3, -2.6],
+      ]);
+      // She fishes facing the tank; the sceptic sits facing away, reading.
+      if (yuuri) yuuri.root.rotation.y = FACING + Math.PI;
+      pose(chito, "sit", 1);
+      if (t < 9.8) pose(yuuri, "point", 0.8);
+
+      s.once("drip", 4.6, () => s.sfx.creak());
+      s.once("bite", 10.0, () => s.sfx.splash());
+      // The strike: a full-body yank on nothing at all.
+      if (t >= 10.0 && t < 12.0 && yuuri) {
+        const yank = Math.sin(clamp01((t - 10.0) / 2.0) * Math.PI);
+        pose(yuuri, "swing", yank);
+        yuuri.root.rotation.x = yank * 0.35;
+        yuuri.root.position.z = -3.6 + yank * 0.5;
+      }
+      if (t >= 10.4 && chito) {
+        pose(chito, "clear", 1);
+        const turn = clamp01((t - 10.4) / 0.8);
+        chito.root.rotation.y = FACING + smooth(turn) * Math.PI;
+        s.walking = false;
+      }
+      // The tank concedes.
+      s.once("surface", 12.4, () => s.sfx.splash());
+      s.once("pop", 12.8, () => s.sfx.open());
+    },
+  },
 ];
 
 /** Where somebody is, plus a height — used by the shot definitions. */
@@ -1193,7 +1332,11 @@ async function build(
       // from wherever the crate happens to be on screen.
       if (!announced && elapsed >= scenario.opensAt) {
         announced = true;
-        const point = crate.position.clone().project(camera);
+        // A crate-free scenario says where its prize comes out of.
+        const source = scenario.reveal
+          ? new THREE.Vector3(...scenario.reveal(stage))
+          : crate.position.clone();
+        const point = source.project(camera);
         options.onOpen?.({
           x: clamp01((point.x + 1) / 2),
           y: clamp01((1 - point.y) / 2),

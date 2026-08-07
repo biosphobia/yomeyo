@@ -4561,3 +4561,72 @@ button.gram-swap-line:hover {
     height: 140px;
   }
 }
+
+/* ---------------- achievements ---------------- */
+
+.ach-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin: 22px 0 10px;
+}
+
+.ach-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+}
+
+.ach-row.locked {
+  opacity: 0.55;
+}
+
+.ach-icon {
+  font-size: 1.6rem;
+  flex: none;
+}
+
+.ach-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.ach-name {
+  font-weight: 700;
+}
+
+.ach-tier {
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-left: 6px;
+}
+
+.ach-tier.tier-easy {
+  color: var(--muted);
+}
+
+.ach-tier.tier-normal {
+  color: #4c9be5;
+}
+
+.ach-tier.tier-hard {
+  color: #b56ce5;
+}
+
+.ach-tier.tier-legendary {
+  color: var(--warn);
+}
+
+.ach-row.done.tier-legendary {
+  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+}
+
+.ach-date {
+  flex: none;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}

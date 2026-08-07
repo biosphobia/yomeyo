@@ -256,6 +256,10 @@ function runQuiz(
     const best = Math.max(progress[index] ?? 0, score);
     progress[index] = best;
     await setMeta(DONE_KEY, progress);
+    if (passed) {
+      const { unlockAchievement } = await import("./achievements.js");
+      void unlockAchievement("first-chapter");
+    }
     const earned = right * PER_CORRECT;
     const balance = earned > 0 ? await earnYennies(earned) : await yennies();
     if (!isCurrent() || !body.isConnected) return;

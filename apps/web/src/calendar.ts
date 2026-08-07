@@ -9,6 +9,7 @@ import {
 } from "./quests.js";
 import { screenHeader } from "./screen.js";
 import { levelState } from "./levels.js";
+import { renderAchievements } from "./achievements.js";
 
 /**
  * The Calendar: a month of days, each carrying its quests.
@@ -59,7 +60,10 @@ export async function renderCalendar(main: HTMLElement, isCurrent: () => boolean
       ${WEEKDAYS.map((day) => `<div class="cal-weekday">${day}</div>`).join("")}
     </div>
     <div id="cal-day"></div>
+    <div id="cal-achievements"></div>
   `;
+
+  void renderAchievements(main.querySelector<HTMLElement>("#cal-achievements")!);
 
   // Tapping the countdown goes to the day itself, which is where the exam
   // and the quests around it are written out.
