@@ -18,8 +18,10 @@
  * GitHub without touching the code.
  */
 
-/** How many device pixels one drawn pixel becomes. Bigger is chunkier. */
-const CHUNK = 4;
+/** How many device pixels one drawn pixel becomes. Bigger is chunkier.
+ *  Three, not four: still blocky, but the letters hold their shapes — at
+ *  four, a phone-sized frame rendered ten-pixel words nobody could read. */
+const CHUNK = 3;
 /** Characters a second. */
 const SPEED = 26;
 
@@ -114,7 +116,7 @@ export function createDialogue(host: HTMLElement, lines: Line[]): Dialogue {
 
     // Sized against the picture rather than fixed, so a line reads the same
     // on a phone as on a monitor.
-    const base = Math.max(5, Math.min(11, Math.round(height * 0.05)));
+    const base = Math.max(7, Math.min(14, Math.round(height * 0.058)));
     const size = line.loud ? Math.round(base * 1.4) : base;
     ctx.font = `bold ${size}px system-ui, sans-serif`;
     ctx.textBaseline = "top";
@@ -127,7 +129,7 @@ export function createDialogue(host: HTMLElement, lines: Line[]): Dialogue {
 
     const margin = Math.round(base * 1.2);
     const rows = wrap(text, Math.min(width - margin * 2, Math.round(width * 0.72)));
-    const lineHeight = size + 2;
+    const lineHeight = size + 3;
     const block = rows.length * lineHeight;
     const jolt = line.loud ? Math.round(Math.sin(t * 47) * 1.2) : 0;
     const colour = line.loud ? "#ffd34d" : "#f6f4ee";

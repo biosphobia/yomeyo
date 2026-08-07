@@ -216,6 +216,11 @@ function pose(walker: Walker | undefined, name: string, amount: number, t = 0): 
       set(b.RightArm, 0, 0, 2.3 + Math.sin(t * 14 + 1) * 0.6);
       set(b.Head, Math.sin(t * 11) * 0.3);
       break;
+    case "gaze":
+      // Looking up at something taking its time.
+      set(b.Head, -0.62);
+      set(b.Spine, -0.14);
+      break;
     case "flat":
       set(b.LeftArm, 0, 0, -1.9);
       set(b.RightArm, 0, 0, 1.9);
@@ -456,175 +461,222 @@ export const SCENARIOS: Scenario[] = [
   },
 
   {
-    id: "airdrop",
-    location: "city",
-    seconds: 13,
-    opensAt: 11.2,
+    /**
+     * The staircase that is most of the journey. They give up climbing it
+     * at exactly the moment the climb becomes unnecessary: the crate takes
+     * the stairs, one thud per step, and parks at their feet.
+     */
+    id: "stairs",
+    location: "stairwell",
+    seconds: 15,
+    opensAt: 13.0,
     shots: [
-      { at: 0, from: [0, 1.55, 7.2], look: [0, 0.95, -1], to: [0, 1.5, 5.6], lookTo: [0, 0.95, -0.4] },
-      // Looking up at the sky a moment before either of them does.
-      { at: 6.6, from: [0.9, 0.6, 3.2], look: [0, 6, -2], fov: 46 },
-      { at: 8.0, from: [0, 1.8, 4.6], look: [0, 1.0, -0.4], shake: 0.03 },
-      { at: 9.4, from: [-1.6, 1.1, 2.4], look: [0, 0.5, -0.4], to: [-0.9, 1.0, 1.9] },
+      // Low at the bottom, the steps running up out of the light.
+      { at: 0, from: [0, 1.1, 3.6], look: [0, 3.4, -9], fov: 44, to: [0, 1.3, 2.6] },
+      // Their faces, craned back, doing the arithmetic.
+      { at: 3.4, from: [0, 1.6, 0.6], look: [0, 1.5, -1.6], fov: 30 },
+      // The sit, in sympathy.
+      { at: 6.4, from: [-2.2, 1.0, 1.8], look: [0, 0.7, -1.2], fov: 36 },
+      // Up the steps for the descent, following it down.
+      { at: 8.6, from: [1.8, 2.6, -1.4], look: [0, 3.4, -8], to: [1.6, 1.6, 0.2], lookTo: [0, 0.6, -1.6], shake: 0.03 },
+      // At their feet, where it ends up.
+      { at: 12.4, from: [0, 1.2, 1.6], look: [0, 0.5, -1.5], to: [0, 1.05, 1.1] },
     ],
     lines: [
-      { at: 5.6, seconds: 1.8, who: "Chito", text: "Did you hear something" },
-      { at: 8.6, seconds: 1.8, who: "Yuuri", text: "no" },
-      { at: 10.6, seconds: 1.8, who: "Chito", text: "It's on top of you" },
+      { at: 1.2, seconds: 2.2, who: "Yuuri", text: "How far up does up go" },
+      { at: 3.8, seconds: 1.8, who: "Chito", text: "All the way" },
+      { at: 6.6, seconds: 2.0, who: "Yuuri", text: "Then we live here now" },
+      { at: 9.2, seconds: 1.4, who: "", text: "(something takes the stairs)" },
+      { at: 12.6, seconds: 2.2, who: "Chito", text: "...it used the handrail" },
     ],
     run(t, _dt, s) {
-      const [victim, other] = s.cast;
-      walkIn(s, t, 5.4);
-      s.once("look", 5.9, () => face(other, -0.4));
-      s.once("whistle", 6.9, () => s.sfx.falling(1.3));
-      if (t >= 6.9 && victim) {
-        const fall = clamp01((t - 6.9) / 1.3);
-        showCrate(s, victim.root.position.x, 13 - 12.6 * fall * fall, victim.root.position.z);
-        s.crate.rotation.y = fall * 4;
+      const [yuuri, chito] = s.cast;
+      place(s, [
+        [-0.7, -1.0],
+        [0.7, -1.2],
+      ]);
+      // Necks back, counting floors.
+      if (t >= 0.8 && t < 6.2) {
+        pose(yuuri, "gaze", clamp01((t - 0.8) / 0.6));
+        pose(chito, "gaze", clamp01((t - 1.2) / 0.6));
       }
-      s.once("impact", 8.2, () => s.sfx.thud());
-      if (t >= 8.2 && victim) {
-        const down = clamp01((t - 8.2) / 0.4);
-        pose(victim, "flat", down);
-        victim.root.rotation.x = -smooth(down) * 1.5;
-        face(other, smooth(down) * 0.7);
+      // The surrender: both of them sit on the bottom step.
+      if (t >= 6.2) {
+        pose(yuuri, "sit", clamp01((t - 6.2) / 0.5));
+        pose(chito, "sit", clamp01((t - 6.5) / 0.5));
+        if (yuuri) yuuri.root.position.set(-0.7, 0.28, -1.9);
+        if (chito) chito.root.position.set(0.7, 0.28, -1.9);
       }
-      if (t >= 9.0 && other && victim) {
-        const over = clamp01((t - 9.0) / 1.3);
-        other.root.position.x = other.homeX + (victim.root.position.x + 0.8 - other.homeX) * smooth(over);
-        s.walking = over < 1;
-        if (over >= 1) pose(other, "reach", clamp01((t - 10.4) / 0.4));
+      // The descent: one step at a time, one thud at a time.
+      const BOUNCES = 7;
+      if (t >= 8.8 && t < 12.2) {
+        const p = clamp01((t - 8.8) / 3.4);
+        const step = Math.min(BOUNCES - 1, Math.floor(p * BOUNCES));
+        const within = p * BOUNCES - step;
+        const fromStep = 14 - step * 2;
+        const toStep = Math.max(0, fromStep - 2);
+        const y = 0.13 + (fromStep + (toStep - fromStep) * within) * 0.26 + Math.sin(within * Math.PI) * 0.5;
+        const z = -2.2 - (fromStep + (toStep - fromStep) * within) * 0.72 + 0.4;
+        showCrate(s, 0.3 * Math.sin(step * 2.4), y + 0.3, z);
+        s.crate.rotation.x = p * 8;
+        s.crate.rotation.y = step * 0.9;
       }
-      s.once("poke", 10.6, () => s.sfx.creak());
-      s.once("pop", 11.2, () => s.sfx.open());
-      if (t >= 11.2) popLid(s, (t - 11.2) / 1.2);
+      for (let n = 0; n < BOUNCES; n++) {
+        s.once(`thud${n}`, 8.8 + ((n + 1) / BOUNCES) * 3.4 - 0.1, () => s.sfx.thud());
+      }
+      s.once("arrive", 12.2, () => s.sfx.clatter());
+      if (t >= 12.2) {
+        showCrate(s, 0, 0.36 * spring(clamp01((t - 12.2) / 0.7)), -1.0);
+        s.crate.rotation.set(0, 0.4, 0);
+        if (t >= 12.4) {
+          pose(yuuri, "reach", clamp01((t - 12.4) / 0.4));
+        }
+      }
+      s.once("pop", 13.0, () => s.sfx.open());
+      if (t >= 13.0) popLid(s, (t - 13.0) / 1.2);
     },
   },
 
   {
-    id: "kick",
-    location: "city",
-    seconds: 14,
-    opensAt: 12.2,
+    /**
+     * Dusk on a roof, and a crate coming down the sky on a parachute
+     * nobody sent — slowly enough for a full negotiation about who owns
+     * it, and politely enough to land exactly between them.
+     */
+    id: "parachute",
+    location: "rooftop",
+    seconds: 16,
+    opensAt: 14.0,
     shots: [
-      { at: 0, from: [0, 1.55, 7.0], look: [0, 0.95, -1], to: [0, 1.5, 5.2], lookTo: [0, 0.9, -1] },
-      // Low and close on the crate for the kicking.
-      { at: 5.0, from: [-1.9, 0.5, 1.4], look: [0, 0.4, -1.2], fov: 40 },
-      // Straight up, following it out of frame.
-      { at: 8.4, from: [1.2, 0.9, 2.6], look: [0, 8, -1.2], fov: 44 },
-      { at: 10.6, from: [0, 1.9, 4.4], look: [0, 0.9, -1.2], shake: 0.03 },
-      { at: 12.2, from: [0, 1.2, 3.0], look: [0, 0.55, -1.2], to: [0, 1.1, 2.5] },
+      // The dusk, the parapet, two silhouettes looking out.
+      { at: 0, from: [0, 1.7, 4.6], look: [0, 1.2, -4], to: [0, 1.6, 3.4] },
+      // Up at the sky, where something is taking its time.
+      { at: 3.2, from: [-0.8, 1.1, 1.2], look: [1.5, 9, -8], fov: 46 },
+      // Their heads, tracking it together like a slow tennis match.
+      { at: 6.2, from: [0, 1.6, 1.2], look: [0, 1.55, -1.4], fov: 28 },
+      // Side-on for the argument, city behind.
+      { at: 9.2, from: [3.4, 1.5, 1.6], look: [-0.8, 1.2, -1.2], fov: 34 },
+      // The landing, gentle as a snowflake with paperwork.
+      { at: 12.6, from: [0, 1.9, 3.0], look: [0, 0.8, -1.2], to: [0, 1.3, 2.2] },
     ],
     lines: [
-      { at: 5.2, seconds: 1.8, who: "Yuuri", text: "It's stuck" },
-      { at: 7.4, seconds: 1.6, who: "Chito", text: "Don't—" },
-      { at: 9.0, seconds: 2.0, who: "Yuuri", text: "where'd it go" },
-      { at: 11.0, seconds: 1.6, who: "Chito", text: "Move." , loud: true },
+      { at: 1.4, seconds: 2.0, who: "Yuuri", text: "It's taking its time" },
+      { at: 3.8, seconds: 2.0, who: "Chito", text: "It has a parachute" },
+      { at: 6.4, seconds: 1.8, who: "Yuuri", text: "I want a parachute" },
+      { at: 8.6, seconds: 1.8, who: "Chito", text: "You'd eat it" },
+      { at: 10.8, seconds: 1.8, who: "Yuuri", text: "...only a bit", loud: true },
+      { at: 13.4, seconds: 1.8, who: "", text: "(it lands exactly between them)" },
     ],
     run(t, _dt, s) {
-      const [kicker, other] = s.cast;
-      walkIn(s, t, 4.6);
-      showCrate(s, 0, 0.3, -1.2);
-      const kicks = [
-        { at: 5.6, who: kicker },
-        { at: 6.8, who: other },
-        { at: 8.2, who: kicker },
-      ];
-      kicks.forEach((kick, i) => {
-        s.once(`kick${i}`, kick.at, () => (i < 2 ? s.sfx.thud() : s.sfx.boing()));
-        if (kick.who && t >= kick.at - 0.45 && t < kick.at + 0.6) {
-          const lean = Math.sin(clamp01((t - (kick.at - 0.45)) / 1.05) * Math.PI);
-          kick.who.root.rotation.x = -lean * 0.5;
-          kick.who.root.position.z = (kick.who === kicker ? -0.2 : -0.55) - lean * 0.45;
-        }
-      });
-      if (t >= 8.2 && t < 11.0) {
-        const up = (t - 8.2) / 2.8;
-        showCrate(s, 0, 0.3 + Math.sin(up * Math.PI) * 24, -1.2);
-        s.crate.rotation.set(up * 9, up * 6, up * 4);
+      const [yuuri, chito] = s.cast;
+      place(s, [
+        [-0.8, -2.6],
+        [0.8, -2.6],
+      ]);
+      // The whole descent: high and far left, down to the roof between
+      // them, swinging under its canopy the entire way.
+      const drop = smooth(clamp01(t / 13.2));
+      const sway = Math.sin(t * 1.7) * (1 - drop) * 1.1;
+      showCrate(s, -6 + 6 * drop + sway, 11.5 - 11.1 * drop, -6 + 4.8 * drop);
+      s.crate.rotation.z = Math.sin(t * 1.7 + 0.6) * 0.25 * (1 - drop);
+      s.crate.rotation.y = t * 0.3;
+      // Two heads following one slow object.
+      if (t >= 2.4 && t < 12.6) {
+        pose(yuuri, "gaze", 0.8);
+        pose(chito, "gaze", 0.7);
+        const track = Math.atan2(s.crate.position.x, 4);
+        face(yuuri, track * 0.8);
+        face(chito, track * 0.8);
       }
-      s.once("gone", 8.9, () => s.sfx.whoosh());
-      if (t >= 9.0 && t < 11.0) for (const who of s.cast) pose(who, "clear", 1);
-      s.once("coming", 10.4, () => s.sfx.falling(0.6));
-      s.once("land", 11.0, () => {
+      s.once("breeze", 3.0, () => s.sfx.whoosh());
+      s.once("settle", 13.2, () => {
         s.sfx.thud();
         s.sfx.clatter();
       });
-      if (t >= 11.0) {
-        showCrate(s, 0, 0.36 * spring(clamp01((t - 11.0) / 0.9)), -1.2);
-        s.crate.rotation.set(0, 0, 0);
-        face(kicker, -0.3);
-        face(other, 0.3);
+      if (t >= 13.2) {
+        showCrate(s, 0, 0.36, -1.2);
+        s.crate.rotation.set(0, 0.2, 0);
+        pose(yuuri, "reach", clamp01((t - 13.4) / 0.4));
+        pose(chito, "clear", 1);
+        face(yuuri, -0.3);
+        face(chito, 0.3);
       }
-      s.once("pop", 12.2, () => s.sfx.open());
-      if (t >= 12.2) popLid(s, (t - 12.2) / 1.2);
+      s.once("pop", 14.0, () => s.sfx.open());
+      if (t >= 14.0) popLid(s, (t - 14.0) / 1.2);
     },
   },
 
   {
-    id: "bowling",
-    location: "city",
-    seconds: 13,
-    opensAt: 11.3,
+    /**
+     * Night, a fire, one ration on a stick, and the fire's opinion of it.
+     * Crate-free: whatever the fire took, the fire gives back with
+     * interest — the prize reveals out of the flames.
+     */
+    id: "campfire",
+    location: "campfire",
+    seconds: 16,
+    opensAt: 13.8,
+    reveal: () => [0, 0.8, -1.3],
     shots: [
-      { at: 0, from: [0, 1.55, 7.0], look: [0, 0.95, -1], to: [0, 1.5, 5.6], lookTo: [0, 0.95, -0.6] },
-      // Side on, so it arrives from off the edge of the frame.
-      { at: 4.9, from: [3.4, 1.0, 3.2], look: [-1, 0.7, -0.6], fov: 42 },
-      { at: 6.2, from: [0, 1.6, 4.2], look: [0, 0.7, -0.6], shake: 0.05 },
-      { at: 7.6, from: [-2.6, 2.2, 3.0], look: [1, 0.6, -0.6] },
-      { at: 9.8, from: [0, 1.3, 3.6], look: [0, 0.6, -0.6], to: [0, 1.2, 3.0] },
+      // The one warm thing in the world, and two people around it.
+      { at: 0, from: [0, 1.5, 2.8], look: [0, 0.7, -1.4], to: [0, 1.3, 2.2] },
+      // Low over the flames: the stick, the ration, the mistake.
+      { at: 3.6, from: [-1.5, 0.6, -0.2], look: [0.3, 0.55, -1.4], fov: 30 },
+      // Firelit faces, one trusting, one doing risk assessment.
+      { at: 6.6, from: [0, 1.1, -0.2], look: [-0.9, 1.0, 0.6], fov: 30 },
+      // The fire takes the ration.
+      { at: 9.6, from: [0.9, 0.8, 0.2], look: [0, 0.6, -1.4], fov: 34, shake: 0.03 },
+      // Push into the flames for the apology.
+      { at: 12.6, from: [0, 1.0, 0.8], look: [0, 0.7, -1.4], to: [0, 0.85, 0.1] },
     ],
     lines: [
-      { at: 5.0, seconds: 1.5, who: "Chito", text: "Something's coming" },
-      { at: 6.6, seconds: 1.6, who: "Yuuri", text: "ow" },
-      { at: 10.0, seconds: 2.0, who: "Chito", text: "It came back" },
+      { at: 1.4, seconds: 2.4, who: "Chito", text: "Last ration. Cook it carefully" },
+      { at: 4.2, seconds: 1.8, who: "Yuuri", text: "I'm the careful one" },
+      { at: 7.0, seconds: 1.6, who: "Chito", text: "You are not" },
+      { at: 9.8, seconds: 1.4, who: "", text: "(the fire eats it)" },
+      { at: 11.4, seconds: 1.8, who: "Yuuri", text: "the fire was hungrier" },
+      { at: 13.6, seconds: 2.0, who: "Yuuri", text: "look — it's sorry", loud: true },
     ],
     run(t, _dt, s) {
-      const [a, b] = s.cast;
-      walkIn(s, t, 4.6);
-      s.once("rumble", 5.0, () => s.sfx.whoosh());
-      if (t >= 5.0 && t < 6.4) {
-        const roll = (t - 5.0) / 1.4;
-        showCrate(s, -12 + 24 * roll, 0.4, -0.6);
-        s.crate.rotation.z = -roll * 26;
+      const [yuuri, chito] = s.cast;
+      place(s, [
+        [-0.9, 0.4],
+        [0.9, 0.4],
+      ]);
+      // Both sat at the fire, facing it — which is towards the camera's
+      // side of the flames, so faces stay lit and visible.
+      pose(yuuri, "sit", 1);
+      pose(chito, "sit", 1);
+      if (yuuri) {
+        yuuri.root.position.y = 0.28;
+        face(yuuri, 0.5);
       }
-      s.once("strike", 5.75, () => {
-        s.sfx.thud();
+      if (chito) {
+        chito.root.position.y = 0.28;
+        face(chito, -0.5);
+      }
+      // The stick over the fire: one arm out, holding dinner's future.
+      if (t >= 1.0 && t < 10.4) pose(yuuri, "point", clamp01((t - 1.0) / 0.6));
+      s.once("sizzle", 5.2, () => s.sfx.creak());
+      s.once("sizzle2", 8.0, () => s.sfx.creak());
+      // The fire takes it: a pop, a flare, an empty stick.
+      s.once("gone", 9.6, () => {
         s.sfx.clatter();
+        s.sfx.growl();
       });
-      if (t >= 5.75) {
-        const spun = clamp01((t - 5.75) / 1.0);
-        if (a) {
-          a.root.rotation.set(-smooth(spun) * 1.3, FACING + smooth(spun) * 7, 0);
-          pose(a, "flat", spun);
-        }
-        if (b) {
-          b.root.rotation.set(-smooth(spun) * 1.1, FACING - smooth(spun) * 6, 0);
-          pose(b, "flat", spun);
-        }
+      if (t >= 10.4 && t < 12.6) {
+        pose(yuuri, "sit", 1);
+        pose(yuuri, "hurt", clamp01((t - 10.4) / 0.8) * 0.6);
       }
-      s.once("crash", 7.1, () => {
-        s.sfx.thud();
-        s.sfx.clatter();
-      });
-      if (t >= 7.1 && t < 9.4) {
-        const back = (t - 7.1) / 2.3;
-        showCrate(s, 12 - 12 * smooth(back), 0.4, -0.6);
-        s.crate.rotation.z = back * 14;
+      if (t >= 12.6) {
+        pose(yuuri, "sit", 1);
+        pose(yuuri, "reach", clamp01((t - 12.6) / 0.6));
+        pose(chito, "sit", 1);
+        pose(chito, "gaze", 0.4);
       }
-      s.once("settle", 9.4, () => s.sfx.thud());
-      if (t >= 9.4) {
-        showCrate(s, 0, 0.36, -0.6);
-        s.crate.rotation.set(0, 0, 0);
-        const up = clamp01((t - 9.6) / 1.1);
-        for (const who of [a, b]) {
-          if (!who) continue;
-          who.root.rotation.set(-1.2 * (1 - smooth(up)), FACING, 0);
-          pose(who, "flat", 1 - smooth(up));
-        }
-      }
-      s.once("pop", 11.3, () => s.sfx.open());
-      if (t >= 11.3) popLid(s, (t - 11.3) / 1.2);
+      // The flames make amends.
+      s.once("hum", 13.0, () => s.sfx.menace(1.4));
+      s.once("pop", 13.8, () => s.sfx.open());
     },
   },
 

@@ -11,7 +11,7 @@
  * because a place you can recognise in one glance is the whole job.
  */
 
-export type LocationId = "city" | "cafe" | "bath" | "aquarium" | "classroom";
+export type LocationId = "city" | "cafe" | "bath" | "aquarium" | "classroom" | "stairwell" | "rooftop" | "campfire";
 
 export interface Location {
   /** Called every frame with the frame delta and the clock. */
@@ -502,7 +502,173 @@ function classroom(ctx: Ctx): Location {
   return { ambient: (dt) => dust(dt), focusY: 1.0 };
 }
 
-const BUILDERS: Record<LocationId, (ctx: Ctx) => Location> = { city, cafe, bath, aquarium, classroom };
+
+// ---------------- the stairwell ----------------
+
+/**
+ * The staircase that is most of the journey: steps going up further than
+ * the light does. Lit from a skylight somewhere far above, so the top of
+ * the frame glows and the bottom does not.
+ */
+function stairwell(ctx: Ctx): Location {
+  const { THREE, scene } = ctx;
+  const DIM = 0x4a4a52;
+  scene.background = new THREE.Color(DIM);
+  scene.fog = new THREE.FogExp2(DIM, 0.06);
+  lights(ctx, 0x9aa0b0, 0x2c2c33, 1.3, [0, 14, -6]);
+
+  const concrete = box(THREE, 0x7d7d88);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), box(THREE, 0x6b6b76, 1));
+  floor.rotation.x = -Math.PI / 2;
+  floor.receiveShadow = true;
+  scene.add(floor);
+
+  // The steps: up and back, twenty of them, into the fog.
+  for (let i = 0; i < 20; i++) {
+    slab(ctx, concrete, 5.4, 0.26, 0.72, 0, 0.13 + i * 0.26, -2.2 - i * 0.72);
+  }
+  // Walls close enough to feel; a landing rail.
+  slab(ctx, concrete, 0.4, 8, 26, -3.1, 4, -8);
+  slab(ctx, concrete, 0.4, 8, 26, 3.1, 4, -8);
+  slab(ctx, box(THREE, 0x54545e), 5.4, 0.1, 0.1, 0, 1.05, -2.0);
+
+  const dust = drift(ctx, {
+    count: 40,
+    spread: 5,
+    height: 6,
+    speed: 0.05,
+    size: 0.04,
+    colour: 0xb8b8c8,
+    opacity: 0.3,
+    up: false,
+    z: [-10, 1],
+  });
+  return { ambient: (dt) => dust(dt), focusY: 1.0 };
+}
+
+// ---------------- the rooftop ----------------
+
+/**
+ * The top of a tower at dusk: a parapet, dead aerials, cables, and a city
+ * that is all silhouette below the ledge. The sky does most of the work.
+ */
+function rooftop(ctx: Ctx): Location {
+  const { THREE, scene } = ctx;
+  const DUSK = 0x74688a;
+  scene.background = new THREE.Color(DUSK);
+  scene.fog = new THREE.FogExp2(DUSK, 0.028);
+  lights(ctx, 0xb9a8c8, 0x3a3444, 1.5, [-8, 10, 4]);
+
+  const roof = new THREE.Mesh(new THREE.PlaneGeometry(22, 18), box(THREE, 0x5c5666, 1));
+  roof.rotation.x = -Math.PI / 2;
+  roof.receiveShadow = true;
+  scene.add(roof);
+
+  const wall = box(THREE, 0x6d6678);
+  // The parapet, a knee-high wall all the way round the front.
+  slab(ctx, wall, 12, 0.85, 0.4, 0, 0.42, -4.6);
+  slab(ctx, wall, 0.4, 0.85, 10, -6, 0.42, 0);
+  slab(ctx, wall, 0.4, 0.85, 10, 6, 0.42, 0);
+
+  // Rooftop furniture: a vent, a tank, an aerial that gave up years ago.
+  slab(ctx, box(THREE, 0x4f4a58), 1.4, 1.0, 1.0, -3.8, 0.5, -2.2);
+  slab(ctx, box(THREE, 0x59536a), 1.0, 1.6, 1.0, 4.2, 0.8, -1.6);
+  slab(ctx, box(THREE, 0x3f3a4a), 0.08, 3.2, 0.08, 4.2, 3.2, -1.6).rotation.z = 0.16;
+  slab(ctx, box(THREE, 0x3f3a4a), 1.2, 0.06, 0.06, 4.2, 4.4, -1.6).rotation.z = 0.16;
+
+  // Towers past the ledge, sunk so only their shoulders show.
+  const tower = box(THREE, 0x4a4456);
+  for (let i = 0; i < 7; i++) {
+    slab(ctx, tower, 2.4 + (i % 3), 8, 2.4, -12 + i * 4.2, -1.5 - (i % 2) * 1.2, -14 - (i % 3) * 4);
+  }
+
+  // Slow embers of city dust in the dusk light.
+  const motes = drift(ctx, {
+    count: 30,
+    spread: 16,
+    height: 6,
+    speed: 0.04,
+    size: 0.05,
+    colour: 0xcabade,
+    opacity: 0.25,
+    up: true,
+    z: [-10, 4],
+  });
+  return { ambient: (dt) => motes(dt), focusY: 1.0 };
+}
+
+// ---------------- the campfire ----------------
+
+/**
+ * Night, and the one warm thing in it. The fire is boxes that never stop
+ * changing size and a light that never stops changing its mind, plus
+ * sparks that climb and die — all animated in `ambient`, because a still
+ * fire is just an orange rock.
+ */
+function campfire(ctx: Ctx): Location {
+  const { THREE, scene } = ctx;
+  const NIGHT = 0x121420;
+  scene.background = new THREE.Color(NIGHT);
+  scene.fog = new THREE.FogExp2(NIGHT, 0.05);
+  scene.add(new THREE.HemisphereLight(0x2c3452, 0x0c0e18, 0.7));
+
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), box(THREE, 0x23222c, 1));
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  // The fire: logs, three tongues of flame, and its light.
+  const logMat = box(THREE, 0x4a3826);
+  slab(ctx, logMat, 0.9, 0.16, 0.2, 0, 0.08, -1.4, 0.5);
+  slab(ctx, logMat, 0.9, 0.16, 0.2, 0, 0.08, -1.4, -0.6);
+  slab(ctx, logMat, 0.9, 0.16, 0.2, 0.1, 0.2, -1.45, 1.6);
+  const flameMat = new THREE.MeshBasicMaterial({ color: 0xff9a3c, transparent: true, opacity: 0.85 });
+  const coreMat = new THREE.MeshBasicMaterial({ color: 0xffd97a, transparent: true, opacity: 0.9 });
+  const flames = [flameMat, coreMat, flameMat].map((material, i) => {
+    const tongue = new THREE.Mesh(new THREE.ConeGeometry(0.16 - i * 0.03, 0.55 - i * 0.1, 6), material);
+    tongue.position.set((i - 1) * 0.14, 0.4, -1.4);
+    scene.add(tongue);
+    return tongue;
+  });
+  const glow = new THREE.PointLight(0xff9a3c, 2.4, 12, 1.6);
+  glow.position.set(0, 0.7, -1.4);
+  glow.castShadow = true;
+  scene.add(glow);
+
+  // A ruin for the fire to glow against, and their packs beside them.
+  slab(ctx, box(THREE, 0x2c2a38), 8, 5, 0.6, 0, 2.5, -8);
+  slab(ctx, box(THREE, 0x3a3630), 0.6, 0.5, 0.4, -1.9, 0.25, -0.4, 0.3);
+  slab(ctx, box(THREE, 0x3a3630), 0.5, 0.4, 0.35, 1.9, 0.2, -0.5, -0.4);
+
+  const sparks = drift(ctx, {
+    count: 26,
+    spread: 1.2,
+    height: 2.6,
+    speed: 0.5,
+    size: 0.035,
+    colour: 0xffb060,
+    opacity: 0.8,
+    up: true,
+    z: [-1.7, -1.1],
+  });
+
+  return {
+    ambient: (dt, t) => {
+      sparks(dt);
+      // The flicker: three tongues breathing out of step, and the light
+      // wandering with them.
+      flames.forEach((tongue, i) => {
+        const breathe = 0.8 + Math.sin(t * (7 + i * 2.4) + i * 1.9) * 0.22;
+        tongue.scale.set(breathe, 0.85 + Math.sin(t * (9 + i) + i) * 0.3, breathe);
+        tongue.rotation.y = t * (0.8 + i * 0.3);
+      });
+      glow.intensity = 2.1 + Math.sin(t * 8.2) * 0.35 + Math.sin(t * 13.7) * 0.2;
+    },
+    focusY: 0.9,
+  };
+}
+
+const BUILDERS: Record<LocationId, (ctx: Ctx) => Location> = { city, cafe, bath, aquarium, classroom, stairwell, rooftop, campfire };
 
 export function buildLocation(id: LocationId, THREE: any, scene: any): Location {
   return (BUILDERS[id] ?? city)({ THREE, scene });
