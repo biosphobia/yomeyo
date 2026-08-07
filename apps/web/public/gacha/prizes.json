@@ -27,17 +27,17 @@
       "title": "Rations",
       "lines": ["chichan. i'm hungry", "you ate the last one", "that was ages ago", "(smack) die faggot", "...food?"]
     },
-    "airdrop": {
-      "title": "Unscheduled delivery",
-      "lines": ["did you hear something", "no", "it's on top of you"]
+    "stairs": {
+      "title": "Then we live here now",
+      "lines": ["How far up does up go", "All the way", "Then we live here now", "(something takes the stairs)", "...it used the handrail"]
     },
-    "kick": {
-      "title": "Percussive maintenance",
-      "lines": ["it's stuck", "don't—", "where'd it go", "move."]
+    "parachute": {
+      "title": "Special delivery, eventually",
+      "lines": ["It's taking its time", "It has a parachute", "I want a parachute", "You'd eat it", "...only a bit", "(it lands exactly between them)"]
     },
-    "bowling": {
-      "title": "Right of way",
-      "lines": ["something's coming", "ow", "it came back"]
+    "campfire": {
+      "title": "The fire was hungrier",
+      "lines": ["Last ration. Cook it carefully", "I'm the careful one", "You are not", "(the fire eats it)", "the fire was hungrier", "look — it's sorry"]
     },
     "hail": {
       "title": "Adverse weather",
@@ -54,6 +54,18 @@
     "tank": {
       "title": "Feeding time",
       "lines": ["they're still alive", "somebody's feeding them", "can we eat them", "no—", "(the tank disagrees)"]
+    },
+    "lesson": {
+      "title": "School is in session",
+      "lines": ["Today: this one. It reads yu", "Chi-chan", "that's a fish", "It's a letter", "a tasty fish...", "(drooling)", "Please don't eat the alphabet", "the fish is glowing"]
+    },
+    "fisher": {
+      "title": "Patience worked",
+      "lines": ["I'm fishing", "You don't have a rod", "I have patience", "You have neither", "(something bites)", "PATIENCE WORKED"]
+    },
+    "books": {
+      "title": "Tripped on human history",
+      "lines": ["A whole floor of books survived", "I'm reading them in order", "do they taste different?", "(she is not watching the floor)", "(the to-read pile fights back)", "...the floor wanted them more", "You tripped on human history", "history is glowing"]
     }
   },
   "_cutscenes": "Each cutscene's caption and its dialogue. The keys are the scenario ids in gacha-scene.ts and cannot be invented here, but every title and every line can be rewritten. Lines are in the order they are spoken; who says each one and when is set in the code. Leave a line blank or drop it and the one written in the code is used.",
@@ -130,6 +142,204 @@
       "on": "wrong",
       "image": "gifs/haircut.gif",
       "text": "that evil wrong answer feeling"
+    },
+    {
+      "id": "gif-blow",
+      "type": "gif",
+      "name": "blow",
+      "rarity": "common",
+      "on": "correct",
+      "image": "gifs/blow.gif",
+      "text": "mwah"
+    },
+    {
+      "id": "gif-goochie",
+      "type": "gif",
+      "name": "goochie",
+      "rarity": "common",
+      "on": "correct",
+      "image": "gifs/goochie.gif",
+      "text": "agoochiegoochiegoo"
+    },
+    {
+      "id": "gif-hips",
+      "type": "gif",
+      "name": "hips",
+      "rarity": "common",
+      "on": "correct",
+      "image": "gifs/hips.gif",
+      "text": "hug earned"
+    },
+    {
+      "id": "gif-kiss",
+      "type": "gif",
+      "name": "kiss",
+      "rarity": "rare",
+      "on": "correct",
+      "image": "gifs/kiss.gif",
+      "text": "yeah yeah shut up"
+    },
+    {
+      "id": "gif-old",
+      "type": "gif",
+      "name": "old",
+      "rarity": "common",
+      "on": "correct",
+      "image": "gifs/old.avif",
+      "text": "old"
+    },
+    {
+      "id": "gif-oomfie",
+      "type": "gif",
+      "name": "oomfie",
+      "rarity": "epic",
+      "on": "correct",
+      "image": "gifs/oomfie.gif",
+      "text": "oomfie!!"
+    },
+    {
+      "id": "gif-shower",
+      "type": "gif",
+      "name": "shower",
+      "rarity": "common",
+      "on": "correct",
+      "image": "gifs/shower.avif",
+      "text": "cleansed"
+    },
+    {
+      "id": "gif-soft",
+      "type": "gif",
+      "name": "soft",
+      "rarity": "rare",
+      "on": "correct",
+      "image": "gifs/soft.gif",
+      "text": "headpats"
+    },
+    {
+      "id": "gif-touch",
+      "type": "gif",
+      "name": "touch",
+      "rarity": "common",
+      "on": "correct",
+      "image": "gifs/touch.gif",
+      "text": "pat pat pat"
+    },
+    {
+      "id": "gif-what",
+      "type": "gif",
+      "name": "what",
+      "rarity": "rare",
+      "on": "correct",
+      "image": "gifs/what.gif",
+      "text": "waow"
+    },
+    {
+      "id": "gif-brain",
+      "type": "gif",
+      "name": "brain",
+      "rarity": "common",
+      "on": "wrong",
+      "image": "gifs/brain.gif",
+      "text": "brain is empty"
+    },
+    {
+      "id": "gif-die",
+      "type": "gif",
+      "name": "die",
+      "rarity": "common",
+      "on": "wrong",
+      "image": "gifs/die.gif",
+      "text": "oh no"
+    },
+    {
+      "id": "gif-disagree",
+      "type": "gif",
+      "name": "disagree",
+      "rarity": "common",
+      "on": "wrong",
+      "image": "gifs/disagree.avif",
+      "text": "the avif disagrees"
+    },
+    {
+      "id": "gif-hors",
+      "type": "gif",
+      "name": "hors",
+      "rarity": "rare",
+      "on": "wrong",
+      "image": "gifs/hors.gif",
+      "text": "the horse expected better"
+    },
+    {
+      "id": "gif-keaj",
+      "type": "gif",
+      "name": "keaj",
+      "rarity": "common",
+      "on": "wrong",
+      "image": "gifs/keaj.gif",
+      "text": "WAAAAAH"
+    },
+    {
+      "id": "gif-oshi",
+      "type": "gif",
+      "name": "oshi",
+      "rarity": "common",
+      "on": "wrong",
+      "image": "gifs/oshi.gif",
+      "text": "(burp)"
+    },
+    {
+      "id": "gif-phone",
+      "type": "gif",
+      "name": "phone",
+      "rarity": "common",
+      "on": "wrong",
+      "image": "gifs/phone.gif",
+      "text": "we don't talk about it"
+    },
+    {
+      "id": "gif-slop",
+      "type": "gif",
+      "name": "slop",
+      "rarity": "epic",
+      "on": "wrong",
+      "image": "gifs/slop.gif",
+      "text": "enjoy the slop"
+    },
+    {
+      "id": "gif-stamp",
+      "type": "gif",
+      "name": "stamp",
+      "rarity": "common",
+      "on": "wrong",
+      "image": "gifs/stamp.gif",
+      "text": "stamped."
+    },
+    {
+      "id": "gif-stomp",
+      "type": "gif",
+      "name": "stomp",
+      "rarity": "common",
+      "on": "wrong",
+      "image": "gifs/stomp.gif",
+      "text": "stomped"
+    },
+    {
+      "id": "gif-talk",
+      "type": "gif",
+      "name": "talk",
+      "rarity": "common",
+      "on": "wrong",
+      "image": "gifs/talk.gif",
+      "text": "zzz"
+    },
+    {
+      "id": "gif-threat",
+      "type": "gif",
+      "name": "threat",
+      "rarity": "common",
+      "on": "wrong",
+      "image": "gifs/threat.gif",
+      "text": "answer better next time"
     }
   ],
 
