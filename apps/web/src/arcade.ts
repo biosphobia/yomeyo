@@ -224,7 +224,7 @@ const BEST_STREAK_KEY = "kanaBestStreak";
  */
 const WORD_CANDIDATES = 1200;
 const RECENT_WORDS_KEY = "kanaRecentWords";
-const RECENT_WORDS = 240;
+const RECENT_WORDS = 360;
 let streak = 0;
 let bestStreak = 0;
 
@@ -2298,19 +2298,20 @@ function readAnotherWay(dictionary: { lookupExact(text: string): DictEntry[] }, 
 }
 
 /**
- * Draw `count` distinct words from a list ordered commonest first.
+ * Draw `count` distinct words, uniformly, from the whole candidate list.
  *
- * Squaring a uniform random number leans the draw towards the front of the
- * list without ever fencing off the back of it: the words that come up are
- * mostly common ones, but which common ones is different every time, and a
- * long tail still turns up often enough to be worth having.
+ * It used to lean towards the front (the commonest words), and the lean was
+ * strong enough that a tenth of all draws landed in the top one percent —
+ * which read as "the same words every night", because it was. The list is
+ * already only the commonest spellable words, so inside it, every word is
+ * fair game and pure chance is the whole policy.
  */
 function drawByFrequency<T>(ranked: T[], count: number): T[] {
   const taken = new Set<number>();
   const out: T[] = [];
   const wanted = Math.min(count, ranked.length);
   while (out.length < wanted) {
-    let at = Math.min(ranked.length - 1, Math.floor(Math.random() ** 2 * ranked.length));
+    let at = Math.floor(Math.random() * ranked.length);
     // Already drawn: walk on to the next free one rather than re-rolling for
     // ever as the list fills up.
     while (taken.has(at)) at = (at + 1) % ranked.length;
