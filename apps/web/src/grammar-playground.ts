@@ -210,12 +210,34 @@ function draw(body: HTMLDivElement): void {
   drawBoard(out, body);
 }
 
+/**
+ * What a piece ACTUALLY adds to this word, read off the word itself.
+ *
+ * The dictionary name of an ending is not always the sound that lands on a
+ * given word: のむ + 〜て is のんで, so a block labelled 〜て over a word
+ * that now ends んで asks a beginner to already know the te-form's sound
+ * changes — the exact thing being learned. The label is therefore the diff:
+ * everything after the longest shared prefix of before and after.
+ */
+function addedLabel(beforeKana: string, afterKana: string, fallback: string): string {
+  let shared = 0;
+  while (
+    shared < beforeKana.length &&
+    shared < afterKana.length &&
+    beforeKana[shared] === afterKana[shared]
+  ) {
+    shared++;
+  }
+  const suffix = afterKana.slice(shared);
+  return suffix ? `〜${suffix}` : fallback;
+}
+
 /** One tappable choice: the piece, its name, and the word it would make. */
 function optionRow(piece: Piece, from: ChainState, action: "add" | "swap"): string {
   const preview = piece.apply(from).kana;
   return `
     <button class="pg-opt tone-${piece.tone}" data-${action}="${piece.id}">
-      <span class="pg-opt-jp" lang="ja">${escapeHtml(piece.label)}</span>
+      <span class="pg-opt-jp" lang="ja">${escapeHtml(addedLabel(from.kana, preview, piece.label))}</span>
       <span class="pg-opt-name">${escapeHtml(piece.name)}</span>
       <span class="pg-opt-preview" lang="ja">→ ${escapeHtml(preview)}</span>
       <span class="pg-opt-job">${escapeHtml(piece.job)}</span>
@@ -266,7 +288,9 @@ function drawBoard(out: HTMLDivElement, body: HTMLDivElement): void {
     const before = at === 0 ? start : steps[at - 1].state;
     const alternatives = PIECES.filter((piece) => piece.id !== step.piece.id && piece.fits(before));
     return `
-      <div class="pg-panel-title"><span lang="ja">${escapeHtml(step.piece.label)}</span> — ${escapeHtml(step.piece.name)}</div>
+      <div class="pg-panel-title"><span lang="ja">${escapeHtml(
+        addedLabel(before.kana, step.state.kana, step.piece.label),
+      )}</span> — ${escapeHtml(step.piece.name)}</div>
       <div class="glosses">${escapeHtml(step.piece.job)}</div>
       <div class="row-actions" style="margin:8px 0">
         <button id="pg-break" class="secondary">Take it off (and everything after)</button>
@@ -305,7 +329,9 @@ function drawBoard(out: HTMLDivElement, body: HTMLDivElement): void {
             (step, i) => `
           <button class="pg-block tone-${step.piece.tone} pg-added${focusAt === i ? " on" : ""}" data-at="${i}"
             title="Tap to change or remove this piece">
-            <span class="pg-block-jp" lang="ja">${escapeHtml(step.piece.label)}</span>
+            <span class="pg-block-jp" lang="ja">${escapeHtml(
+              addedLabel((i === 0 ? start : steps[i - 1].state).kana, step.state.kana, step.piece.label),
+            )}</span>
             <span class="pg-block-sub">${escapeHtml(step.piece.name)}</span>
           </button>`,
           )
