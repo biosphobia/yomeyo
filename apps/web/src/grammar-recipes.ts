@@ -349,7 +349,7 @@ function openPicker(host: HTMLElement, spot: PickerSpot, onPick: (w: SlotWord) =
         )
         .join("") ||
       `<div class="glosses" style="padding:12px">${
-        mine ? "No cards fit this slot yet — the flashcards you save show up here." : "Nothing matches."
+        mine ? "No cards fit this slot yet. The flashcards you save show up here." : "Nothing matches."
       }</div>`;
     for (const button of list.querySelectorAll<HTMLButtonElement>(".rc-pick")) {
       button.addEventListener("click", () => {
@@ -429,7 +429,7 @@ function cardHtml(recipe: Recipe, s: RecipeState): string {
   const jp = recipe.jp(s);
   return `
     <div class="card-panel rc-card" data-card="${recipe.id}">
-      <div class="rc-title"><b lang="ja">${escapeHtml(recipe.title)}</b> — ${escapeHtml(recipe.pattern)}</div>
+      <div class="rc-title"><b lang="ja">${escapeHtml(recipe.title)}</b>: ${escapeHtml(recipe.pattern)}</div>
       <div class="pg-chain rc-chain">
         ${slots.join("")}
         <button class="pg-endcap rc-plus${panel[recipe.id] === "plus" ? " on" : ""}" data-recipe="${recipe.id}">＋</button>

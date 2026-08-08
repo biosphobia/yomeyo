@@ -5,6 +5,7 @@ import { PER_CORRECT, earnYennies, formatYennies, yennies } from "./yennies.js";
 import { LESSONS } from "./grammar-lessons.js";
 import { GRAMMAR_UNITS } from "./grammar-data.js";
 import { runUnit } from "./grammar-practice.js";
+import { renderRecipes } from "./grammar-recipes.js";
 
 /**
  * The Course: the grammar curriculum as chapters, each read, drilled and
@@ -171,6 +172,7 @@ async function drawLesson(
           </div>`,
           )
           .join("")}
+        ${section.recipes ? `<div class="rc-embed" id="lesson-recipes"></div>` : ""}
       </div>`,
       )
       .join("")}
@@ -200,6 +202,8 @@ async function drawLesson(
     openLesson = null;
     void renderLessons(body, isCurrent);
   });
+  const recipesHost = body.querySelector<HTMLDivElement>("#lesson-recipes");
+  if (recipesHost) void renderRecipes(recipesHost);
   for (const row of body.querySelectorAll<HTMLElement>(".lesson-example")) {
     row.querySelector(".speaker")!.addEventListener("click", () => {
       void speak(row.dataset.say ?? "", { rate: 0.85 }).catch(() => undefined);

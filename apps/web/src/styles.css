@@ -4757,3 +4757,31 @@ button.gram-swap-line:hover {
     align-items: center;
   }
 }
+
+/* recipes embedded inside a lesson chapter: same cards, tighter */
+.rc-embed {
+  margin-top: 12px;
+}
+
+.rc-embed .rc-intro {
+  display: none;
+}
+
+.rc-embed .card-panel.rc-card {
+  padding: 12px;
+  margin-bottom: 10px;
+  background: var(--panel-2, rgba(255, 255, 255, 0.03));
+}
+
+.rc-embed .rc-jp {
+  font-size: 1.25rem;
+}
+
+.rc-embed .pg-block-jp {
+  font-size: 1rem;
+}
+
+.rc-embed .rc-romaji,
+.rc-embed .rc-en {
+  margin-left: 36px;
+}
