@@ -165,6 +165,46 @@ export async function setPrizeOverride(id: string, patch: PrizeOverride | null):
   loaded = null; // the next prizeTable() folds the new overrides in
 }
 
+/**
+ * Is the publish endpoint deployed and holding a key? Same probe pattern
+ * as the audio endpoint: only a 204 counts, because a static host serves
+ * the PHP source as a 200.
+ */
+let publishReady: Promise<boolean> | null = null;
+
+export function publishAvailable(): Promise<boolean> {
+  publishReady ??= fetch(assetUrl("prizes-admin.php?probe=1"), { cache: "no-store" })
+    .then((res) => res.status === 204)
+    .catch(() => false);
+  return publishReady;
+}
+
+/**
+ * Publish one prize's edit for everyone, via the server's overrides file.
+ * "denied" means the key was wrong; anything else that goes wrong is
+ * "error". On success the table cache is dropped so the next load shows it.
+ */
+export async function publishPrizeOverride(
+  id: string,
+  patch: PrizeOverride | null,
+  key: string,
+): Promise<"ok" | "denied" | "error"> {
+  try {
+    const res = await fetch(assetUrl("prizes-admin.php"), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ key, id, patch }),
+    });
+    if (res.status === 204) {
+      loaded = null;
+      return "ok";
+    }
+    return res.status === 403 ? "denied" : "error";
+  } catch {
+    return "error";
+  }
+}
+
 export function prizeTable(): Promise<PrizeTable> {
   loaded ??= fetch(assetUrl("gacha/prizes.json"))
     .then((res) => (res.ok ? res.json() : {}))
@@ -173,23 +213,28 @@ export function prizeTable(): Promise<PrizeTable> {
         raw.rarities && typeof raw.rarities === "object" && Object.keys(raw.rarities).length > 0
           ? raw.rarities
           : FALLBACK.rarities;
-      const overrides =
+      // Two layers of edits over the file: the published overrides from the
+      // server (everyone sees those), then this device's own local ones.
+      const global = await fetch(assetUrl("gacha/prizes-overrides.json"), { cache: "no-store" })
+        .then((res) => (res.ok ? res.json() : {}))
+        .catch((): Record<string, PrizeOverride> => ({}));
+      const local =
         (await getMeta<Record<string, PrizeOverride>>(OVERRIDES_KEY).catch(
           (): Record<string, PrizeOverride> => ({}),
         )) ?? {};
-      const prizes = (
-        Array.isArray(raw.prizes)
-          ? raw.prizes.map((p) => cleanPrize(p, rarities)).filter((p): p is Prize => p !== null)
-          : []
-      ).map((prize) => {
-        const edit = overrides[prize.id];
-        if (!edit) return prize;
+      const apply = (prize: Prize, edit: PrizeOverride | undefined): Prize => {
+        if (!edit || typeof edit !== "object") return prize;
         const merged = { ...prize };
         if (typeof edit.name === "string" && edit.name.trim()) merged.name = edit.name.trim();
         if (typeof edit.rarity === "string" && edit.rarity in rarities) merged.rarity = edit.rarity;
         if (merged.type === "gif" && typeof edit.text === "string" && edit.text.trim()) merged.text = edit.text.trim();
         return merged;
-      });
+      };
+      const prizes = (
+        Array.isArray(raw.prizes)
+          ? raw.prizes.map((p) => cleanPrize(p, rarities)).filter((p): p is Prize => p !== null)
+          : []
+      ).map((prize) => apply(apply(prize, (global as Record<string, PrizeOverride>)[prize.id]), local[prize.id]));
       return {
         cost: typeof raw.cost === "number" && raw.cost > 0 ? Math.floor(raw.cost) : FALLBACK.cost,
         draw: (raw.draw === "rarity" ? "rarity" : "uniform") as DrawMode,

@@ -10,6 +10,8 @@ import {
   prizeImageUrl,
   prizeTable,
   rarityOdds,
+  publishAvailable,
+  publishPrizeOverride,
   setPrizeOverride,
   type Prize,
   type PrizeTable,
@@ -17,6 +19,10 @@ import {
 import { forgetReactions } from "./feedback.js";
 import { applySkin } from "./skins.js";
 import { unlockAll, unlockAllNow } from "./unlock.js";
+import { getMeta, setMeta } from "./db.js";
+
+/** Where the admin's publish key rests between edits. */
+const PUBLISH_KEY = "gachaPublishKey";
 
 /**
  * The Gacha tab: what yennies are for.
@@ -266,7 +272,7 @@ function drawCollection(
       const prize = table.prizes.find((p) => p.id === id);
       // The admin taps a prize to edit it; everyone else taps skins to wear them.
       if (admin && prize) {
-        openPrizeEditor(main, table, prize, wearing, refresh);
+        void openPrizeEditor(main, table, prize, wearing, refresh);
         return;
       }
       await equipSkin(wearing === id ? null : id);
@@ -281,13 +287,15 @@ function drawCollection(
  * Saved as a local override on this device; prizes.json on GitHub stays the
  * source of truth for everyone else.
  */
-function openPrizeEditor(
+async function openPrizeEditor(
   main: HTMLElement,
   table: PrizeTable,
   prize: Prize,
   wearing: string | null,
   refresh: () => void,
-): void {
+): Promise<void> {
+  const canPublish = await publishAvailable();
+  const storedKey = (await getMeta<string>(PUBLISH_KEY)) ?? "";
   main.querySelector(".rc-scrim")?.remove();
   const scrim = document.createElement("div");
   scrim.className = "rc-scrim";
@@ -317,13 +325,25 @@ function openPrizeEditor(
             .join("")}
         </select>
       </label>
+      ${
+        canPublish
+          ? `<label class="pe-field">Publish key
+              <input id="pe-key" type="password" value="${escapeAttr(storedKey)}"
+                placeholder="the GACHA_ADMIN_KEY secret" autocomplete="off" />
+            </label>`
+          : ""
+      }
       <div class="row-actions" style="margin-top:10px">
-        <button id="pe-save">Save</button>
-        <button id="pe-clear" class="secondary">Clear override</button>
+        ${canPublish ? `<button id="pe-publish">Publish to everyone</button>` : ""}
+        <button id="pe-save" class="${canPublish ? "secondary" : ""}">Save on this device</button>
+        <button id="pe-clear" class="secondary">Clear</button>
         ${prize.type === "skin" ? `<button id="pe-wear" class="secondary">${wearing === prize.id ? "Take off" : "Wear"}</button>` : ""}
       </div>
-      <div class="glosses" style="margin-top:8px">Saved on this device. prizes.json on GitHub is still the
-        source for everyone else.</div>
+      <div class="glosses" id="pe-msg" style="margin-top:8px">${
+        canPublish
+          ? "Publish writes the server's overrides file, for every device. Save keeps it here only."
+          : "Saved on this device. prizes.json on GitHub is the source for everyone else."
+      }</div>
     </div>`;
   main.appendChild(scrim);
 
@@ -332,20 +352,46 @@ function openPrizeEditor(
     if (ev.target === scrim) close();
   });
   scrim.querySelector(".rc-close")!.addEventListener("click", close);
-  scrim.querySelector("#pe-save")!.addEventListener("click", async () => {
+
+  const patchFromForm = (): { name?: string; text?: string; rarity?: string } => {
     const name = scrim.querySelector<HTMLInputElement>("#pe-name")?.value.trim();
     const text = scrim.querySelector<HTMLTextAreaElement>("#pe-text")?.value.trim();
     const rarity = scrim.querySelector<HTMLSelectElement>("#pe-rarity")?.value;
-    await setPrizeOverride(prize.id, {
-      ...(name && name !== prize.name ? { name } : {}),
-      ...(text && prize.type === "gif" && text !== prize.text ? { text } : {}),
-      ...(rarity && rarity !== prize.rarity ? { rarity } : {}),
-    });
+    return {
+      ...(name ? { name } : {}),
+      ...(text && prize.type === "gif" ? { text } : {}),
+      ...(rarity ? { rarity } : {}),
+    };
+  };
+
+  scrim.querySelector("#pe-save")!.addEventListener("click", async () => {
+    await setPrizeOverride(prize.id, patchFromForm());
     close();
     refresh();
   });
+  scrim.querySelector("#pe-publish")?.addEventListener("click", async () => {
+    const message = scrim.querySelector<HTMLElement>("#pe-msg")!;
+    const key = scrim.querySelector<HTMLInputElement>("#pe-key")?.value.trim() ?? "";
+    if (!key) {
+      message.textContent = "The publish key is the GACHA_ADMIN_KEY repository secret.";
+      return;
+    }
+    message.textContent = "Publishing…";
+    const outcome = await publishPrizeOverride(prize.id, patchFromForm(), key);
+    if (outcome === "ok") {
+      await setMeta(PUBLISH_KEY, key);
+      // The global copy now carries the edit; a stale local one would shadow it.
+      await setPrizeOverride(prize.id, null);
+      close();
+      refresh();
+    } else {
+      message.textContent = outcome === "denied" ? "Wrong key." : "Couldn't reach the server.";
+    }
+  });
   scrim.querySelector("#pe-clear")!.addEventListener("click", async () => {
     await setPrizeOverride(prize.id, null);
+    const key = scrim.querySelector<HTMLInputElement>("#pe-key")?.value.trim() ?? "";
+    if (canPublish && key) await publishPrizeOverride(prize.id, null, key);
     close();
     refresh();
   });

@@ -39,8 +39,6 @@ const TRIPLE_PAY: Record<string, number> = { "７": 60, ゆ: 30, 魚: 20, 缶: 1
 /** Multiplier for exactly two of a kind, for the two worth pairing. */
 const PAIR_PAY: Record<string, number> = { "７": 4, ゆ: 2 };
 
-const CELL_ANGLE = (Math.PI * 2) / REEL.length;
-
 function slotResult(cells: number[]): { mult: number; line: string } {
   const [a, b, c] = cells.map((cell) => REEL[cell]);
   if (a === b && b === c) return { mult: TRIPLE_PAY[a] ?? 8, line: `${a} ${a} ${a} — three of a kind!` };
@@ -152,30 +150,6 @@ function neonTexture(THREE: any): any {
   return new THREE.CanvasTexture(canvas);
 }
 
-function reelTexture(THREE: any): any {
-  const canvas = document.createElement("canvas");
-  canvas.width = 1024;
-  canvas.height = 128;
-  const paint = canvas.getContext("2d")!;
-  REEL.forEach((symbol, i) => {
-    paint.fillStyle = i % 2 === 0 ? "#faf6ec" : "#ece4d4";
-    paint.fillRect(i * 128, 0, 128, 128);
-    paint.save();
-    paint.translate(i * 128 + 64, 64);
-    // The reel lies on its side, so the glyphs are painted on theirs.
-    paint.rotate(Math.PI / 2);
-    paint.fillStyle = SYMBOL_COLOUR[symbol] ?? "#333";
-    paint.font = "bold 90px 'Hiragino Sans', 'Noto Sans JP', sans-serif";
-    paint.textAlign = "center";
-    paint.textBaseline = "middle";
-    paint.fillText(symbol, 0, 0);
-    paint.restore();
-  });
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.wrapS = THREE.RepeatWrapping;
-  return texture;
-}
-
 /** One die face, drawn: `dark` swaps ivory-and-black for charcoal-and-white. */
 function dieFace(THREE: any, value: number, dark: boolean): any {
   const canvas = document.createElement("canvas");
@@ -231,11 +205,6 @@ function faceUp(inner: any, value: number): void {
   }
 }
 
-/** Park a reel with cell index (fractional while spinning) at the front. */
-function setReel(reel: any, cell: number): void {
-  reel.rotation.y = -(cell + 0.5) * CELL_ANGLE;
-}
-
 // ---------------- the room ----------------
 
 const MX = -1.7;
@@ -251,7 +220,8 @@ interface Die {
 }
 
 interface Room {
-  reels: any[];
+  /** Redraw the slot screen: three column positions in cells, win rows lit. */
+  drawSlots: (positions: number[], highlight: boolean) => void;
   bulbs: any[];
   neon: any;
   pink: any;
@@ -319,27 +289,50 @@ function buildRoom(THREE: any, scene: any): Room {
   slab(gold, 1.6, 0.12, 1.0, MX, 2.26, MZ);
   slab(gold, 1.6, 0.12, 1.0, MX, 0.06, MZ);
   const frame = matte(0x35142a, 0.3);
-  slab(frame, 1.4, 0.1, 0.14, MX, 1.78, MZ + 0.48); // above the window
-  slab(frame, 1.4, 0.1, 0.14, MX, 0.92, MZ + 0.48); // below it
-  slab(frame, 0.1, 0.96, 0.14, MX - 0.65, 1.35, MZ + 0.48);
-  slab(frame, 0.1, 0.96, 0.14, MX + 0.65, 1.35, MZ + 0.48);
-  const reelStrip = reelTexture(THREE);
-  const reels: any[] = [];
-  for (let i = 0; i < 3; i++) {
-    const reel = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.3, 0.3, 0.36, 24, 1, true),
-      new THREE.MeshStandardMaterial({ map: reelStrip, roughness: 0.45 }),
-    );
-    reel.rotation.z = Math.PI / 2;
-    reel.position.set(MX - 0.39 + i * 0.39, 1.35, MZ + 0.28);
-    setReel(reel, Math.floor(Math.random() * REEL.length));
-    scene.add(reel);
-    reels.push(reel);
-  }
-  // A soft lamp on the reels: enough to read them, not enough to blow out.
-  const reelLight = new THREE.PointLight(0xfff6e0, 2.2, 2.6, 1.6);
-  reelLight.position.set(MX, 1.6, MZ + 1.3);
-  scene.add(reelLight);
+  slab(frame, 1.44, 0.1, 0.14, MX, 2.0, MZ + 0.48); // above the screen
+  slab(frame, 1.44, 0.1, 0.14, MX, 0.7, MZ + 0.48); // below it
+  slab(frame, 0.1, 1.4, 0.14, MX - 0.67, 1.35, MZ + 0.48);
+  slab(frame, 0.1, 1.4, 0.14, MX + 0.67, 1.35, MZ + 0.48);
+  // The screen itself: a flat 3x3 grid drawn on canvas, self-lit so it
+  // reads in any light, in honest perspective on the cabinet face.
+  const CELL = 128;
+  const slotCanvas = document.createElement("canvas");
+  slotCanvas.width = CELL * 3;
+  slotCanvas.height = CELL * 3;
+  const slotPaint = slotCanvas.getContext("2d")!;
+  const slotTexture = new THREE.CanvasTexture(slotCanvas);
+  const drawSlots = (positions: number[], highlight: boolean): void => {
+    slotPaint.fillStyle = "#221426";
+    slotPaint.fillRect(0, 0, CELL * 3, CELL * 3);
+    slotPaint.font = "bold 86px 'Hiragino Sans', 'Noto Sans JP', sans-serif";
+    slotPaint.textAlign = "center";
+    slotPaint.textBaseline = "middle";
+    for (let col = 0; col < 3; col++) {
+      const base = Math.floor(positions[col]);
+      const frac = positions[col] - base;
+      for (let row = -1; row <= 3; row++) {
+        const symbol = REEL[(((base + row) % REEL.length) + REEL.length) % REEL.length];
+        const y = (row - frac) * CELL;
+        slotPaint.fillStyle = (base + row) % 2 === 0 ? "#faf6ec" : "#ece4d4";
+        slotPaint.fillRect(col * CELL + 4, y + 4, CELL - 8, CELL - 8);
+        slotPaint.fillStyle = SYMBOL_COLOUR[symbol] ?? "#333";
+        slotPaint.fillText(symbol, col * CELL + CELL / 2, y + CELL / 2 + 4);
+      }
+    }
+    // The payline, across the middle row.
+    slotPaint.fillStyle = highlight ? "rgba(255, 216, 96, 0.30)" : "rgba(255, 216, 96, 0.12)";
+    slotPaint.fillRect(0, CELL, CELL * 3, CELL);
+    slotPaint.strokeStyle = highlight ? "#ffd860" : "rgba(255, 216, 96, 0.55)";
+    slotPaint.lineWidth = highlight ? 10 : 4;
+    slotPaint.strokeRect(3, CELL + 3, CELL * 3 - 6, CELL - 6);
+    slotTexture.needsUpdate = true;
+  };
+  const screen = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.24, 1.24),
+    new THREE.MeshBasicMaterial({ map: slotTexture }),
+  );
+  screen.position.set(MX, 1.35, MZ + 0.46);
+  scene.add(screen);
   const bulbs: any[] = [];
   for (let i = 0; i < 5; i++) {
     const bulb = new THREE.Mesh(
@@ -350,9 +343,9 @@ function buildRoom(THREE: any, scene: any): Room {
     scene.add(bulb);
     bulbs.push(bulb);
   }
-  // Her stool, square in front of the machine.
-  slab(matte(0x51392a), 0.16, 0.55, 0.16, MX, 0.28, MZ + 1.1);
-  slab(matte(0x7a5236, 0.6), 0.55, 0.1, 0.55, MX, 0.58, MZ + 1.1);
+  // Her stool, in front of the machine with knee room.
+  slab(matte(0x51392a), 0.16, 0.55, 0.16, MX, 0.28, MZ + 1.6);
+  slab(matte(0x7a5236, 0.6), 0.55, 0.1, 0.55, MX, 0.58, MZ + 1.6);
 
   // The dealer's table: bright felt under its own lamp, dice at the ready.
   const felt = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.05, 0.1, 24), matte(0x2a7a4c, 0.85));
@@ -441,7 +434,7 @@ function buildRoom(THREE: any, scene: any): Room {
     coins.push(coin);
   }
 
-  return { reels, bulbs, neon, pink, winLight, mine, theirs, card, paintCard, coins };
+  return { drawSlots, bulbs, neon, pink, winLight, mine, theirs, card, paintCard, coins };
 }
 
 // ---------------- the render ----------------
@@ -561,6 +554,7 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
     const camera = new THREE.PerspectiveCamera(42, stageHost.clientWidth / Math.max(240, stageHost.clientHeight), 0.1, 100);
 
     room = buildRoom(THREE, scene);
+    room.drawSlots([0, 3, 5].map((n) => n + Math.floor(Math.random() * REEL.length)), false);
 
     // The cast: Yuuri (0) on the stool beside her machine, Chito (1) at the
     // table, far enough back that the felt doesn't swallow her.
@@ -591,8 +585,10 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
     });
     const [yuuri, chito] = cast;
     if (yuuri) {
-      // ON the stool, not floating near it: seat height, facing the reels.
-      yuuri.root.position.set(MX, 0.52, MZ + 1.1);
+      // Sitting ON the stool: the sit pose parks the seat ~0.28 below the
+      // root, so a 0.63 seat wants the root at 0.91 — same sum the campfire
+      // scene uses for the ground.
+      yuuri.root.position.set(MX, 0.91, MZ + 1.6);
       yuuri.root.rotation.y = Math.PI;
     }
     if (chito) {
@@ -847,29 +843,33 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
       busy = true;
       result.textContent = "…";
       sfx.whoosh();
-      // The reels tick while they turn, like something mechanical should.
+      // The screen ticks while the columns run, like something mechanical.
       const ticker = setInterval(() => sfx.step(), 110);
-      const targets = room.reels.map(() => Math.floor(Math.random() * REEL.length));
+      const targets = [0, 1, 2].map(() => Math.floor(Math.random() * REEL.length));
       const startAt = performance.now();
-      const spins = [4, 5, 6];
+      const spins = [3, 4, 5];
       const DURATION = [1400, 2000, 2600];
-      const from = room.reels.map((reel: any) => -reel.rotation.y / CELL_ANGLE - 0.5);
+      // Column position p shows REEL[(floor p)+1] on the payline, so each
+      // column lands at target-1 plus its share of full loops.
+      const from = [0, 0, 0].map(() => Math.floor(Math.random() * REEL.length));
       const stopped = [false, false, false];
       await new Promise<void>((resolve) => {
         const tick = (): void => {
           const now = performance.now();
           let done = true;
-          room!.reels.forEach((reel: any, i: number) => {
+          const positions = [0, 1, 2].map((i) => {
             const p = Math.min(1, (now - startAt) / DURATION[i]);
             const eased = 1 - Math.pow(1 - p, 3);
-            const total = spins[i] * REEL.length + ((targets[i] - from[i]) % REEL.length + REEL.length) % REEL.length;
-            setReel(reel, from[i] + total * eased);
+            const land = targets[i] - 1;
+            const total = spins[i] * REEL.length + (((land - from[i]) % REEL.length) + REEL.length) % REEL.length;
             if (p < 1) done = false;
             else if (!stopped[i]) {
               stopped[i] = true;
               sfx.thud();
             }
+            return from[i] + total * eased;
           });
+          room!.drawSlots(positions, false);
           if (done || mySeq !== seq) resolve();
           else requestAnimationFrame(tick);
         };
@@ -877,6 +877,7 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
       });
       clearInterval(ticker);
       const { mult, line } = slotResult(targets);
+      room.drawSlots(targets.map((cell) => cell - 1), mult > 0);
       const won = Math.floor(bet * mult);
       await payout(won);
       if (won > 0) {
