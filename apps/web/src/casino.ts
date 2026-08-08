@@ -236,6 +236,12 @@ const MX = -1.7;
 const MZ = -3.4;
 const TX = 1.9;
 const TZ = -3.4;
+/**
+ * The race track's centre lane. The machines all stand along the back
+ * wall around z = -3.4; the track lives out on the open carpet in the
+ * foreground so nothing runs through a cabinet.
+ */
+const RACE_Z = 1.15;
 /** Where the felt's top surface is, plus half a die. */
 const DIE_REST = 1.0;
 
@@ -569,12 +575,12 @@ function buildRoom(THREE: any, scene: any): Room {
       new THREE.Mesh(new THREE.BoxGeometry(1.3 + (i % 3) * 0.3, 0.035, 1.72), matte(SCRAP[i % SCRAP.length], 0.9)),
       -3.3 + i * 0.83,
       0.02 + (i % 2) * 0.012,
-      -2.55,
+      RACE_Z,
     );
     plate.rotation.y = (i % 2 === 0 ? 1 : -1) * 0.045;
   }
   const pipeMat = matte(0x3c444e, 0.45);
-  for (const z of [-1.72, -3.38]) {
+  for (const z of [RACE_Z + 0.83, RACE_Z - 0.83]) {
     const rail = put(new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 7.4, 10), pipeMat), 0, 0.14, z);
     rail.rotation.z = Math.PI / 2;
     for (let x = -3.4; x <= 3.5; x += 1.7) {
@@ -597,19 +603,19 @@ function buildRoom(THREE: any, scene: any): Room {
     new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(checkCanvas) }),
   );
   finish.rotation.x = -Math.PI / 2;
-  finish.position.set(3.0, 0.05, -2.55);
+  finish.position.set(3.0, 0.05, RACE_Z);
   raceTrack.add(finish);
-  put(new THREE.Mesh(new THREE.BoxGeometry(0.09, 1.15, 0.09), pipeMat), 3.0, 0.57, -1.72);
-  put(new THREE.Mesh(new THREE.BoxGeometry(0.09, 1.15, 0.09), pipeMat), 3.0, 0.57, -3.38);
-  put(new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.16, 1.85), matte(0x8a4a2e, 0.7)), 3.0, 1.18, -2.55);
+  put(new THREE.Mesh(new THREE.BoxGeometry(0.09, 1.15, 0.09), pipeMat), 3.0, 0.57, RACE_Z + 0.83);
+  put(new THREE.Mesh(new THREE.BoxGeometry(0.09, 1.15, 0.09), pipeMat), 3.0, 0.57, RACE_Z - 0.83);
+  put(new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.16, 1.85), matte(0x8a4a2e, 0.7)), 3.0, 1.18, RACE_Z);
   // The crowd: two tiers of benches a side, cans standing on them, a few
   // already leaning. Each can remembers its seat so events can knock it
   // over and the next race can put it back.
   const CAN_COLOURS = [0xb8bcc2, 0xa33232, 0x6e7d46, 0xc2952e, 0x4a6e8a];
   const cans: any[] = [];
   for (const [zRow, away] of [
-    [-1.48, 1],
-    [-3.62, -1],
+    [RACE_Z + 1.07, 1],
+    [RACE_Z - 1.07, -1],
   ] as [number, number][]) {
     put(new THREE.Mesh(new THREE.BoxGeometry(6.8, 0.1, 0.3), matte(0x4e4438, 0.85)), 0, 0.16, zRow);
     put(new THREE.Mesh(new THREE.BoxGeometry(6.8, 0.1, 0.3), matte(0x5a5f66, 0.85)), 0, 0.36, zRow + away * 0.34);
@@ -823,8 +829,9 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
     highlow: { pos: [TX - 1.1, 1.85, -0.8], look: [TX + 0.1, 0.95, TZ + 0.3] },
     // Over the felt for the shells, wide across the floor for the race.
     cups: { pos: [TX - 0.3, 2.0, -1.0], look: [TX, 0.95, TZ + 0.15] },
-    // High and wide enough to hold the whole scrap track and its crowd.
-    race: { pos: [0, 2.7, 1.7], look: [0, 0.25, -2.65] },
+    // High and wide enough to hold the whole scrap track and its crowd,
+    // out on the open carpet; during a race the camera trots along.
+    race: { pos: [0, 2.9, RACE_Z + 4.4], look: [0, 0.2, RACE_Z] },
     // Standing off from the mystery door, at a respectful distance.
     door: { pos: [4.0, 1.65, -2.2], look: [4.6, 1.5, -6.1] },
   };
@@ -1706,7 +1713,7 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
 
   const RACE_START = -3.0;
   const RACE_END = 2.9;
-  const RACE_LANES = [-2.1, -2.55, -3.0];
+  const RACE_LANES = [RACE_Z + 0.45, RACE_Z, RACE_Z - 0.45];
   const RACE_NAMES = ["the teal one", "the orange one", "the ivory one"];
 
   /** Every can back on its seat, upright, ready to be knocked off again. */
@@ -1808,6 +1815,14 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
               racer.rotation.z = Math.sin(now / 70 + i) * 0.25 * wriggle;
               if (racer.position.x >= RACE_END && winner < 0) winner = i;
             });
+            // The camera trots alongside the pack, and the room's own
+            // lerp keeps the ride smooth.
+            const packX = Math.max(
+              -2.6,
+              Math.min(2.6, room.racers.reduce((sum: number, racer: any) => sum + racer.position.x, 0) / 3),
+            );
+            zoomTarget = { pos: [packX * 0.92, 1.8, RACE_Z + 2.9], look: [packX, 0.25, RACE_Z] };
+            zoomUntil = now / 1000 + 0.6;
             if (now < rattleUntil) {
               room.cans.forEach((can: any, i: number) => {
                 if (can.rotation.z > 1) return; // the fallen stay fallen
@@ -1824,9 +1839,12 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
           tick();
         });
         sfx.clatter();
+        // Hold on the finish line for a beat, then drift back out wide.
+        zoomTarget = { pos: [2.3, 1.8, RACE_Z + 2.9], look: [RACE_END, 0.3, RACE_Z] };
+        zoomUntil = performance.now() / 1000 + 2.4;
         if (winner === pick) {
           await payout(Math.floor(stake * 2.7));
-          celebrate(false, [RACE_END, 1.2, -2.55]);
+          celebrate(false, [RACE_END, 1.2, RACE_Z]);
           react(0, "cheer");
           result.textContent = `${RACE_NAMES[winner]} takes it! +${formatYennies(Math.floor(stake * 2.7) - stake)}`;
         } else {
