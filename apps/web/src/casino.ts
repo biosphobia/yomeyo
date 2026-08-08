@@ -724,46 +724,28 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
 
       if (yuuri) {
         const STOOL = { x: MX, z: MZ + 1.6 };
-        const POST = { x: 3.85, z: -5.15 };
+        // Dead centre of the zoomed door shot, one stride from the lens.
+        const POP = { x: 4.56, z: -5.3 };
         const g = guard ? t - guard.start : -1;
-        if (guard && g >= 5.4) guard = null;
+        if (guard && g >= 3.1) guard = null;
         if (guard && g >= 0) {
-          if (g < 0.4) {
-            // Off the stool.
-            yuuri.root.position.set(STOOL.x, SIT_Y * (1 - g / 0.4), STOOL.z);
-            yuuri.root.rotation.y = Math.PI;
+          if (g < 0.3) {
+            // UP, from below the frame, with a bounce at the top.
+            const p = g / 0.3;
+            const springy = 1 - Math.pow(2, -9 * p) * Math.cos(p * 13);
+            yuuri.root.position.set(POP.x, -1.6 * (1 - springy), POP.z);
+            yuuri.root.rotation.y = 0; // square in your face
             pose(yuuri.bones, "clear", 1);
-          } else if (g < 1.6) {
-            // Hurrying over.
-            const p = smooth((g - 0.4) / 1.2);
-            yuuri.root.position.set(
-              STOOL.x + (POST.x - STOOL.x) * p,
-              Math.abs(Math.sin(g * 11)) * 0.05,
-              STOOL.z + (POST.z - STOOL.z) * p,
-            );
-            yuuri.root.rotation.y = Math.atan2(POST.x - STOOL.x, POST.z - STOOL.z);
-            pose(yuuri.bones, "clear", 1);
-          } else if (g < 3.8) {
-            // Barring the way, finger up.
-            yuuri.root.position.set(POST.x, 0, POST.z);
-            yuuri.root.rotation.y = 0.55;
+          } else if (g < 2.7) {
+            // The finger, held until it has definitely been understood.
+            yuuri.root.position.set(POP.x, 0, POP.z);
+            yuuri.root.rotation.y = 0;
             pose(yuuri.bones, "point", 1, t);
-          } else if (g < 5.0) {
-            // Back to her machine.
-            const p = smooth((g - 3.8) / 1.2);
-            yuuri.root.position.set(
-              POST.x + (STOOL.x - POST.x) * p,
-              Math.abs(Math.sin(g * 11)) * 0.05,
-              POST.z + (STOOL.z - POST.z) * p,
-            );
-            yuuri.root.rotation.y = Math.atan2(STOOL.x - POST.x, STOOL.z - POST.z);
-            pose(yuuri.bones, "clear", 1);
           } else {
-            // Settling back onto the stool.
-            const p = (g - 5.0) / 0.4;
-            yuuri.root.position.set(STOOL.x, SIT_Y * p, STOOL.z);
-            yuuri.root.rotation.y = Math.PI;
-            pose(yuuri.bones, "sit", p);
+            // Gone the way she came, straight down.
+            const p = (g - 2.7) / 0.4;
+            yuuri.root.position.set(POP.x, -1.6 * smooth(p), POP.z);
+            pose(yuuri.bones, "clear", 1);
           }
         } else {
           yuuri.root.position.set(STOOL.x, SIT_Y, STOOL.z);
@@ -1429,31 +1411,31 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
       busy = true;
       const now = performance.now() / 1000;
       zoomTarget = DOOR_ZOOM;
-      zoomUntil = now + 6.2;
+      zoomUntil = now + 4.6;
       result.textContent = "…";
       // Your steps, then the chain in your hand.
       sfx.step();
       setTimeout(() => sfx.step(), 320);
       setTimeout(() => sfx.step(), 640);
       setTimeout(() => sfx.creak(), 950);
-      // The door notices. So does she.
+      // The door notices — and she is suddenly VERY much in the way.
       setTimeout(() => {
         doorFlareUntil = performance.now() / 1000 + 2.2;
         sfx.menace(1.6);
         guard = { start: performance.now() / 1000 };
+        sfx.boing();
       }, 1050);
-      for (let n = 0; n < 6; n++) setTimeout(() => sfx.step(), 1500 + n * 190);
       setTimeout(() => {
         result.textContent = "Yuuri: だめ。";
         sfx.thud();
-      }, 2750);
+      }, 1500);
       setTimeout(() => {
         result.textContent = "She points you back to the games, and won't say what's behind it.";
-      }, 4300);
-      for (let n = 0; n < 6; n++) setTimeout(() => sfx.step(), 4900 + n * 190);
+      }, 3100);
+      setTimeout(() => sfx.whoosh(), 3750);
       setTimeout(() => {
         busy = false;
-      }, 6500);
+      }, 4400);
     });
   };
 
