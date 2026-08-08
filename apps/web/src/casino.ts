@@ -976,7 +976,25 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
       <div class="row-actions" style="justify-content:center">
         <button id="cas-spin" class="cas-big">SPIN — <span id="cas-cost">${bet}</span> ¥</button>
       </div>
-      <div class="cas-result" id="cas-result">Three ７ ×60 · ゆ＋🐟 ×3 · 🐱＋🐟 ×3 · all 月☆ ×2 · pairs of ７・ゆ・🥫 pay too</div>
+      <div class="cas-result" id="cas-result">The middle row is the payline.</div>
+      <details class="cas-paytable">
+        <summary>Paytable</summary>
+        <div class="cas-pay-grid">
+          <span lang="ja">７ ７ ７</span><b>×60</b>
+          <span lang="ja">ゆ ゆ ゆ</span><b>×30</b>
+          <span>🐱 🐱 🐱</span><b>×25</b>
+          <span>🐟 🐟 🐟</span><b>×20</b>
+          <span>🍐 🍐 🍐</span><b>×18</b>
+          <span>🥫 🥫 🥫</span><b>×15</b>
+          <span lang="ja">月月月 / ☆☆☆</span><b>×8</b>
+          <span lang="ja">ゆ ＋ 🐟 <i>it thinks it's a fish</i></span><b>×3</b>
+          <span>🐱 ＋ 🐟 <i>the cat gets it</i></span><b>×3</b>
+          <span lang="ja">月・☆ only <i>clear night sky</i></span><b>×2</b>
+          <span lang="ja">７ ７ pair</span><b>×4</b>
+          <span>🥫 🥫 pair</span><b>×3</b>
+          <span lang="ja">ゆ ゆ pair</span><b>×2</b>
+        </div>
+      </details>
     `;
     wireBets(() => {
       const cost = gameBox.querySelector("#cas-cost");

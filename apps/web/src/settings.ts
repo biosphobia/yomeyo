@@ -1,4 +1,5 @@
 import { screenHeader } from "./screen.js";
+import { assetUrl } from "./store.js";
 import {
   configIsFromEnv,
   currentAccount,
@@ -93,6 +94,23 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
         Chrome menu (⋮) → <i>Add to Home screen</i>: Yomeyo then opens like an
         app and works offline. To save words while browsing, select text and
         share it to Yomeyo, or install the browser extension.
+      </div>
+    </div>
+
+    <div class="card-panel">
+      <b>Browser extension</b>
+      <div class="msg">
+        Tap any Japanese word on any page to look it up and save it straight
+        into your decks. Download the build for your browser, then load it
+        from the extensions page.
+      </div>
+      <div class="row-actions">
+        <a class="button-link" href="${escapeAttr(assetUrl("yomeyo-extension-firefox.zip"))}" download>
+          🦊 Firefox
+        </a>
+        <a class="button-link" href="${escapeAttr(assetUrl("yomeyo-extension-chromium.zip"))}" download>
+          🌐 Chrome / Edge
+        </a>
       </div>
     </div>
 

@@ -5179,3 +5179,59 @@ button.gram-swap-line:hover {
 .cas-tabs {
   flex-wrap: wrap;
 }
+
+/* link dressed as a button, for downloads */
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--panel-2, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.14));
+  border-radius: 12px;
+  padding: 10px 16px;
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--text);
+}
+
+/* the slots paytable */
+.cas-paytable {
+  margin-top: 10px;
+}
+
+.cas-paytable summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-align: center;
+  list-style: none;
+}
+
+.cas-paytable summary::after {
+  content: " ▾";
+}
+
+.cas-paytable[open] summary::after {
+  content: " ▴";
+}
+
+.cas-pay-grid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 14px;
+  margin: 10px auto 0;
+  max-width: 340px;
+  font-size: 0.92rem;
+}
+
+.cas-pay-grid b {
+  color: #f6ad55;
+  text-align: right;
+}
+
+.cas-pay-grid i {
+  color: var(--muted);
+  font-style: normal;
+  font-size: 0.78rem;
+  margin-left: 6px;
+}
