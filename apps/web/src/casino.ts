@@ -222,6 +222,8 @@ interface Die {
 interface Room {
   /** Redraw the slot screen: three column positions in cells, win rows lit. */
   drawSlots: (positions: number[], highlight: boolean) => void;
+  /** The light leaking under the mystery door, for the loop to breathe. */
+  doorGlow: any;
   bulbs: any[];
   neon: any;
   pink: any;
@@ -362,6 +364,42 @@ function buildRoom(THREE: any, scene: any): Room {
   warm2.position.set(MX, 2.8, MZ + 1.6);
   scene.add(warm2);
 
+  // The mystery door: sealed, signed with a question mark, light leaking
+  // out underneath. It does nothing. For now.
+  const steel = matte(0x2a2230, 0.5);
+  slab(matte(0x1c1420, 0.6), 1.5, 2.7, 0.18, 4.6, 1.35, -6.24); // frame
+  slab(steel, 0.62, 2.5, 0.12, 4.28, 1.25, -6.16); // left leaf
+  slab(steel, 0.62, 2.5, 0.12, 4.92, 1.25, -6.16); // right leaf
+  const chain = matte(0x8a7440, 0.35);
+  slab(chain, 1.7, 0.09, 0.05, 4.6, 1.6, -6.08).rotation.z = 0.45;
+  slab(chain, 1.7, 0.09, 0.05, 4.6, 1.2, -6.08).rotation.z = -0.45;
+  const signCanvas = document.createElement("canvas");
+  signCanvas.width = 128;
+  signCanvas.height = 128;
+  const signPaint = signCanvas.getContext("2d")!;
+  signPaint.fillStyle = "#160d1c";
+  signPaint.fillRect(0, 0, 128, 128);
+  signPaint.shadowColor = "#a06fff";
+  signPaint.shadowBlur = 22;
+  signPaint.fillStyle = "#c9a6ff";
+  signPaint.font = "bold 92px 'Hiragino Sans', sans-serif";
+  signPaint.textAlign = "center";
+  signPaint.textBaseline = "middle";
+  signPaint.fillText("?", 64, 70);
+  const sign = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.5, 0.5),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(signCanvas) }),
+  );
+  sign.position.set(4.6, 2.95, -6.12);
+  scene.add(sign);
+  const doorGlow = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.2, 0.07),
+    new THREE.MeshBasicMaterial({ color: 0xa06fff, transparent: true, opacity: 0.6 }),
+  );
+  doorGlow.rotation.x = -Math.PI / 2;
+  doorGlow.position.set(4.6, 0.012, -6.05);
+  scene.add(doorGlow);
+
   const mine = [0, 1, 2].map(() => makeDie(THREE, false));
   const theirs = [0, 1, 2].map(() => makeDie(THREE, true));
   for (const die of [...mine, ...theirs]) scene.add(die.group);
@@ -434,7 +472,7 @@ function buildRoom(THREE: any, scene: any): Room {
     coins.push(coin);
   }
 
-  return { drawSlots, bulbs, neon, pink, winLight, mine, theirs, card, paintCard, coins };
+  return { drawSlots, doorGlow, bulbs, neon, pink, winLight, mine, theirs, card, paintCard, coins };
 }
 
 // ---------------- the render ----------------
@@ -654,6 +692,8 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
       room!.pink.intensity = strobing ? 16 + Math.sin(t * 18) * 12 : 16;
       room!.neon.material.color.setHSL(strobing ? (t * 1.5) % 1 : 0, strobing ? 0.5 : 0, 1);
       room!.winLight.intensity = Math.max(0, fx.flashUntil - t) * 60;
+      // Whatever is behind the mystery door, it's awake.
+      room!.doorGlow.material.opacity = 0.45 + Math.sin(t * 0.7) * 0.2 + Math.max(0, Math.sin(t * 0.13) - 0.98) * 12;
 
       const target = t < zoomUntil ? ZOOM : CAMS[game];
       camPos.lerp(new THREE.Vector3(...target.pos), 0.045);
