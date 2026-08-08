@@ -1,75 +1,161 @@
 {
   "_comment": "Everything the gacha can give out. Edit this file on GitHub and the next deploy has it — no code changes. A gif is a reaction that joins the pool the kana and grammar drills draw from, and it need not be a gif: animated webp, avif, png and jpeg all work, as does a photograph. Images are filenames in this folder (put them in gifs/), a path like ../feedback/correct.gif, or a full https:// URL. Any size is fine — each deploy squeezes its own copy to the same budget, so upload the original.",
-
   "cost": 120,
   "_cost": "Yennies per pull.",
-
   "duplicateRefund": 0.4,
   "_duplicateRefund": "Fraction of the cost paid back when a pull is one you already own.",
-
   "draw": "uniform",
   "_draw": "'uniform' — every prize equally likely, so adding one never changes what the others were worth. 'rarity' — weighted by the table below instead. While the pool is still being filled in, uniform is the honest one; under it the rarity of a prize is only its colour, and no odds are claimed on screen.",
-
   "rarities": {
-    "common": { "label": "Common", "weight": 62, "color": "#94a3b8" },
-    "rare": { "label": "Rare", "weight": 25, "color": "#56b4d0" },
-    "epic": { "label": "Epic", "weight": 10, "color": "#a855f7" },
-    "legendary": { "label": "Legendary", "weight": 3, "color": "#e5a54b" }
+    "common": {
+      "label": "Common",
+      "weight": 62,
+      "color": "#94a3b8"
+    },
+    "rare": {
+      "label": "Rare",
+      "weight": 25,
+      "color": "#56b4d0"
+    },
+    "epic": {
+      "label": "Epic",
+      "weight": 10,
+      "color": "#a855f7"
+    },
+    "legendary": {
+      "label": "Legendary",
+      "weight": 3,
+      "color": "#e5a54b"
+    }
   },
   "_rarities": "Only used when draw is 'rarity'. Weights are relative, not percentages — they need not add to 100.",
-
   "cutscenes": {
     "green": {
       "title": "For an amazing reason",
-      "lines": ["chichan look", "why are you green....", "for an amazing reason", "that's not a reason"]
+      "lines": [
+        "chichan look",
+        "why are you green....",
+        "for an amazing reason",
+        "that's not a reason"
+      ]
     },
     "hungry": {
       "title": "Rations",
-      "lines": ["chichan. i'm hungry", "you ate the last one", "that was ages ago", "(smack) die faggot", "...food?"]
+      "lines": [
+        "chichan. i'm hungry",
+        "you ate the last one",
+        "that was ages ago",
+        "(smack) die faggot",
+        "...food?"
+      ]
     },
     "stairs": {
       "title": "Then we live here now",
-      "lines": ["How far up does up go", "All the way", "Then we live here now", "(something takes the stairs)", "...it used the handrail"]
+      "lines": [
+        "How far up does up go",
+        "All the way",
+        "Then we live here now",
+        "(something takes the stairs)",
+        "...it used the handrail"
+      ]
     },
     "parachute": {
       "title": "Special delivery, eventually",
-      "lines": ["It's taking its time", "It has a parachute", "I want a parachute", "You'd eat it", "...only a bit", "(it lands exactly between them)"]
+      "lines": [
+        "It's taking its time",
+        "It has a parachute",
+        "I want a parachute",
+        "You'd eat it",
+        "...only a bit",
+        "(it lands exactly between them)"
+      ]
     },
     "campfire": {
       "title": "The fire was hungrier",
-      "lines": ["Last ration. Cook it carefully", "I'm the careful one", "You are not", "(the fire eats it)", "the fire was hungrier", "look — it's sorry"]
+      "lines": [
+        "Last ration. Cook it carefully",
+        "I'm the careful one",
+        "You are not",
+        "(the fire eats it)",
+        "the fire was hungrier",
+        "look — it's sorry"
+      ]
     },
     "hail": {
       "title": "Adverse weather",
-      "lines": ["run", "which way", "...that one was polite"]
+      "lines": [
+        "run",
+        "which way",
+        "...that one was polite"
+      ]
     },
     "order": {
       "title": "Table service",
-      "lines": ["is anyone here", "nobody's been here for years", "then who's that", "don't ask"]
+      "lines": [
+        "is anyone here",
+        "nobody's been here for years",
+        "then who's that",
+        "don't ask"
+      ]
     },
     "soak": {
       "title": "Something in the water",
-      "lines": ["this was a good idea", "something touched my foot", "wasn't me", "i know. that's the problem"]
+      "lines": [
+        "this was a good idea",
+        "something touched my foot",
+        "wasn't me",
+        "i know. that's the problem"
+      ]
     },
     "tank": {
       "title": "Feeding time",
-      "lines": ["they're still alive", "somebody's feeding them", "can we eat them", "no—", "(the tank disagrees)"]
+      "lines": [
+        "they're still alive",
+        "somebody's feeding them",
+        "can we eat them",
+        "no—",
+        "(the tank disagrees)"
+      ]
     },
     "lesson": {
       "title": "School is in session",
-      "lines": ["Today: this one. It reads yu", "Chi-chan", "that's a fish", "It's a letter", "a tasty fish...", "(drooling)", "Please don't eat the alphabet", "the fish is glowing"]
+      "lines": [
+        "Today: this one. It reads yu",
+        "Chi-chan",
+        "that's a fish",
+        "It's a letter",
+        "a tasty fish...",
+        "(drooling)",
+        "Please don't eat the alphabet",
+        "the fish is glowing"
+      ]
     },
     "fisher": {
       "title": "Patience worked",
-      "lines": ["I'm fishing", "You don't have a rod", "I have patience", "You have neither", "(something bites)", "PATIENCE WORKED"]
+      "lines": [
+        "I'm fishing",
+        "You don't have a rod",
+        "I have patience",
+        "You have neither",
+        "(something bites)",
+        "PATIENCE WORKED"
+      ]
     },
     "books": {
       "title": "Tripped on human history",
-      "lines": ["A whole floor of books survived", "I'm reading them in order", "do they taste different?", "(she is not watching the floor)", "(the to-read pile fights back)", "...the floor wanted them more", "You tripped on human history", "history is glowing"]
+      "lines": [
+        "A whole floor of books survived",
+        "I'm reading them in order",
+        "do they taste different?",
+        "(she is not watching the floor)",
+        "(the to-read pile fights back)",
+        "...the floor wanted them more",
+        "You tripped on human history",
+        "history is glowing"
+      ]
     }
   },
   "_cutscenes": "Each cutscene's caption and its dialogue. The keys are the scenario ids in gacha-scene.ts and cannot be invented here, but every title and every line can be rewritten. Lines are in the order they are spoken; who says each one and when is set in the code. Leave a line blank or drop it and the one written in the code is used.",
-
   "prizes": [
     {
       "id": "gif-rubrub",
@@ -147,7 +233,7 @@
       "id": "gif-blow",
       "type": "gif",
       "name": "blow",
-      "rarity": "common",
+      "rarity": "rare",
       "on": "correct",
       "image": "gifs/blow.gif",
       "text": "mwah"
@@ -156,7 +242,7 @@
       "id": "gif-goochie",
       "type": "gif",
       "name": "goochie",
-      "rarity": "common",
+      "rarity": "rare",
       "on": "correct",
       "image": "gifs/goochie.gif",
       "text": "agoochiegoochiegoo"
@@ -165,7 +251,7 @@
       "id": "gif-hips",
       "type": "gif",
       "name": "hips",
-      "rarity": "common",
+      "rarity": "rare",
       "on": "correct",
       "image": "gifs/hips.gif",
       "text": "hug earned"
@@ -174,7 +260,7 @@
       "id": "gif-kiss",
       "type": "gif",
       "name": "kiss",
-      "rarity": "rare",
+      "rarity": "epic",
       "on": "correct",
       "image": "gifs/kiss.gif",
       "text": "yeah yeah shut up"
@@ -228,7 +314,7 @@
       "id": "gif-what",
       "type": "gif",
       "name": "what",
-      "rarity": "rare",
+      "rarity": "legendary",
       "on": "correct",
       "image": "gifs/what.gif",
       "text": "waow"
@@ -255,7 +341,7 @@
       "id": "gif-disagree",
       "type": "gif",
       "name": "disagree",
-      "rarity": "common",
+      "rarity": "rare",
       "on": "wrong",
       "image": "gifs/disagree.avif",
       "text": "the avif disagrees"
@@ -291,7 +377,7 @@
       "id": "gif-phone",
       "type": "gif",
       "name": "phone",
-      "rarity": "common",
+      "rarity": "rare",
       "on": "wrong",
       "image": "gifs/phone.gif",
       "text": "we don't talk about it"
@@ -318,7 +404,7 @@
       "id": "gif-stomp",
       "type": "gif",
       "name": "stomp",
-      "rarity": "common",
+      "rarity": "rare",
       "on": "wrong",
       "image": "gifs/stomp.gif",
       "text": "stomped"
@@ -336,12 +422,11 @@
       "id": "gif-threat",
       "type": "gif",
       "name": "threat",
-      "rarity": "common",
+      "rarity": "epic",
       "on": "wrong",
       "image": "gifs/threat.gif",
       "text": "answer better next time"
     }
   ],
-
   "_prizes": "Add one by copying an entry: drop the gif in gifs/, give it a unique id, set 'on' to 'correct' or 'wrong', and write the line that goes under it. Ids are what the save file remembers, so never reuse one for a different prize. 'note' is optional flavour shown in the collection. Skins are still supported — type 'skin' with a 'vars' object of CSS custom properties — but none are in the pool for now."
 }

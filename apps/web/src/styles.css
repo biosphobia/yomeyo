@@ -5088,3 +5088,27 @@ button.gram-swap-line:hover {
   gap: 8px;
   margin-bottom: 8px;
 }
+
+/* the admin's pencil on prize cards, and the editor's fields */
+.prize-edit {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
+.pe-field {
+  display: block;
+  margin: 8px 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.pe-field input,
+.pe-field textarea,
+.pe-field select {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+}

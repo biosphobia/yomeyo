@@ -1,4 +1,5 @@
 import { assetUrl } from "./store.js";
+import { getMeta, setMeta } from "./db.js";
 
 /**
  * What the gacha can give out, and how likely each is.
@@ -143,17 +144,52 @@ function cleanPrize(raw: unknown, rarities: Record<string, RarityInfo>): Prize |
 
 let loaded: Promise<PrizeTable> | null = null;
 
+/**
+ * The admin's local edits: per-prize rarity, name and caption, laid over
+ * whatever prizes.json says. Kept in meta on this device — prizes.json on
+ * GitHub stays the source of truth for everyone else.
+ */
+export interface PrizeOverride {
+  name?: string;
+  text?: string;
+  rarity?: string;
+}
+
+const OVERRIDES_KEY = "prizeOverrides";
+
+export async function setPrizeOverride(id: string, patch: PrizeOverride | null): Promise<void> {
+  const all = (await getMeta<Record<string, PrizeOverride>>(OVERRIDES_KEY)) ?? {};
+  if (patch === null) delete all[id];
+  else all[id] = patch;
+  await setMeta(OVERRIDES_KEY, all);
+  loaded = null; // the next prizeTable() folds the new overrides in
+}
+
 export function prizeTable(): Promise<PrizeTable> {
   loaded ??= fetch(assetUrl("gacha/prizes.json"))
     .then((res) => (res.ok ? res.json() : {}))
-    .then((raw: Partial<PrizeTable>) => {
+    .then(async (raw: Partial<PrizeTable>) => {
       const rarities =
         raw.rarities && typeof raw.rarities === "object" && Object.keys(raw.rarities).length > 0
           ? raw.rarities
           : FALLBACK.rarities;
-      const prizes = Array.isArray(raw.prizes)
-        ? raw.prizes.map((p) => cleanPrize(p, rarities)).filter((p): p is Prize => p !== null)
-        : [];
+      const overrides =
+        (await getMeta<Record<string, PrizeOverride>>(OVERRIDES_KEY).catch(
+          (): Record<string, PrizeOverride> => ({}),
+        )) ?? {};
+      const prizes = (
+        Array.isArray(raw.prizes)
+          ? raw.prizes.map((p) => cleanPrize(p, rarities)).filter((p): p is Prize => p !== null)
+          : []
+      ).map((prize) => {
+        const edit = overrides[prize.id];
+        if (!edit) return prize;
+        const merged = { ...prize };
+        if (typeof edit.name === "string" && edit.name.trim()) merged.name = edit.name.trim();
+        if (typeof edit.rarity === "string" && edit.rarity in rarities) merged.rarity = edit.rarity;
+        if (merged.type === "gif" && typeof edit.text === "string" && edit.text.trim()) merged.text = edit.text.trim();
+        return merged;
+      });
       return {
         cost: typeof raw.cost === "number" && raw.cost > 0 ? Math.floor(raw.cost) : FALLBACK.cost,
         draw: (raw.draw === "rarity" ? "rarity" : "uniform") as DrawMode,

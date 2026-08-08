@@ -10,6 +10,7 @@ import {
   prizeImageUrl,
   prizeTable,
   rarityOdds,
+  setPrizeOverride,
   type Prize,
   type PrizeTable,
 } from "./gacha-data.js";
@@ -239,6 +240,7 @@ function drawCollection(
     return;
   }
 
+  const admin = unlockAllNow();
   grid.innerHTML = table.prizes
     .map((prize) => {
       const mine = have.has(prize.id);
@@ -246,13 +248,14 @@ function drawCollection(
       const worn = prize.type === "skin" && wearing === prize.id;
       return `<button class="prize${mine ? "" : " locked"}${worn ? " worn" : ""}"
           data-id="${escapeAttr(prize.id)}" style="--rarity:${escapeAttr(rarity?.color ?? "#94a3b8")}"
-          ${mine && prize.type === "skin" ? "" : "disabled"}>
-        ${mine ? prizeFace(prize) : `<span class="prize-locked">?</span>`}
-        <span class="prize-name">${mine ? escapeHtml(prize.name) : "&nbsp;"}</span>
+          ${admin || (mine && prize.type === "skin") ? "" : "disabled"}>
+        ${mine || admin ? prizeFace(prize) : `<span class="prize-locked">?</span>`}
+        <span class="prize-name">${mine || admin ? escapeHtml(prize.name) : "&nbsp;"}</span>
         <span class="prize-rarity">${
-          table.draw === "uniform" ? (mine ? "&nbsp;" : "locked") : escapeHtml(rarity?.label ?? "")
+          admin || table.draw === "rarity" ? escapeHtml(rarity?.label ?? "") : mine ? "&nbsp;" : "locked"
         }</span>
         ${worn ? `<span class="prize-worn">worn</span>` : ""}
+        ${admin ? `<span class="prize-edit">✎</span>` : ""}
       </button>`;
     })
     .join("");
@@ -260,12 +263,98 @@ function drawCollection(
   for (const button of grid.querySelectorAll<HTMLButtonElement>(".prize[data-id]")) {
     button.addEventListener("click", async () => {
       const id = button.dataset.id!;
-      // Tapping the skin you are wearing takes it off.
+      const prize = table.prizes.find((p) => p.id === id);
+      // The admin taps a prize to edit it; everyone else taps skins to wear them.
+      if (admin && prize) {
+        openPrizeEditor(main, table, prize, wearing, refresh);
+        return;
+      }
       await equipSkin(wearing === id ? null : id);
       await applySkin();
       refresh();
     });
   }
+}
+
+/**
+ * The admin's pencil: rename a prize, rewrite its caption, move its rarity.
+ * Saved as a local override on this device; prizes.json on GitHub stays the
+ * source of truth for everyone else.
+ */
+function openPrizeEditor(
+  main: HTMLElement,
+  table: PrizeTable,
+  prize: Prize,
+  wearing: string | null,
+  refresh: () => void,
+): void {
+  main.querySelector(".rc-scrim")?.remove();
+  const scrim = document.createElement("div");
+  scrim.className = "rc-scrim";
+  scrim.innerHTML = `
+    <div class="rc-pop card-panel" role="dialog" aria-modal="true">
+      <div class="rc-pop-head">
+        <b>Edit: ${escapeHtml(prize.id)}</b>
+        <button class="rc-close ghost" aria-label="Close">✕</button>
+      </div>
+      <label class="pe-field">Name
+        <input id="pe-name" value="${escapeAttr(prize.name)}" autocomplete="off" />
+      </label>
+      ${
+        prize.type === "gif"
+          ? `<label class="pe-field">Caption
+              <textarea id="pe-text" rows="2">${escapeHtml(prize.text)}</textarea>
+            </label>`
+          : ""
+      }
+      <label class="pe-field">Rarity
+        <select id="pe-rarity">
+          ${Object.entries(table.rarities)
+            .map(
+              ([key, info]) =>
+                `<option value="${escapeAttr(key)}" ${key === prize.rarity ? "selected" : ""}>${escapeHtml(info.label)}</option>`,
+            )
+            .join("")}
+        </select>
+      </label>
+      <div class="row-actions" style="margin-top:10px">
+        <button id="pe-save">Save</button>
+        <button id="pe-clear" class="secondary">Clear override</button>
+        ${prize.type === "skin" ? `<button id="pe-wear" class="secondary">${wearing === prize.id ? "Take off" : "Wear"}</button>` : ""}
+      </div>
+      <div class="glosses" style="margin-top:8px">Saved on this device. prizes.json on GitHub is still the
+        source for everyone else.</div>
+    </div>`;
+  main.appendChild(scrim);
+
+  const close = (): void => scrim.remove();
+  scrim.addEventListener("click", (ev) => {
+    if (ev.target === scrim) close();
+  });
+  scrim.querySelector(".rc-close")!.addEventListener("click", close);
+  scrim.querySelector("#pe-save")!.addEventListener("click", async () => {
+    const name = scrim.querySelector<HTMLInputElement>("#pe-name")?.value.trim();
+    const text = scrim.querySelector<HTMLTextAreaElement>("#pe-text")?.value.trim();
+    const rarity = scrim.querySelector<HTMLSelectElement>("#pe-rarity")?.value;
+    await setPrizeOverride(prize.id, {
+      ...(name && name !== prize.name ? { name } : {}),
+      ...(text && prize.type === "gif" && text !== prize.text ? { text } : {}),
+      ...(rarity && rarity !== prize.rarity ? { rarity } : {}),
+    });
+    close();
+    refresh();
+  });
+  scrim.querySelector("#pe-clear")!.addEventListener("click", async () => {
+    await setPrizeOverride(prize.id, null);
+    close();
+    refresh();
+  });
+  scrim.querySelector("#pe-wear")?.addEventListener("click", async () => {
+    await equipSkin(wearing === prize.id ? null : prize.id);
+    await applySkin();
+    close();
+    refresh();
+  });
 }
 
 function prizeFace(prize: Prize): string {
