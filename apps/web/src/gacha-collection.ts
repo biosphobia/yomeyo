@@ -14,14 +14,31 @@ import { getMeta, onAccountChange, setMeta } from "./db.js";
 
 const OWNED_KEY = "gachaOwned";
 const SKIN_KEY = "gachaSkin";
+const ITEMS_KEY = "gachaItems";
 
 let ownedCache: Set<string> | null = null;
 let skinCache: string | null | undefined;
+let itemsCache: Record<string, number> | null = null;
 
 onAccountChange(() => {
   ownedCache = null;
   skinCache = undefined;
+  itemsCache = null;
 });
+
+/** How many of each stackable item is held, by prize id. */
+export async function itemCounts(): Promise<Record<string, number>> {
+  itemsCache ??= (await getMeta<Record<string, number>>(ITEMS_KEY)) ?? {};
+  return itemsCache;
+}
+
+/** One more of a stackable item. Returns the new count. */
+export async function addItem(id: string): Promise<number> {
+  const counts = await itemCounts();
+  counts[id] = (counts[id] ?? 0) + 1;
+  await setMeta(ITEMS_KEY, counts);
+  return counts[id];
+}
 
 export async function owned(): Promise<Set<string>> {
   ownedCache ??= new Set((await getMeta<string[]>(OWNED_KEY)) ?? []);

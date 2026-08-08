@@ -22,7 +22,9 @@ const PITCH = CARD_WIDTH + CARD_GAP;
 function cardHtml(prize: Prize, table: PrizeTable): string {
   const rarity = table.rarities[prize.rarity];
   const face =
-    prize.type === "skin"
+    prize.type === "item"
+      ? `<span class="roll-item">${escapeHtml(prize.icon)}</span>`
+      : prize.type === "skin"
       ? `<span class="roll-swatch" style="background:${escapeAttr(prize.vars["--bg"] ?? "#000")};
            border-color:${escapeAttr(prize.vars["--accent"] ?? "#fff")}">
            <i style="background:${escapeAttr(prize.vars["--accent"] ?? "#fff")}"></i>

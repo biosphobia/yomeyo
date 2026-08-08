@@ -39,7 +39,18 @@ export interface GifPrize extends BasePrize {
   text: string;
 }
 
-export type Prize = SkinPrize | GifPrize;
+/**
+ * A thing, not a reaction: it goes in the inventory and does nothing else
+ * yet. Unlike gifs you can hold more than one of these — pulling a second
+ * bag of food is another bag of food.
+ */
+export interface ItemPrize extends BasePrize {
+  type: "item";
+  icon: string;
+  text: string;
+}
+
+export type Prize = SkinPrize | GifPrize | ItemPrize;
 
 /**
  * How a pull is decided.
@@ -139,6 +150,10 @@ function cleanPrize(raw: unknown, rarities: Record<string, RarityInfo>): Prize |
     if (typeof p.text !== "string" || !p.text.trim()) return null;
     return p;
   }
+  if (p.type === "item") {
+    if (typeof p.text !== "string" || !p.text.trim()) return null;
+    return { ...p, icon: typeof p.icon === "string" && p.icon.trim() ? p.icon : "🎁" };
+  }
   return null;
 }
 
@@ -230,7 +245,8 @@ export function prizeTable(): Promise<PrizeTable> {
         const merged = { ...prize };
         if (typeof edit.name === "string" && edit.name.trim()) merged.name = edit.name.trim();
         if (typeof edit.rarity === "string" && edit.rarity in rarities) merged.rarity = edit.rarity;
-        if (merged.type === "gif" && typeof edit.text === "string" && edit.text.trim()) merged.text = edit.text.trim();
+        if ((merged.type === "gif" || merged.type === "item") && typeof edit.text === "string" && edit.text.trim())
+          merged.text = edit.text.trim();
         return merged;
       };
       const prizes = (

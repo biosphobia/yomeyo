@@ -17,7 +17,7 @@ import { warmUpCutscene } from "./gacha-scene.js";
  * losses get a growl and a head-clutch. All of it is yennies.
  */
 
-type GameId = "slots" | "dice" | "highlow" | "door";
+type GameId = "slots" | "dice" | "highlow" | "cups" | "race" | "door";
 
 let game: GameId = "slots";
 
@@ -239,6 +239,11 @@ interface Die {
 interface Room {
   /** Redraw the slot screen: three column positions in cells, win rows lit. */
   drawSlots: (positions: number[], highlight: boolean) => void;
+  /** The shell game's cups and the fish that hides under one. */
+  cups: any[];
+  cupFish: any;
+  /** Three racing fish, floor-grade. */
+  racers: any[];
   /** The light leaking under the mystery door, for the loop to breathe. */
   doorGlow: any;
   bulbs: any[];
@@ -417,6 +422,40 @@ function buildRoom(THREE: any, scene: any): Room {
   doorGlow.position.set(4.6, 0.012, -6.05);
   scene.add(doorGlow);
 
+  // The shell game: three cups face-down on the felt, one fish.
+  const cupMat = matte(0x8a4a2e, 0.55);
+  const cups: any[] = [];
+  for (let i = 0; i < 3; i++) {
+    const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.17, 0.26, 16, 1), cupMat);
+    cup.castShadow = true;
+    cup.visible = false;
+    scene.add(cup);
+    cups.push(cup);
+  }
+  const fishBody = (colour: number): any => {
+    const group = new THREE.Group();
+    const body = new THREE.Mesh(
+      new THREE.SphereGeometry(0.09, 10, 8),
+      new THREE.MeshStandardMaterial({ color: colour, roughness: 0.45 }),
+    );
+    body.scale.set(1.7, 0.9, 0.8);
+    body.castShadow = true;
+    group.add(body);
+    const tail = new THREE.Mesh(
+      new THREE.ConeGeometry(0.06, 0.12, 8),
+      new THREE.MeshStandardMaterial({ color: colour, roughness: 0.45 }),
+    );
+    tail.rotation.z = Math.PI / 2;
+    tail.position.x = -0.17;
+    group.add(tail);
+    group.visible = false;
+    scene.add(group);
+    return group;
+  };
+  const cupFish = fishBody(0x4fd1c5);
+  // The racers: teal, orange, ivory. Nobody asks where they swim to.
+  const racers = [0x4fd1c5, 0xf0a860, 0xe8e2d2].map((colour) => fishBody(colour));
+
   const mine = [0, 1, 2].map(() => makeDie(THREE, false));
   const theirs = [0, 1, 2].map(() => makeDie(THREE, true));
   for (const die of [...mine, ...theirs]) scene.add(die.group);
@@ -489,7 +528,7 @@ function buildRoom(THREE: any, scene: any): Room {
     coins.push(coin);
   }
 
-  return { drawSlots, doorGlow, bulbs, neon, pink, winLight, mine, theirs, card, paintCard, coins };
+  return { drawSlots, cups, cupFish, racers, doorGlow, bulbs, neon, pink, winLight, mine, theirs, card, paintCard, coins };
 }
 
 // ---------------- the render ----------------
@@ -509,6 +548,8 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
         <button data-g="slots" class="${game === "slots" ? "on" : ""}">🎰 Slots</button>
         <button data-g="dice" class="${game === "dice" ? "on" : ""}">🎲 Dice</button>
         <button data-g="highlow" class="${game === "highlow" ? "on" : ""}">🃏 High-Low</button>
+        <button data-g="cups" class="${game === "cups" ? "on" : ""}">🥤 Cups</button>
+        <button data-g="race" class="${game === "race" ? "on" : ""}">🐠 Race</button>
         <button data-g="door" class="${game === "door" ? "on" : ""}">🚪 ???</button>
       </div>
       <div id="cas-game"></div>
@@ -579,6 +620,9 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
     dice: { pos: [TX, 2.35, -0.2], look: [TX, 0.9, TZ] },
     // The card table from a lower, angled seat: same felt, different chair.
     highlow: { pos: [TX - 1.1, 1.85, -0.8], look: [TX + 0.1, 0.95, TZ + 0.3] },
+    // Over the felt for the shells, wide across the floor for the race.
+    cups: { pos: [TX - 0.3, 2.0, -1.0], look: [TX, 0.95, TZ + 0.15] },
+    race: { pos: [0, 2.15, 0.7], look: [0, 0.35, -2.7] },
     // Standing off from the mystery door, at a respectful distance.
     door: { pos: [4.3, 1.55, -2.9], look: [4.6, 1.5, -6.1] },
   };
@@ -731,7 +775,7 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
       if (chito) {
         pose(chito.bones, "lean", 1, t + 3);
         // At the card table she's working; at the dice bowl, just watching.
-        if (game === "highlow") pose(chito.bones, "deal", 0.7, t);
+        if (game === "highlow" || game === "cups") pose(chito.bones, "deal", 0.7, t);
       }
 
       // Coins fall, bounce nowhere, and are swept away.
@@ -840,6 +884,9 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
     if (!room) return;
     for (const die of [...room.mine, ...room.theirs]) die.group.visible = false;
     room.card.visible = false;
+    for (const cup of room.cups) cup.visible = false;
+    room.cupFish.visible = false;
+    for (const racer of room.racers) racer.visible = false;
   };
 
   // ---- the card in the air ----
@@ -1159,6 +1206,214 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
     });
   };
 
+  // ---- cups (the shell game) ----
+
+  const CUP_SPOTS = [TX - 0.5, TX, TX + 0.5];
+  const CUP_Z = TZ + 0.22;
+  const CUP_REST = 1.04;
+
+  const placeCup = (cup: any, x: number, lift = 0): void => {
+    cup.position.set(x, CUP_REST + lift, CUP_Z);
+  };
+
+  /** Two cups trade places, one arcing over the other. */
+  const swapCups = (a: any, b: any): Promise<void> =>
+    new Promise((resolve) => {
+      const start = performance.now();
+      const DUR = 240;
+      const ax = a.position.x;
+      const bx = b.position.x;
+      sfx.whoosh();
+      const tick = (): void => {
+        if (mySeq !== seq) return resolve();
+        const p = Math.min(1, (performance.now() - start) / DUR);
+        const arc = Math.sin(p * Math.PI) * 0.16;
+        a.position.set(ax + (bx - ax) * p, CUP_REST + arc, CUP_Z);
+        b.position.set(bx + (ax - bx) * p, CUP_REST - arc * 0.4, CUP_Z);
+        if (p >= 1) resolve();
+        else requestAnimationFrame(tick);
+      };
+      tick();
+    });
+
+  /** A cup rises (showing whatever is under it) or settles back down. */
+  const liftCup = (cup: any, up: boolean): Promise<void> =>
+    new Promise((resolve) => {
+      const start = performance.now();
+      const DUR = 320;
+      sfx.creak();
+      const tick = (): void => {
+        if (mySeq !== seq) return resolve();
+        const p = Math.min(1, (performance.now() - start) / DUR);
+        const eased = p * p * (3 - 2 * p);
+        cup.position.y = CUP_REST + (up ? eased : 1 - eased) * 0.42;
+        if (p >= 1) resolve();
+        else requestAnimationFrame(tick);
+      };
+      tick();
+    });
+
+  const drawCups = (): void => {
+    hideDice();
+    gameBox.innerHTML = `
+      ${betRow()}
+      <div class="row-actions" style="justify-content:center" id="cas-cup-actions">
+        <button id="cas-cups" class="cas-big">PLAY — <span id="cas-cost">${bet}</span> ¥</button>
+      </div>
+      <div class="cas-result" id="cas-result">Chito hides the fish, the cups dance, you point. Right cup pays ×2.5.</div>
+    `;
+    wireBets(() => {
+      const cost = gameBox.querySelector("#cas-cost");
+      if (cost) cost.textContent = String(bet);
+    });
+    const actions = gameBox.querySelector<HTMLDivElement>("#cas-cup-actions")!;
+    const result = gameBox.querySelector<HTMLDivElement>("#cas-result")!;
+    gameBox.querySelector<HTMLButtonElement>("#cas-cups")!.addEventListener("click", async () => {
+      if (!room || !(await take(bet))) return;
+      busy = true;
+      const stake = bet;
+      result.textContent = "Watch the fish…";
+      // The cups arrive; spot s holds cup atSpot[s].
+      const atSpot = [0, 1, 2];
+      room.cups.forEach((cup: any, i: number) => {
+        cup.visible = true;
+        placeCup(cup, CUP_SPOTS[i]);
+      });
+      sfx.thud();
+      let fishAt = 1;
+      room.cupFish.visible = true;
+      room.cupFish.position.set(CUP_SPOTS[fishAt], 0.99, CUP_Z);
+      await liftCup(room.cups[atSpot[fishAt]], true);
+      sfx.splash();
+      await new Promise((r) => setTimeout(r, 650));
+      await liftCup(room.cups[atSpot[fishAt]], false);
+      room.cupFish.visible = false;
+      // The dance: eight trades, the fish riding its cup.
+      for (let n = 0; n < 8; n++) {
+        const s1 = Math.floor(Math.random() * 3);
+        let s2 = Math.floor(Math.random() * 3);
+        while (s2 === s1) s2 = Math.floor(Math.random() * 3);
+        await swapCups(room.cups[atSpot[s1]], room.cups[atSpot[s2]]);
+        const held = atSpot[s1];
+        atSpot[s1] = atSpot[s2];
+        atSpot[s2] = held;
+        if (fishAt === s1) fishAt = s2;
+        else if (fishAt === s2) fishAt = s1;
+      }
+      result.textContent = "Which cup?";
+      actions.innerHTML = ["left", "middle", "right"]
+        .map((label, s) => `<button class="cas-big" data-spot="${s}">${label.toUpperCase()}</button>`)
+        .join("");
+      for (const button of actions.querySelectorAll<HTMLButtonElement>("[data-spot]")) {
+        button.addEventListener("click", async () => {
+          const spot = Number(button.dataset.spot);
+          actions.innerHTML = "";
+          if (!room) return;
+          if (spot === fishAt) {
+            room.cupFish.visible = true;
+            room.cupFish.position.set(CUP_SPOTS[spot], 0.99, CUP_Z);
+          }
+          await liftCup(room.cups[atSpot[spot]], true);
+          if (spot === fishAt) {
+            sfx.splash();
+            await payout(Math.floor(stake * 2.5));
+            celebrate(false, [TX, 1.5, TZ + 0.2]);
+            react(0, "cheer");
+            result.textContent = `The fish! +${formatYennies(Math.floor(stake * 2.5) - stake)}`;
+          } else {
+            sfx.growl();
+            react(0, "hurt", 1.8);
+            react(1, "point", 2.0);
+            room.cupFish.visible = true;
+            room.cupFish.position.set(CUP_SPOTS[fishAt], 0.99, CUP_Z);
+            await liftCup(room.cups[atSpot[fishAt]], true);
+            result.textContent = "Wrong cup. The fish was next door the whole time.";
+          }
+          busy = false;
+          setTimeout(() => {
+            if (game === "cups" && !busy) drawCups();
+          }, 2400);
+        });
+      }
+    });
+  };
+
+  // ---- the fish race ----
+
+  const RACE_START = -2.4;
+  const RACE_END = 2.4;
+  const RACE_LANES = [-2.1, -2.55, -3.0];
+
+  const drawRace = (): void => {
+    hideDice();
+    gameBox.innerHTML = `
+      ${betRow()}
+      <div class="row-actions" style="justify-content:center">
+        <button class="cas-big" data-fish="0">🩵 TEAL</button>
+        <button class="cas-big" data-fish="1">🧡 ORANGE</button>
+        <button class="cas-big" data-fish="2">🤍 IVORY</button>
+      </div>
+      <div class="cas-result" id="cas-result">Three fish, no water, one carpet. Pick yours; the winner pays ×2.7.</div>
+    `;
+    wireBets();
+    const result = gameBox.querySelector<HTMLDivElement>("#cas-result")!;
+    for (const button of gameBox.querySelectorAll<HTMLButtonElement>("[data-fish]")) {
+      button.addEventListener("click", async () => {
+        if (!room || !(await take(bet))) return;
+        busy = true;
+        const stake = bet;
+        const pick = Number(button.dataset.fish);
+        result.textContent = "They're off. Somehow.";
+        sfx.splash();
+        room.racers.forEach((racer: any, i: number) => {
+          racer.visible = true;
+          racer.position.set(RACE_START, 0.14, RACE_LANES[i]);
+          racer.rotation.y = 0; // the tail is already at the back; nose to the finish
+        });
+        const speeds = [0, 0, 0].map(() => 0.55 + Math.random() * 0.2);
+        let winner = -1;
+        let lastSplash = 0;
+        await new Promise<void>((resolve) => {
+          let previous = performance.now();
+          const tick = (): void => {
+            if (mySeq !== seq || !room) return resolve();
+            const now = performance.now();
+            const dt = Math.min(0.05, (now - previous) / 1000);
+            previous = now;
+            room.racers.forEach((racer: any, i: number) => {
+              // Wandering speeds, so the lead trades hands.
+              speeds[i] = Math.max(0.3, Math.min(1.1, speeds[i] + (Math.random() - 0.5) * 0.12));
+              racer.position.x += speeds[i] * dt;
+              racer.position.y = 0.14 + Math.abs(Math.sin(now / 90 + i * 2)) * 0.05;
+              racer.rotation.z = Math.sin(now / 70 + i) * 0.25;
+              if (racer.position.x >= RACE_END && winner < 0) winner = i;
+            });
+            if (now - lastSplash > 700) {
+              lastSplash = now;
+              sfx.splash();
+            }
+            if (winner >= 0) resolve();
+            else requestAnimationFrame(tick);
+          };
+          tick();
+        });
+        sfx.clatter();
+        const names = ["the teal one", "the orange one", "the ivory one"];
+        if (winner === pick) {
+          await payout(Math.floor(stake * 2.7));
+          celebrate(false, [0, 1.2, -2.5]);
+          react(0, "cheer");
+          result.textContent = `${names[winner]} takes it! +${formatYennies(Math.floor(stake * 2.7) - stake)}`;
+        } else {
+          sfx.growl();
+          react(0, "hurt", 1.8);
+          result.textContent = `${names[winner]} takes it. Yours is still apologising.`;
+        }
+        busy = false;
+      });
+    }
+  };
+
   // ---- the mystery door ----
   const drawDoor = (): void => {
     hideDice();
@@ -1205,6 +1460,8 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
   const drawGame = (): void => {
     if (game === "slots") drawSlots();
     else if (game === "dice") drawDice();
+    else if (game === "cups") drawCups();
+    else if (game === "race") drawRace();
     else if (game === "door") drawDoor();
     else drawHighlow();
   };

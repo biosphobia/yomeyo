@@ -426,6 +426,14 @@
       "on": "wrong",
       "image": "gifs/threat.gif",
       "text": "answer better next time"
+    },
+    {
+      "id": "item-bag-of-food",
+      "type": "item",
+      "name": "Bag of food",
+      "rarity": "rare",
+      "icon": "🍱",
+      "text": "yuuri might like this"
     }
   ],
   "_prizes": "Add one by copying an entry: drop the gif in gifs/, give it a unique id, set 'on' to 'correct' or 'wrong', and write the line that goes under it. Ids are what the save file remembers, so never reuse one for a different prize. 'note' is optional flavour shown in the collection. Skins are still supported — type 'skin' with a 'vars' object of CSS custom properties — but none are in the pool for now."

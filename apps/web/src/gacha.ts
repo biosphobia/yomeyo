@@ -2,7 +2,7 @@ import { levelState } from "./levels.js";
 import { screenHeader } from "./screen.js";
 import { toast } from "./toast.js";
 import { earnYennies, formatYennies, levelReward, spendYennies, yennies } from "./yennies.js";
-import { addOwned, equipSkin, equippedSkin, owned } from "./gacha-collection.js";
+import { addItem, addOwned, equipSkin, equippedSkin, itemCounts, owned } from "./gacha-collection.js";
 import {
   cutsceneLines,
   cutsceneTitle,
@@ -80,6 +80,11 @@ export async function renderGacha(main: HTMLElement, isCurrent: () => boolean = 
     </div>
 
     <div class="card-panel">
+      <b>Inventory</b>
+      <div id="gacha-inventory"></div>
+    </div>
+
+    <div class="card-panel">
       <b>Odds</b>
       ${
         // Under a uniform draw there is nothing to weigh up, and printing a
@@ -130,6 +135,7 @@ export async function renderGacha(main: HTMLElement, isCurrent: () => boolean = 
   if (free) void drawCutscenes(main, table, isCurrent);
 
   drawCollection(main, table, have, wearing, () => void renderGacha(main, isCurrent));
+  await drawInventory(main, table, have);
   const open = main.querySelector<HTMLButtonElement>("#gacha-open");
   if (open) {
     open.disabled = open.disabled || opening;
@@ -224,6 +230,41 @@ async function preview(
   }
   if (!isCurrent() || !stage.isConnected) return;
   stage.innerHTML = "";
+}
+
+// ---------------- the inventory ----------------
+
+/**
+ * What is actually held: every gif and skin once (that is all you can
+ * have of one), stackable items with their counts. The collection above
+ * answers "what exists"; this answers "what's mine".
+ */
+async function drawInventory(main: HTMLElement, table: PrizeTable, have: Set<string>): Promise<void> {
+  const box = main.querySelector<HTMLDivElement>("#gacha-inventory");
+  if (!box) return;
+  const counts = await itemCounts();
+  const held = table.prizes.filter(
+    (prize) => (prize.type === "item" ? (counts[prize.id] ?? 0) > 0 : have.has(prize.id)),
+  );
+  if (held.length === 0) {
+    box.innerHTML = `<div class="glosses">Nothing yet. Open a crate.</div>`;
+    return;
+  }
+  box.innerHTML = held
+    .map((prize) => {
+      const rarity = table.rarities[prize.rarity];
+      const count = prize.type === "item" ? (counts[prize.id] ?? 0) : 1;
+      const note = prize.type === "item" || prize.type === "gif" ? prize.text : "a look for the whole app";
+      return `<div class="inv-row" style="--rarity:${escapeAttr(rarity?.color ?? "#94a3b8")}">
+        <span class="inv-face">${prizeFace(prize)}</span>
+        <span class="inv-body">
+          <span class="inv-name">${escapeHtml(prize.name)}${count > 1 ? ` <b class="inv-count">×${count}</b>` : ""}</span>
+          <span class="glosses">${escapeHtml(note)}</span>
+        </span>
+        <span class="inv-rarity">${escapeHtml(rarity?.label ?? "")}</span>
+      </div>`;
+    })
+    .join("");
 }
 
 // ---------------- the collection ----------------
@@ -388,6 +429,9 @@ async function openPrizeEditor(
 }
 
 function prizeFace(prize: Prize): string {
+  if (prize.type === "item") {
+    return `<span class="prize-item">${escapeHtml(prize.icon)}</span>`;
+  }
   if (prize.type === "skin") {
     return `<span class="prize-swatch" style="background:${escapeAttr(prize.vars["--bg"] ?? "#000")};
       border-color:${escapeAttr(prize.vars["--accent"] ?? "#fff")}">
@@ -425,7 +469,12 @@ async function openCrate(main: HTMLElement, table: PrizeTable, isCurrent: () => 
     toast("No prizes are configured.", "error");
     return;
   }
-  const isNew = await addOwned(prize.id);
+  let isNew = await addOwned(prize.id);
+  // A stackable item is never a dupe: a second bag of food is another bag.
+  if (prize.type === "item") {
+    await addItem(prize.id);
+    isNew = true;
+  }
   // A won gif joins the drills' pool. Told now, so the next question can
   // show it rather than the one after the app is next opened.
   if (isNew && prize.type === "gif") forgetReactions();
