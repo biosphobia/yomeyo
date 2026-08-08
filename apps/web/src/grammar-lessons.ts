@@ -45,28 +45,27 @@ export const LESSONS: Lesson[] = [
   // ---------------------------------------------------------------- 1
   {
     title: "How a Japanese sentence works",
-    tagline: "Blocks with stickers on them, and the last block does the talking.",
+    tagline: "The last word does the talking, and stickers do the rest.",
     sections: [
       {
-        heading: "A sentence is blocks, snapped together",
+        heading: "The last word does the talking",
         body:
-          "Forget grammar for a second. A Japanese sentence is a row of blocks: a few things, then ONE " +
-          "block at the end that says what's going on — an action (のむ, drink), a feeling (あつい, hot), or " +
-          "an “is” (です). That last block is the whole point of the sentence. Everything before it is just " +
-          "setting the scene, and you don't find out what actually happened until the end.",
+          "A Japanese sentence ends with the important part: an action (のむ, drink), a feeling (あつい, " +
+          "hot), or です (is). Everything before it sets the scene.\n\n" +
+          "English says who–does–what. Japanese says who–what–does. You find out what happened at the end.",
         examples: [
           { jp: "さくらが みずを のむ", r: "sakura ga mizu wo nomu", en: "Sakura drinks water. (literally: Sakura water drinks)" },
           { jp: "ねこが ねる", r: "neko ga neru", en: "The cat sleeps." },
         ],
       },
       {
-        heading: "Particles: stickers on the back of a word",
+        heading: "Particles are stickers",
         body:
-          "Now the only piece of jargon this course will ever ask you to keep: a PARTICLE. A particle is a " +
-          "tiny word — が, を, に, は — stuck on the BACK of the word in front of it, like a sticker that says " +
-          "what that word is doing in the sentence. みず is just “water”; みずを is “water — the thing being " +
-          "acted on”. English tells you who does what by word ORDER. Japanese tells you with stickers " +
-          "instead. Read a particle as belonging to the word before it, always: [みず を], never [を のむ].",
+          "A particle is a tiny word — が, を, に, は — stuck on the back of the word before it. Think of it " +
+          "as a sticker that says the word's job.\n\n" +
+          "みず is water. みずを is water with a sticker on it: “the action lands on me”.\n\n" +
+          "English shows jobs with word order. Japanese shows them with stickers. A sticker always belongs " +
+          "to the word in front of it: read [みず を], never [を のむ].",
         examples: [
           { jp: "さくらが", r: "sakura ga", en: "Sakura + sticker: “I'm the one doing it”" },
           { jp: "みずを", r: "mizu wo", en: "water + sticker: “it's happening to me”" },
@@ -74,46 +73,48 @@ export const LESSONS: Lesson[] = [
         ],
       },
       {
-        heading: "The five stickers you'll meet first",
+        heading: "Five stickers to know",
         body:
-          "Each of these gets its own chapter, so don't memorise anything yet — just wave at them. " +
-          "は says “here's what I'm talking about”. が says “this one is the doer”. を says “the action lands " +
-          "on this”. に says “this is the place it's going, or the time it happens”. で says “this is where " +
-          "the action takes place”. That's the whole trick of Japanese: five little stickers doing the work " +
-          "that English word order does. Two spelling quirks to know from day one: working as a sticker, " +
-          "は is said “wa” and を is said “o”.",
+          "Each one gets its own chapter later. For now, just meet them:\n\n" +
+          "は — “here's what I'm talking about” (said “wa”)\n" +
+          "が — “this one is the doer”\n" +
+          "を — “the action lands on this” (said “o”)\n" +
+          "に — “headed here” (a place, or a time)\n" +
+          "で — “happening here”",
         examples: [
-          { jp: "わたしは", r: "watashi wa", en: "as for me… (the topic — what the sentence is about)" },
+          { jp: "わたしは", r: "watashi wa", en: "as for me…" },
           { jp: "ねこが", r: "neko ga", en: "the cat is the one doing it" },
           { jp: "パンを", r: "pan wo", en: "bread is what it happens to" },
           { jp: "うちに", r: "uchi ni", en: "headed home" },
-          { jp: "こうえんで", r: "kouen de", en: "at the park (that's where it happens)" },
+          { jp: "こうえんで", r: "kouen de", en: "at the park" },
         ],
       },
       {
-        heading: "Four recipes that carry your first month",
+        heading: "Sentence recipes",
         body:
-          "Almost every sentence you'll want to say at the start is one of four patterns. Read ＿ as a " +
-          "slot you drop a word into. Recipe 1: ＿は ＿です — “A is B”, for introducing anything, including " +
-          "yourself. One thing to get straight now: the “is” lives in です, not in は — は only says “as for " +
-          "A…”, and then です does the being. Recipe 2: ＿は ＿を (action) — “A does something to B”. " +
-          "Recipe 3: ＿は ＿に いく — “A goes to B”. Recipe 4: any of those + か on the very end — now it's " +
-          "a question, no rearranging, no question mark needed. Swap words in and out of the slots and the " +
-          "recipe keeps working.",
+          "Most sentences you'll want at the start follow a few patterns. ＿ is a slot you drop a word " +
+          "into.\n\n" +
+          "1. ＿は ＿です — “A is B”. The “is” lives in です, not in は. は only says “as for A…”.\n" +
+          "2. ＿は ＿を (action) — “A does something to B”.\n" +
+          "3. ＿は ＿に いく — “A goes to B”.\n" +
+          "4. Any of these + か at the end — now it's a question. Nothing moves around.\n\n" +
+          "Swap words in and out of the slots and the recipe keeps working. The Playground tab has recipes " +
+          "1 and 2 built to play with — tap the slots, change the words, watch the sentence follow.",
         examples: [
           { jp: "わたしは トムです", r: "watashi wa tomu desu", en: "I am Tom. — recipe 1" },
           { jp: "わたしは みずを のむ", r: "watashi wa mizu wo nomu", en: "I drink water. — recipe 2" },
           { jp: "わたしは がっこうに いく", r: "watashi wa gakkou ni iku", en: "I go to school. — recipe 3" },
-          { jp: "これは ねこですか", r: "kore wa neko desu ka", en: "Is this a cat? — any recipe + か" },
+          { jp: "これは ねこですか", r: "kore wa neko desu ka", en: "Is this a cat? — recipe 1 + か" },
         ],
       },
       {
-        heading: "Because of the stickers, order is free",
+        heading: "Order is free",
         body:
-          "Since the sticker carries the job, the blocks can trade places and nobody gets confused. " +
-          "さくらが みずを のむ and みずを さくらが のむ both mean Sakura drinks water — が is still stuck to " +
-          "Sakura either way, so she's still the one drinking. Only two things are ever fixed: the ending " +
-          "block comes last, and a describing word comes right before the thing it describes.",
+          "The sticker carries the job, so the words can trade places. さくらが みずを のむ and " +
+          "みずを さくらが のむ both mean Sakura drinks water — が is still on Sakura, so she's still the one " +
+          "drinking.\n\n" +
+          "Only two things are fixed: the ending comes last, and a describing word comes right before what " +
+          "it describes.",
         examples: [
           { jp: "さくらが みずを のむ", r: "sakura ga mizu wo nomu", en: "Sakura drinks water." },
           { jp: "みずを さくらが のむ", r: "mizu wo sakura ga nomu", en: "Same meaning — the stickers didn't move." },
@@ -122,13 +123,16 @@ export const LESSONS: Lesson[] = [
       {
         heading: "A whole sentence can be tiny",
         body:
-          "Japanese drops anything that's obvious. のむ on its own is a complete, natural sentence: someone " +
-          "— clear from the situation — drinks. No stated “I”, no “it”, no filler. When words are missing, " +
-          "they're not broken off; they were never needed. Half of understanding Japanese is calmly filling " +
-          "in what nobody bothered to say.",
+          "Japanese drops anything that's obvious. のむ on its own is a complete, natural sentence: " +
+          "someone, clear from the situation, drinks. No “I”, “him” or “it” needed if it's clear from " +
+          "context. Japanese drops words like this a lot.\n\n" +
+          "It's also common when introducing yourself to say ピエトロです instead of わたしは ピエトロです " +
+          "(“as for me, I am Pietro”). Everyone already knows you're talking about yourself — you are the " +
+          "topic, so you don't need to state it again.",
         examples: [
           { jp: "のむ", r: "nomu", en: "(I'll) drink. — a full sentence" },
           { jp: "あつい", r: "atsui", en: "(It's) hot. — also a full sentence" },
+          { jp: "ピエトロです", r: "pietoro desu", en: "(I'm) Pietro. — the topic goes unsaid" },
         ],
       },
     ],
@@ -359,11 +363,11 @@ export const LESSONS: Lesson[] = [
         heading: "は vs が",
         body:
           "が answers “who?” — it points. は answers “what about it?” — it frames. さくらが きた answers " +
-          "“who came?” (SAKURA came). さくらは きた answers “what did Sakura do?” (as for Sakura, she came). " +
-          "New information leans on が; already-known things settle onto は. If English is your anchor, it " +
-          "behaves a little like “a” vs “the”: わたしは がくせいだ introduces you — “I'm a student, for what " +
-          "it's worth” — while わたしが がくせいだ singles you out — “I'm THE student (the one you're looking " +
-          "for)”. Don't hold that as a rule; it bends. It's a feel for the general shape.",
+          "“who came?” (SAKURA came). さくらは きた answers “what did Sakura do?” (as for Sakura, she " +
+          "came).\n\n" +
+          "It's a bit like “a” vs “the” in English. わたしは がくせいだ introduces you: “I'm a student.” " +
+          "わたしが がくせいだ singles you out: “I'm THE student — the one you're looking for.” This isn't a " +
+          "strict rule, just a useful feel.",
         examples: [
           { jp: "さくらが きた", r: "sakura ga kita", en: "SAKURA came. (answering: who came?)" },
           { jp: "さくらは きた", r: "sakura wa kita", en: "As for Sakura — she came. (we were already talking about her)" },
@@ -374,11 +378,9 @@ export const LESSONS: Lesson[] = [
       {
         heading: "は and が in the same sentence",
         body:
-          "They're not rivals — one very common pattern uses both: ＿は ＿が ＿, “as for A, its B is C”. " +
-          "は raises the big topic, then が points at the part of it being described. かれは めが おおきい is " +
-          "literally “as for him, the eyes are big” — English just says “his eyes are big”. Japanese reaches " +
-          "for this shape constantly; when you spot は and が together, read the は part as the headline and " +
-          "the が part as the detail.",
+          "One very common pattern uses both: ＿は ＿が ＿ — “as for A, its B is C”.\n\n" +
+          "かれは めが おおきい is literally “as for him, the eyes are big”. English just says “his eyes are " +
+          "big”. When you see は and が together, the は part is the headline and the が part is the detail.",
         examples: [
           { jp: "かれは めが おおきい", r: "kare wa me ga ookii", en: "His eyes are big. (as for him, the eyes are big)" },
           { jp: "ぞうは はなが ながい", r: "zou wa hana ga nagai", en: "Elephants have long noses. (as for elephants, the nose is long)" },
@@ -388,12 +390,11 @@ export const LESSONS: Lesson[] = [
         heading: "は often hides a が",
         body:
           "When the topic and the doer are the same person, は takes the stage and the が goes invisible: " +
-          "わたしは たべる is really “as for me, (I) eat.” That's why so many sentences seem to have は where " +
-          "you'd expect が — the が is still there, just unsaid. And when even the topic is obvious, it goes " +
-          "too: introducing yourself, トムです is enough — everyone knows you're talking about you. One last " +
-          "thing, so this chapter doesn't weigh on you: nobody chooses は or が by rule, natives included. " +
-          "You'll meet thousands of sentences in this app, and the feel arrives on its own. When in doubt, " +
-          "は and move on.",
+          "わたしは たべる is really “as for me, (I) eat.” That's why so many sentences have は where you'd " +
+          "expect が — the が is still there, just unsaid.\n\n" +
+          "When even the topic is obvious, it goes too. Introducing yourself, トムです is enough.\n\n" +
+          "Nobody chooses は or が by a rule — natives included. The feel comes from seeing sentences. When " +
+          "in doubt, use は and move on.",
         examples: [
           { jp: "わたしは たべる", r: "watashi wa taberu", en: "As for me, (I) eat." },
           { jp: "トムです", r: "tomu desu", en: "(I'm) Tom. — the obvious topic just stays home" },

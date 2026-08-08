@@ -157,7 +157,7 @@ async function drawLesson(
         (section) => `
       <div class="card-panel lesson-section">
         <h3>${escapeHtml(section.heading)}</h3>
-        <p>${escapeHtml(section.body)}</p>
+        ${bodyHtml(section.body)}
         ${(section.examples ?? [])
           .map(
             (ex) => `
@@ -231,6 +231,18 @@ async function drawLesson(
 /** The bit of an example line worth reading out loud: the Japanese only. */
 function spokenOf(jp: string): string {
   return jp.replace(/\s+/g, "");
+}
+
+/**
+ * A lesson body, laid out: blank lines split paragraphs, single newlines
+ * become line breaks — so a body can hold a short list without a wall of
+ * text, and old single-paragraph bodies render as before.
+ */
+function bodyHtml(body: string): string {
+  return body
+    .split(/\n\n+/)
+    .map((para) => `<p>${escapeHtml(para).replace(/\n/g, "<br>")}</p>`)
+    .join("");
 }
 
 // ---------------- the test ----------------

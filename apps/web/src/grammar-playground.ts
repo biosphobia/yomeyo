@@ -3,6 +3,7 @@ import { getMeta, setMeta } from "./db.js";
 import { speak } from "./audio.js";
 import { activeDictionary, assetUrl } from "./store.js";
 import { generationAvailable } from "./grammar-ai.js";
+import { renderRecipes } from "./grammar-recipes.js";
 import {
   PIECES,
   WORD_KIND_INFO,
@@ -41,6 +42,10 @@ import {
  */
 
 const LAST_KEY = "playgroundLast";
+const MODE_KEY = "playgroundMode";
+
+/** Recipes first: the guided patterns, with free build one tap away. */
+let mode: "recipes" | "free" | null = null;
 
 interface PlayWord {
   /** As typed: 食べる or たべる. */
@@ -71,6 +76,7 @@ const translations = new Map<string, { en: string; note?: string }>();
 let translateSeq = 0;
 
 export async function renderPlayground(body: HTMLDivElement, isCurrent: () => boolean = () => true): Promise<void> {
+  mode ??= ((await getMeta<string>(MODE_KEY)) as "recipes" | "free" | undefined) ?? "recipes";
   if (!word) {
     const saved = await getMeta<Saved>(LAST_KEY);
     if (saved?.typed) {
@@ -147,8 +153,32 @@ function walkChain(): { start: ChainState; steps: Step[]; state: ChainState } {
 // ---------------- drawing ----------------
 
 function draw(body: HTMLDivElement): void {
-  const suggestions = ["たべる", "のむ", "いく", "あかい", "べんきょうする", "がくせい"];
   body.innerHTML = `
+    <div class="segmented pg-mode">
+      <button data-m="recipes" class="${mode === "recipes" ? "on" : ""}">Recipes</button>
+      <button data-m="free" class="${mode === "free" ? "on" : ""}">Free build</button>
+    </div>
+    <div id="pg-mode-view"></div>
+  `;
+  for (const button of body.querySelectorAll<HTMLButtonElement>(".pg-mode button")) {
+    button.addEventListener("click", () => {
+      if (button.dataset.m === mode) return;
+      mode = button.dataset.m as "recipes" | "free";
+      void setMeta(MODE_KEY, mode);
+      draw(body);
+    });
+  }
+  const view = body.querySelector<HTMLDivElement>("#pg-mode-view")!;
+  if (mode === "recipes") {
+    void renderRecipes(view);
+    return;
+  }
+  drawFree(view, body);
+}
+
+function drawFree(root: HTMLDivElement, body: HTMLDivElement): void {
+  const suggestions = ["たべる", "のむ", "いく", "あかい", "べんきょうする", "がくせい"];
+  root.innerHTML = `
     <div class="card-panel">
       <label for="pg-in">A word to play with</label>
       <div class="pg-input-row">
@@ -164,9 +194,9 @@ function draw(body: HTMLDivElement): void {
     <div id="pg-out"></div>
   `;
 
-  const input = body.querySelector<HTMLInputElement>("#pg-in")!;
-  const msg = body.querySelector<HTMLDivElement>("#pg-msg")!;
-  const out = body.querySelector<HTMLDivElement>("#pg-out")!;
+  const input = root.querySelector<HTMLInputElement>("#pg-in")!;
+  const msg = root.querySelector<HTMLDivElement>("#pg-msg")!;
+  const out = root.querySelector<HTMLDivElement>("#pg-out")!;
 
   const build = async (text: string): Promise<void> => {
     const found = await resolveWord(text);
@@ -185,11 +215,11 @@ function draw(body: HTMLDivElement): void {
     draw(body);
   };
 
-  body.querySelector("#pg-go")!.addEventListener("click", () => void build(input.value));
+  root.querySelector("#pg-go")!.addEventListener("click", () => void build(input.value));
   input.addEventListener("keydown", (ev) => {
     if (ev.key === "Enter") void build(input.value);
   });
-  for (const chip of body.querySelectorAll<HTMLButtonElement>(".pg-chip")) {
+  for (const chip of root.querySelectorAll<HTMLButtonElement>(".pg-chip")) {
     chip.addEventListener("click", () => {
       input.value = chip.dataset.w!;
       void build(chip.dataset.w!);

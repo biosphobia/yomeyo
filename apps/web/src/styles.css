@@ -4630,3 +4630,130 @@ button.gram-swap-line:hover {
   font-size: 0.72rem;
   font-variant-numeric: tabular-nums;
 }
+
+/* ---------------- sentence recipes (playground) ---------------- */
+
+.pg-mode {
+  margin-bottom: 12px;
+}
+
+.rc-intro {
+  margin: 0 2px 10px;
+}
+
+.rc-card {
+  margin-bottom: 14px;
+}
+
+.rc-title {
+  font-size: 0.95rem;
+  margin-bottom: 10px;
+}
+
+.rc-chain {
+  margin-bottom: 12px;
+}
+
+.rc-fixed {
+  align-self: center;
+  font-size: 1.15rem;
+  color: var(--muted);
+  padding: 0 2px;
+}
+
+.pg-block.rc-slot {
+  cursor: pointer;
+  border-style: dashed;
+}
+
+.rc-sentence {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rc-jp {
+  font-size: 1.45rem;
+  line-height: 1.4;
+}
+
+.rc-romaji {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 2px 0 4px 40px;
+}
+
+.rc-en {
+  color: var(--good, #4ade80);
+  font-size: 0.95rem;
+  margin: 0 0 6px 40px;
+}
+
+.rc-hint {
+  margin-top: 6px;
+}
+
+.rc-panel {
+  margin-top: 8px;
+}
+
+/* the word picker */
+.rc-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 60;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 16px;
+}
+
+.rc-pop {
+  width: min(440px, 100%);
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.rc-pop-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.rc-search {
+  flex: 1;
+  min-width: 0;
+}
+
+.rc-pop-list {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rc-pick {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  text-align: left;
+  background: var(--panel-2, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: 1.05rem;
+}
+
+.rc-pick .glosses {
+  font-size: 0.82rem;
+}
+
+@media (min-width: 640px) {
+  .rc-scrim {
+    align-items: center;
+  }
+}
