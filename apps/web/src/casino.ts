@@ -17,7 +17,7 @@ import { warmUpCutscene } from "./gacha-scene.js";
  * losses get a growl and a head-clutch. All of it is yennies.
  */
 
-type GameId = "slots" | "dice" | "highlow";
+type GameId = "slots" | "dice" | "highlow" | "door";
 
 let game: GameId = "slots";
 
@@ -492,6 +492,7 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
         <button data-g="slots" class="${game === "slots" ? "on" : ""}">🎰 Slots</button>
         <button data-g="dice" class="${game === "dice" ? "on" : ""}">🎲 Dice</button>
         <button data-g="highlow" class="${game === "highlow" ? "on" : ""}">🃏 High-Low</button>
+        <button data-g="door" class="${game === "door" ? "on" : ""}">🚪 ???</button>
       </div>
       <div id="cas-game"></div>
     </div>
@@ -551,8 +552,9 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
     }
   };
 
-  /** Where the camera wants to be, per game; the dice zoom overrides it. */
+  /** Where the camera wants to be, per game; a timed zoom overrides it. */
   let zoomUntil = 0;
+  let zoomTarget: { pos: number[]; look: number[] } | null = null;
   const CAMS: Record<GameId, { pos: number[]; look: number[] }> = {
     // A three-quarter view from the right: the whole machine, the reels at
     // an angle, and Yuuri on her stool in profile.
@@ -560,8 +562,15 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
     dice: { pos: [TX, 2.05, -0.9], look: [TX, 0.95, TZ] },
     // The card table from a lower, angled seat: same felt, different chair.
     highlow: { pos: [TX - 0.85, 1.6, -1.5], look: [TX + 0.1, 0.95, TZ + 0.3] },
+    // Standing off from the mystery door, at a respectful distance.
+    door: { pos: [4.3, 1.55, -3.1], look: [4.6, 1.5, -6.1] },
   };
-  const ZOOM = { pos: [TX, 1.6, -2.05], look: [TX, 0.95, TZ + 0.1] };
+  const DICE_ZOOM = { pos: [TX, 1.6, -2.05], look: [TX, 0.95, TZ + 0.1] };
+  const DOOR_ZOOM = { pos: [4.5, 1.45, -4.55], look: [4.6, 1.3, -6.1] };
+  /** Yuuri's trip from her stool to bar the door, timed from its start. */
+  let guard: { start: number } | null = null;
+  let doorFlareUntil = 0;
+  const smooth = (x: number): number => x * x * (3 - 2 * x);
 
   // The picture leans with the pointer, a few centimetres of parallax.
   const pointer = { x: 0, y: 0, tx: 0, ty: 0 };
@@ -650,8 +659,54 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
       const t = now / 1000;
 
       if (yuuri) {
-        pose(yuuri.bones, "sit", 1);
-        pose(yuuri.bones, "lean", 1, t);
+        const STOOL = { x: MX, z: MZ + 1.6 };
+        const POST = { x: 3.85, z: -5.15 };
+        const g = guard ? t - guard.start : -1;
+        if (guard && g >= 5.4) guard = null;
+        if (guard && g >= 0) {
+          if (g < 0.4) {
+            // Off the stool.
+            yuuri.root.position.set(STOOL.x, 0.91 * (1 - g / 0.4), STOOL.z);
+            yuuri.root.rotation.y = Math.PI;
+            pose(yuuri.bones, "clear", 1);
+          } else if (g < 1.6) {
+            // Hurrying over.
+            const p = smooth((g - 0.4) / 1.2);
+            yuuri.root.position.set(
+              STOOL.x + (POST.x - STOOL.x) * p,
+              Math.abs(Math.sin(g * 11)) * 0.05,
+              STOOL.z + (POST.z - STOOL.z) * p,
+            );
+            yuuri.root.rotation.y = Math.atan2(POST.x - STOOL.x, POST.z - STOOL.z);
+            pose(yuuri.bones, "clear", 1);
+          } else if (g < 3.8) {
+            // Barring the way, finger up.
+            yuuri.root.position.set(POST.x, 0, POST.z);
+            yuuri.root.rotation.y = 0.55;
+            pose(yuuri.bones, "point", 1, t);
+          } else if (g < 5.0) {
+            // Back to her machine.
+            const p = smooth((g - 3.8) / 1.2);
+            yuuri.root.position.set(
+              POST.x + (STOOL.x - POST.x) * p,
+              Math.abs(Math.sin(g * 11)) * 0.05,
+              POST.z + (STOOL.z - POST.z) * p,
+            );
+            yuuri.root.rotation.y = Math.atan2(STOOL.x - POST.x, STOOL.z - POST.z);
+            pose(yuuri.bones, "clear", 1);
+          } else {
+            // Settling back onto the stool.
+            const p = (g - 5.0) / 0.4;
+            yuuri.root.position.set(STOOL.x, 0.91 * p, STOOL.z);
+            yuuri.root.rotation.y = Math.PI;
+            pose(yuuri.bones, "sit", p);
+          }
+        } else {
+          yuuri.root.position.set(STOOL.x, 0.91, STOOL.z);
+          yuuri.root.rotation.y = Math.PI;
+          pose(yuuri.bones, "sit", 1);
+          pose(yuuri.bones, "lean", 1, t);
+        }
       }
       if (chito) {
         pose(chito.bones, "lean", 1, t + 3);
@@ -693,9 +748,10 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
       room!.neon.material.color.setHSL(strobing ? (t * 1.5) % 1 : 0, strobing ? 0.5 : 0, 1);
       room!.winLight.intensity = Math.max(0, fx.flashUntil - t) * 60;
       // Whatever is behind the mystery door, it's awake.
-      room!.doorGlow.material.opacity = 0.45 + Math.sin(t * 0.7) * 0.2 + Math.max(0, Math.sin(t * 0.13) - 0.98) * 12;
+      room!.doorGlow.material.opacity =
+        0.45 + Math.sin(t * 0.7) * 0.2 + Math.max(0, Math.sin(t * 0.13) - 0.98) * 12 + (t < doorFlareUntil ? 0.35 : 0);
 
-      const target = t < zoomUntil ? ZOOM : CAMS[game];
+      const target = t < zoomUntil && zoomTarget ? zoomTarget : CAMS[game];
       camPos.lerp(new THREE.Vector3(...target.pos), 0.045);
       camLook.lerp(new THREE.Vector3(...target.look), 0.045);
       pointer.x += (pointer.tx - pointer.x) * 0.06;
@@ -968,6 +1024,7 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
       result.textContent = "…";
       hideDice();
       // Lean in for the throw, and stay in until it's read.
+      zoomTarget = DICE_ZOOM;
       zoomUntil = performance.now() / 1000 + 4.6;
       const playerDice = roll3();
       await throwDice(room.mine, playerDice, TZ + 0.55);
@@ -1082,9 +1139,53 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
     });
   };
 
+  // ---- the mystery door ----
+  const drawDoor = (): void => {
+    hideDice();
+    gameBox.innerHTML = `
+      <div class="row-actions" style="justify-content:center">
+        <button id="cas-door" class="cas-big">TRY THE DOOR</button>
+      </div>
+      <div class="cas-result" id="cas-result">Chained shut. Warm to stand near. Humming, slightly.</div>
+    `;
+    const result = gameBox.querySelector<HTMLDivElement>("#cas-result")!;
+    gameBox.querySelector<HTMLButtonElement>("#cas-door")!.addEventListener("click", () => {
+      if (busy) return;
+      busy = true;
+      const now = performance.now() / 1000;
+      zoomTarget = DOOR_ZOOM;
+      zoomUntil = now + 6.2;
+      result.textContent = "…";
+      // Your steps, then the chain in your hand.
+      sfx.step();
+      setTimeout(() => sfx.step(), 320);
+      setTimeout(() => sfx.step(), 640);
+      setTimeout(() => sfx.creak(), 950);
+      // The door notices. So does she.
+      setTimeout(() => {
+        doorFlareUntil = performance.now() / 1000 + 2.2;
+        sfx.menace(1.6);
+        guard = { start: performance.now() / 1000 };
+      }, 1050);
+      for (let n = 0; n < 6; n++) setTimeout(() => sfx.step(), 1500 + n * 190);
+      setTimeout(() => {
+        result.textContent = "Yuuri: だめ。";
+        sfx.thud();
+      }, 2750);
+      setTimeout(() => {
+        result.textContent = "She points you back to the games, and won't say what's behind it.";
+      }, 4300);
+      for (let n = 0; n < 6; n++) setTimeout(() => sfx.step(), 4900 + n * 190);
+      setTimeout(() => {
+        busy = false;
+      }, 6500);
+    });
+  };
+
   const drawGame = (): void => {
     if (game === "slots") drawSlots();
     else if (game === "dice") drawDice();
+    else if (game === "door") drawDoor();
     else drawHighlow();
   };
   drawGame();
