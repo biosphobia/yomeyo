@@ -159,6 +159,7 @@ async function drawLesson(
       <div class="card-panel lesson-section">
         <h3>${escapeHtml(section.heading)}</h3>
         ${bodyHtml(section.body)}
+        ${section.visual ? visualHtml(section.visual) : ""}
         ${(section.examples ?? [])
           .map(
             (ex) => `
@@ -209,6 +210,11 @@ async function drawLesson(
       void speak(row.dataset.say ?? "", { rate: 0.85 }).catch(() => undefined);
     });
   }
+  for (const unit of body.querySelectorAll<HTMLElement>(".lesson-visual [data-say]")) {
+    unit.addEventListener("click", () => {
+      void speak(unit.dataset.say ?? "", { rate: 0.8 }).catch(() => undefined);
+    });
+  }
   body.querySelector<HTMLInputElement>("#lesson-romaji")?.addEventListener("change", (ev) => {
     void setMeta(ROMAJI_KEY, (ev.target as HTMLInputElement).checked);
   });
@@ -235,6 +241,77 @@ async function drawLesson(
 /** The bit of an example line worth reading out loud: the Japanese only. */
 function spokenOf(jp: string): string {
   return jp.replace(/\s+/g, "");
+}
+
+// ---------------- drawn figures ----------------
+
+const STICKER_CLASS: Record<string, string> = {
+  は: "stk-wa",
+  が: "stk-ga",
+  を: "stk-wo",
+  に: "stk-ni",
+  で: "stk-de",
+};
+
+/** A word tile with its particle stuck on the back. Tap to hear the pair. */
+function stickerUnit(word: string, gloss: string, particle: string): string {
+  return `
+    <button class="stk" type="button" data-say="${escapeHtml(word + particle)}">
+      <span class="stk-word" lang="ja">${escapeHtml(word)}<span class="stk-gloss">${escapeHtml(gloss)}</span></span>
+      <span class="stk-tag ${STICKER_CLASS[particle] ?? ""}" lang="ja">${escapeHtml(particle)}</span>
+    </button>`;
+}
+
+/**
+ * The figures a section can ask for. All drawn in CSS: word tiles with
+ * sticker tags peeling off their back edge, each particle in its own
+ * colour, everything tappable to hear.
+ */
+function visualHtml(id: string): string {
+  switch (id) {
+    case "sticker":
+      return `
+        <div class="lesson-visual">
+          ${stickerUnit("みず", "water", "を")}
+          ${stickerUnit("さくら", "Sakura", "が")}
+          ${stickerUnit("がっこう", "school", "に")}
+        </div>
+        <div class="lv-caption">the sticker belongs to the word it's stuck on</div>`;
+    case "sentence-blocks":
+      return `
+        <div class="lesson-visual">
+          ${stickerUnit("さくら", "Sakura", "が")}
+          ${stickerUnit("みず", "water", "を")}
+          <button class="stk stk-final" type="button" data-say="のむ">
+            <span class="stk-word" lang="ja">のむ<span class="stk-gloss">drinks</span></span>
+            <span class="lv-badge">the point</span>
+          </button>
+        </div>
+        <div class="lv-caption">さくらが みずを のむ: Sakura drinks water</div>`;
+    case "five-stickers": {
+      const five: [string, string, string, string][] = [
+        ["は", "the topic", "wa", "わ"],
+        ["が", "the doer", "ga", "が"],
+        ["を", "lands on it", "o", "お"],
+        ["に", "headed there", "ni", "に"],
+        ["で", "happens there", "de", "で"],
+      ];
+      return `
+        <div class="lesson-visual lv-five">
+          ${five
+            .map(
+              ([particle, caption, said, say]) => `
+            <button class="lv-p" type="button" data-say="${say}">
+              <span class="stk-tag ${STICKER_CLASS[particle]}" lang="ja">${particle}</span>
+              <span class="lv-p-cap">${escapeHtml(caption)}</span>
+              <span class="lv-p-said">"${said}"</span>
+            </button>`,
+            )
+            .join("")}
+        </div>`;
+    }
+  }
+  return "";
 }
 
 /**

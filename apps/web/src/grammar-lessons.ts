@@ -24,6 +24,8 @@ export interface LessonSection {
   examples?: LessonExample[];
   /** Show the live sentence recipes right under this section. */
   recipes?: boolean;
+  /** A drawn figure under the body: an id the lesson view knows how to draw. */
+  visual?: "sentence-blocks" | "sticker" | "five-stickers";
 }
 
 export interface QuizQuestion {
@@ -51,6 +53,7 @@ export const LESSONS: Lesson[] = [
     sections: [
       {
         heading: "The last word does the talking",
+        visual: "sentence-blocks",
         body:
           "A Japanese sentence ends with the important part: an action (のむ, drink), a feeling (あつい, " +
           "hot), or です (is). Everything before it sets the scene.\n\n" +
@@ -63,34 +66,18 @@ export const LESSONS: Lesson[] = [
       },
       {
         heading: "Particles are stickers",
+        visual: "sticker",
         body:
           "A particle is a tiny word like が, を, に or は. It sticks to the back of the word before it, " +
           "like a sticker that says the word's job.\n\n" +
           "みず is water. みずを is water wearing a sticker that says \"the action lands on me\".\n\n" +
           "English shows jobs with word order. Japanese shows them with stickers. A sticker always belongs " +
           "to the word in front of it, so read みずを as one piece: water, plus its sticker.",
-        examples: [
-          { jp: "さくらが", r: "sakura ga", en: "Sakura + sticker: \"I'm the one doing it\"" },
-          { jp: "みずを", r: "mizu wo", en: "water + sticker: \"it's happening to me\"" },
-          { jp: "がっこうに", r: "gakkou ni", en: "school + sticker: \"this is where it's headed\"" },
-        ],
       },
       {
         heading: "Five stickers to know",
-        body:
-          "Each one gets its own chapter later. For now, just meet them:\n\n" +
-          "は: \"here's what I'm talking about\" (said \"wa\")\n" +
-          "が: \"this one is the doer\"\n" +
-          "を: \"the action lands on this\" (said \"o\")\n" +
-          "に: \"headed here\" (a place, or a time)\n" +
-          "で: \"happening here\"",
-        examples: [
-          { jp: "わたしは", r: "watashi wa", en: "as for me…" },
-          { jp: "ねこが", r: "neko ga", en: "the cat is the one doing it" },
-          { jp: "パンを", r: "pan wo", en: "bread is what it happens to" },
-          { jp: "うちに", r: "uchi ni", en: "headed home" },
-          { jp: "こうえんで", r: "kouen de", en: "at the park" },
-        ],
+        visual: "five-stickers",
+        body: "Each one gets its own chapter later. For now, just meet them. Tap any of them to hear it.",
       },
       {
         heading: "The first sentence pattern",

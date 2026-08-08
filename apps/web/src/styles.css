@@ -4819,3 +4819,122 @@ button.gram-swap-line:hover {
 .pg-block.rc-slot-y .pg-block-jp {
   color: #f6ad55;
 }
+
+/* ---------------- lesson figures: words with stickers on ---------------- */
+
+.lesson-visual {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 20px;
+  justify-content: center;
+  align-items: flex-start;
+  margin: 14px 0 10px;
+}
+
+.stk {
+  display: inline-flex;
+  align-items: flex-start;
+  position: relative;
+  background: none;
+  border: none;
+  padding: 0 10px 0 0;
+  cursor: pointer;
+}
+
+.stk-word {
+  display: inline-block;
+  background: var(--panel-2, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  border-radius: 14px;
+  padding: 10px 18px 8px;
+  font-size: 1.5rem;
+  line-height: 1.2;
+  color: var(--text);
+  text-align: center;
+}
+
+.stk-gloss {
+  display: block;
+  font-size: 0.68rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.stk-tag {
+  display: inline-block;
+  margin: -6px 0 0 -10px;
+  transform: rotate(7deg);
+  border-radius: 9px;
+  padding: 6px 11px;
+  font-size: 1.3rem;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.35);
+  position: relative;
+  z-index: 1;
+}
+
+.stk-wa { background: rgba(167, 139, 250, 0.18); color: #a78bfa; border: 1px solid rgba(167, 139, 250, 0.55); }
+.stk-ga { background: rgba(79, 209, 197, 0.16); color: #4fd1c5; border: 1px solid rgba(79, 209, 197, 0.55); }
+.stk-wo { background: rgba(246, 173, 85, 0.16); color: #f6ad55; border: 1px solid rgba(246, 173, 85, 0.55); }
+.stk-ni { background: rgba(104, 211, 145, 0.16); color: #68d391; border: 1px solid rgba(104, 211, 145, 0.55); }
+.stk-de { background: rgba(99, 179, 237, 0.16); color: #63b3ed; border: 1px solid rgba(99, 179, 237, 0.55); }
+
+.stk-final .stk-word {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.lv-badge {
+  position: absolute;
+  top: -10px;
+  right: 2px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.lv-caption {
+  width: 100%;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin: -2px 0 8px;
+}
+
+.lv-five {
+  gap: 10px 14px;
+}
+
+.lv-p {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  width: 96px;
+}
+
+.lv-p .stk-tag {
+  margin: 0;
+  transform: rotate(-5deg);
+  font-size: 1.5rem;
+  padding: 9px 15px;
+}
+
+.lv-p-cap {
+  font-size: 0.75rem;
+  color: var(--text);
+}
+
+.lv-p-said {
+  font-size: 0.68rem;
+  color: var(--muted);
+}
