@@ -627,7 +627,7 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
     door: { pos: [4.3, 1.55, -2.9], look: [4.6, 1.5, -6.1] },
   };
   const DICE_ZOOM = { pos: [TX, 1.95, -1.25], look: [TX, 0.9, TZ] };
-  const DOOR_ZOOM = { pos: [4.5, 1.45, -4.55], look: [4.6, 1.3, -6.1] };
+  const DOOR_ZOOM = { pos: [4.5, 1.5, -4.35], look: [4.6, 1.3, -6.1] };
   /** Yuuri's trip from her stool to bar the door, timed from its start. */
   let guard: { start: number } | null = null;
   let doorFlareUntil = 0;
@@ -724,8 +724,9 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
 
       if (yuuri) {
         const STOOL = { x: MX, z: MZ + 1.6 };
-        // Dead centre of the zoomed door shot, one stride from the lens.
-        const POP = { x: 4.56, z: -5.3 };
+        // Dead centre of the zoomed door shot, far enough from the lens
+        // that her face fits the frame, not just the crown of her hat.
+        const POP = { x: 4.58, z: -5.9 };
         const g = guard ? t - guard.start : -1;
         if (guard && g >= 3.1) guard = null;
         if (guard && g >= 0) {
