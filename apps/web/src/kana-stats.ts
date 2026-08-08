@@ -1,5 +1,14 @@
 import { getMeta, onAccountChange, setMeta } from "./db.js";
 import { kanaSegments } from "./kana-data.js";
+import { unlockAchievement } from "./achievements.js";
+
+/** Answer this many kana questions and a certain heavy door unlocks. */
+export const KANA_REVIEW_GOAL = 3000;
+
+/** Every question ever answered in the kana games, all sessions counted. */
+export async function totalKanaReviews(): Promise<number> {
+  return (await allGames()).reduce((sum, game) => sum + (game.questions ?? 0), 0);
+}
 
 /**
  * The permanent record of the kana game, kept per account.
@@ -244,6 +253,9 @@ export function startGameSession(info: {
           record.wrong++;
           if (outcome.timeout) record.timeouts++;
         }
+        // The three-thousandth answer, whenever it lands, opens the casino.
+        const total = (await allGames()).reduce((sum, game) => sum + (game.questions ?? 0), 0);
+        if (total >= KANA_REVIEW_GOAL) void unlockAchievement("kana-3000");
         // Words stay out of the mastery record entirely: a word miss says
         // nothing sure about any one kana in it, and the word levels are
         // meant to be pure chance, not steered. Only lone kana teach the

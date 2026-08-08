@@ -53,6 +53,13 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: "first-kana-level", name: "First steps", icon: "👣", detail: "Clear any kana level.", tier: "easy" },
   { id: "first-chapter", name: "Chapter one", icon: "📖", detail: "Pass a grammar chapter's test.", tier: "easy" },
   { id: "first-pull", name: "Beginner's luck", icon: "🎁", detail: "Open your first crate.", tier: "easy" },
+  {
+    id: "kana-3000",
+    name: "House key",
+    icon: "🎰",
+    detail: "Answer 3,000 kana questions. Somewhere in the snow, a heavy door unlocks.",
+    tier: "legendary",
+  },
 ];
 
 const BY_ID = new Map(ACHIEVEMENTS.map((a) => [a.id, a]));

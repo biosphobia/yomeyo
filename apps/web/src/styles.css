@@ -5064,3 +5064,27 @@ button.gram-swap-line:hover {
   font-weight: 700;
   color: #f6ad55;
 }
+
+.gate-stage {
+  position: relative;
+  height: min(58vh, 460px);
+  border-radius: 16px;
+  overflow: hidden;
+  background: #b9c2cc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gate-stage canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.cas-admin {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}

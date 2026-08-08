@@ -2,9 +2,17 @@ import { getMeta, setMeta } from "./db.js";
 import { playKana, playWord, prefetchAudio, spokenKana, warmKanaBuffers } from "./audio.js";
 import { cheerBox, preloadReactions, showReaction } from "./feedback.js";
 import { recordQuestEvents } from "./quests.js";
-import { unlockAll } from "./unlock.js";
+import { unlockAll, unlockAllNow } from "./unlock.js";
 import { PER_CORRECT, earnYennies, formatYennies, spendYennies, yennies } from "./yennies.js";
-import { kanaStats, startGameSession, type GameSession, type KanaStat } from "./kana-stats.js";
+import {
+  KANA_REVIEW_GOAL,
+  kanaStats,
+  startGameSession,
+  totalKanaReviews,
+  type GameSession,
+  type KanaStat,
+} from "./kana-stats.js";
+import { achievementState, unlockAchievement } from "./achievements.js";
 import { renderKanaStats } from "./kana-stats-view.js";
 import { screenHeader } from "./screen.js";
 import { lazyImport } from "./lazy.js";
@@ -381,11 +389,93 @@ export async function renderArcade(main: HTMLElement, isCurrent: () => boolean =
 
   const body = main.querySelector<HTMLDivElement>("#kana-body")!;
   if (view === "stats") void renderKanaStats(body);
-  else if (view === "casino") {
-    void lazyImport(() => import("./casino.js")).then(({ renderCasino }) => {
-      if (body.isConnected && isCurrent()) void renderCasino(body, isCurrent);
+  else if (view === "casino") void openCasino(body, isCurrent);
+  else renderSelection(body, game, main, isCurrent);
+}
+
+// ---------------- the casino door ----------------
+
+const GATE_SEEN_KEY = "casinoGateSeen";
+
+/**
+ * The casino sits behind 3,000 kana answers and a pair of steel doors.
+ *
+ * Short of the count, walking up triggers the boot-to-the-camera scene
+ * every single time, then a panel with how far there is left to go. With
+ * the achievement earned, the doors-open scene plays once and the casino
+ * is simply there from then on. The admin sees each scene once and is let
+ * in regardless, with replay buttons for both films.
+ */
+async function openCasino(body: HTMLDivElement, isCurrent: () => boolean): Promise<void> {
+  const admin = unlockAllNow();
+  const total = await totalKanaReviews();
+  const remaining = Math.max(0, KANA_REVIEW_GOAL - total);
+  const earned = remaining === 0 || (await achievementState())["kana-3000"] !== undefined;
+  // Grinders from before the counter existed get their key on arrival.
+  if (remaining === 0) void unlockAchievement("kana-3000");
+  const seen = (await getMeta<{ locked?: boolean; opened?: boolean }>(GATE_SEEN_KEY)) ?? {};
+  if (!body.isConnected || !isCurrent()) return;
+
+  const { playGate } = await lazyImport(() => import("./casino-gate.js"));
+  const { renderCasino } = await lazyImport(() => import("./casino.js"));
+
+  const enter = async (): Promise<void> => {
+    if (!body.isConnected || !isCurrent()) return;
+    await renderCasino(body, isCurrent);
+    if (admin) adminReplayBar(body, isCurrent);
+  };
+
+  if (earned) {
+    if (!seen.opened) {
+      await playGate(body, { opened: true, remaining: 0 });
+      seen.opened = true;
+      await setMeta(GATE_SEEN_KEY, seen);
+    }
+    return enter();
+  }
+  if (admin) {
+    if (!seen.locked) {
+      await playGate(body, { opened: false, remaining });
+      seen.locked = true;
+      await setMeta(GATE_SEEN_KEY, seen);
+    }
+    return enter();
+  }
+  // The boot, every time, until the count is paid.
+  await playGate(body, { opened: false, remaining });
+  if (!body.isConnected || !isCurrent()) return;
+  body.innerHTML = `
+    <div class="card-panel" style="text-align:center">
+      <div class="big">🚪</div>
+      <div><b>The doors stay shut.</b></div>
+      <div class="glosses" style="margin:6px 0">${total.toLocaleString()} / ${KANA_REVIEW_GOAL.toLocaleString()} kana answers.
+        ${remaining.toLocaleString()} to go.</div>
+      <div class="kana-bar"><div class="kana-bar-fill" style="width:${Math.min(100, Math.round((total / KANA_REVIEW_GOAL) * 100))}%"></div></div>
+      <div class="glosses" style="margin-top:8px">Every question answered in Kana or the Game centre counts.</div>
+    </div>`;
+}
+
+function adminReplayBar(body: HTMLDivElement, isCurrent: () => boolean): void {
+  const bar = document.createElement("div");
+  bar.className = "cas-admin";
+  bar.innerHTML = `<span class="glosses">admin</span>
+    <button class="ghost" data-replay="locked">Replay: the boot</button>
+    <button class="ghost" data-replay="opened">Replay: doors open</button>`;
+  body.prepend(bar);
+  for (const button of bar.querySelectorAll<HTMLButtonElement>("[data-replay]")) {
+    button.addEventListener("click", async () => {
+      const total = await totalKanaReviews();
+      const { playGate } = await lazyImport(() => import("./casino-gate.js"));
+      const { renderCasino } = await lazyImport(() => import("./casino.js"));
+      await playGate(body, {
+        opened: button.dataset.replay === "opened",
+        remaining: Math.max(0, KANA_REVIEW_GOAL - total),
+      });
+      if (!body.isConnected || !isCurrent()) return;
+      await renderCasino(body, isCurrent);
+      adminReplayBar(body, isCurrent);
     });
-  } else renderSelection(body, game, main, isCurrent);
+  }
 }
 
 function renderSelection(
