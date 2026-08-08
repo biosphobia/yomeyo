@@ -55,7 +55,7 @@ export const LESSONS: Lesson[] = [
         heading: "The last word does the talking",
         visual: "sentence-blocks",
         body:
-          "A Japanese sentence ends with the important part: an action (のむ, drink), a feeling (あつい, " +
+          "A Japanese sentence ends with the important part: an action (のむ, drink), a describing word (あつい, " +
           "hot), or です (is). Everything before it sets the scene.\n\n" +
           "English goes \"who does what\". Japanese goes \"who, what, does\". You find out what happened " +
           "at the end.",
@@ -129,7 +129,7 @@ export const LESSONS: Lesson[] = [
         q: "Which block does the real talking in a Japanese sentence?",
         choices: ["The first one", "The one with は", "The last one", "The longest one"],
         answer: 2,
-        why: "The ending (the action, the feeling, or です) always comes last, and it's the point of the sentence.",
+        why: "The ending (the action, the describing word, or です) always comes last, and it's the point of the sentence.",
       },
       {
         q: "What is a particle?",
