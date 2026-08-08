@@ -370,11 +370,14 @@ export async function renderArcade(main: HTMLElement, isCurrent: () => boolean =
   // by the time that tile is reached, the words are already waiting.
   if (game) void warmAlienWords(game.groups, poolOf(game));
 
+  // Until the house key is earned, the tab will not even say what it is.
+  const casinoKnown =
+    (await achievementState())["kana-3000"] !== undefined || (await totalKanaReviews()) >= KANA_REVIEW_GOAL;
   main.innerHTML = `
     ${screenHeader("Game centre", await yennies())}
     <div class="segmented">
       <button data-view="play" class="${view === "play" ? "on" : ""}">Play</button>
-      <button data-view="casino" class="${view === "casino" ? "on" : ""}">🎰 Casino</button>
+      <button data-view="casino" class="${view === "casino" ? "on" : ""}">${casinoKnown ? "🎰 Casino" : "❓ ???"}</button>
       <button data-view="stats" class="${view === "stats" ? "on" : ""}">Stats</button>
     </div>
     <div id="kana-body"></div>
