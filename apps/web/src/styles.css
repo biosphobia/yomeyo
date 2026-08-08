@@ -4938,3 +4938,13 @@ button.gram-swap-line:hover {
   font-size: 0.68rem;
   color: var(--muted);
 }
+
+.lv-morph {
+  gap: 10px;
+}
+
+.lv-arrow {
+  align-self: center;
+  color: var(--muted);
+  font-size: 1.3rem;
+}

@@ -18,14 +18,35 @@ export interface LessonExample {
   en: string;
 }
 
+/** A drawn figure under a section's body, all built from data. */
+export type LessonVisual =
+  | {
+      /** Word tiles wearing particle tags, with an optional bare final block. */
+      kind: "stickers";
+      items: [word: string, gloss: string, particle: string][];
+      final?: [word: string, gloss: string];
+      finalBadge?: string;
+      caption?: string;
+    }
+  | {
+      /** A sticker sheet: the particle, its job, how it's said. */
+      kind: "tags";
+      items: [particle: string, job: string, said: string][];
+    }
+  | {
+      /** A word changing shape, left to right, arrows between. */
+      kind: "morph";
+      steps: [jp: string, label: string][];
+      caption?: string;
+    };
+
 export interface LessonSection {
   heading: string;
   body: string;
   examples?: LessonExample[];
   /** Show the live sentence recipes right under this section. */
   recipes?: boolean;
-  /** A drawn figure under the body: an id the lesson view knows how to draw. */
-  visual?: "sentence-blocks" | "sticker" | "five-stickers";
+  visual?: LessonVisual;
 }
 
 export interface QuizQuestion {
@@ -53,7 +74,7 @@ export const LESSONS: Lesson[] = [
     sections: [
       {
         heading: "The last word does the talking",
-        visual: "sentence-blocks",
+        visual: { kind: "stickers", items: [["さくら", "Sakura", "が"], ["みず", "water", "を"]], final: ["のむ", "drinks"], finalBadge: "the point", caption: "さくらが みずを のむ: Sakura drinks water" },
         body:
           "A Japanese sentence ends with the important part: an action (のむ, drink), a describing word (あつい, " +
           "hot), or です (is). Everything before it sets the scene.\n\n" +
@@ -66,7 +87,7 @@ export const LESSONS: Lesson[] = [
       },
       {
         heading: "Particles are stickers",
-        visual: "sticker",
+        visual: { kind: "stickers", items: [["みず", "water", "を"], ["さくら", "Sakura", "が"], ["がっこう", "school", "に"]], caption: "the sticker belongs to the word it's stuck on" },
         body:
           "A particle is a tiny word like が, を, に or は. It sticks to the back of the word before it, " +
           "like a sticker that says the word's job.\n\n" +
@@ -76,7 +97,7 @@ export const LESSONS: Lesson[] = [
       },
       {
         heading: "Five stickers to know",
-        visual: "five-stickers",
+        visual: { kind: "tags", items: [["は", "the topic", "wa"], ["が", "the doer", "ga"], ["を", "lands on it", "o"], ["に", "headed there", "ni"], ["で", "happens there", "de"]] },
         body: "Each one gets its own chapter later. For now, just meet them. Tap any of them to hear it.",
       },
       {
@@ -91,6 +112,9 @@ export const LESSONS: Lesson[] = [
           "So は never means \"is\", it only points at the topic. At a restaurant you can tell the " +
           "waitress {x:わたし}は {y:ライス}です. You are not rice: わたしは says \"about me\", ライスです " +
           "says \"it's rice\", and from context you've just ordered.\n\n" +
+          "{y} can also be a describing word: {x:ねこ}は {y:かわいい}です, \"the cat is cute\". A describing " +
+          "word is already a full sentence by itself (あつい alone means \"it's hot\"), so the です after " +
+          "it only adds politeness. You can keep it or drop it.\n\n" +
           "Add か to the end and it becomes a question.",
         examples: [
           { jp: "わたしは ピエトロです", r: "watashi wa pietoro desu", en: "As for me, it's Pietro. = I'm Pietro." },
@@ -189,6 +213,7 @@ export const LESSONS: Lesson[] = [
     sections: [
       {
         heading: "Thing + だ",
+        visual: { kind: "morph", steps: [["ねこ", "cat"], ["ねこだ", "is a cat"], ["ねこです", "is a cat, polite"]], caption: "だ and です say the same thing" },
         body:
           "To say something IS something, Japanese puts the thing first and だ after it: ねこだ, “(it) is a " +
           "cat”. だ is the ending here, so it comes last, like every ending. There is no separate word for " +
@@ -262,6 +287,7 @@ export const LESSONS: Lesson[] = [
     sections: [
       {
         heading: "が marks the doer",
+        visual: { kind: "stickers", items: [["とり", "the bird", "が"], ["みず", "the water", "が"], ["さくら", "Sakura", "が"]], caption: "が points at the doer" },
         body:
           "が tags whoever, or whatever, the ending is about: the one walking, the thing that is red, the " +
           "person who exists in the room. Find the が and you've found the sentence's anchor.",
@@ -338,6 +364,7 @@ export const LESSONS: Lesson[] = [
     sections: [
       {
         heading: "は says what we're talking about",
+        visual: { kind: "stickers", items: [["きょう", "today", "は"], ["ねこ", "cats", "は"]], caption: "は raises the topic: as for…" },
         body:
           "は (read “wa”, not “ha”) doesn't mark a doer. It raises a topic: “as for X, here comes something " +
           "about it.” わたしは こうちゃが すきだ is literally “as for me, tea is pleasing”. The topic is me, " +
@@ -365,6 +392,7 @@ export const LESSONS: Lesson[] = [
       },
       {
         heading: "は and が in the same sentence",
+        visual: { kind: "stickers", items: [["かれ", "him", "は"], ["め", "eyes", "が"]], final: ["おおきい", "big"], caption: "かれは めが おおきい: his eyes are big" },
         body:
           "One very common pattern uses both: Xは Yが Z, “as for X, its Y is Z”.\n\n" +
           "かれは めが おおきい is literally “as for him, the eyes are big”. English just says “his eyes are " +
@@ -439,6 +467,7 @@ export const LESSONS: Lesson[] = [
     sections: [
       {
         heading: "を marks the target of an action",
+        visual: { kind: "stickers", items: [["さかな", "a fish", "を"], ["ほん", "a book", "を"], ["みず", "water", "を"]], caption: "を marks what the action lands on" },
         body:
           "When an action lands on something, eat bread, read a book, drink water, を tags the thing it " +
           "lands on. It's written を but read “o”. The doer keeps が (or hides behind は); the thing acted on " +
@@ -515,6 +544,7 @@ export const LESSONS: Lesson[] = [
     sections: [
       {
         heading: "に: the pin",
+        visual: { kind: "stickers", items: [["がっこう", "school", "に"], ["へや", "the room", "に"], ["うち", "home", "へ"]], caption: "に pins the point; へ points the way" },
         body:
           "に drops a pin: where something ends up (がっこうに いく, go to school), where it sits (へやに いる " +
           ",  be in the room), or who it's aimed at (ともだちに あげる, give to a friend).",
@@ -593,6 +623,7 @@ export const LESSONS: Lesson[] = [
     sections: [
       {
         heading: "で: the stage",
+        visual: { kind: "stickers", items: [["こうえん", "the park", "で"], ["はし", "chopsticks", "で"], ["でんしゃ", "the train", "で"]], caption: "the stage, the tool, the ride: all で" },
         body:
           "で marks where an action HAPPENS, the stage it plays out on. Compare に: へやに いる (the cat IS in " +
           "the room, a pin) but へやで あそぶ (plays IN the room, the room is the stage the playing happens " +
@@ -671,6 +702,7 @@ export const LESSONS: Lesson[] = [
     sections: [
       {
         heading: "と: a complete “and”, or “together with”",
+        visual: { kind: "stickers", items: [["ねこ", "the cat", "と"], ["パン", "bread", "や"], ["わたし", "me", "も"]], caption: "closed and, open and, too" },
         body:
           "Between things, と lists them ALL: ねこと いぬ, the cat and the dog, that's the whole list. After a " +
           "person, it also means doing something together: さくらと はなす, talk with Sakura.",
@@ -749,6 +781,7 @@ export const LESSONS: Lesson[] = [
     sections: [
       {
         heading: "A の B: B belongs to A",
+        visual: { kind: "stickers", items: [["わたし", "me", "の"]], final: ["ほん", "book"], caption: "わたしの ほん: my book" },
         body:
           "の links two things, and the first one owns or frames the second: わたしの ほん, my book. さくらの " +
           "ねこ. Sakura's cat. Read A の B as “B of A” and the order never trips you.",
@@ -822,6 +855,7 @@ export const LESSONS: Lesson[] = [
     sections: [
       {
         heading: "か turns anything into a question",
+        visual: { kind: "tags", items: [["か", "asks", "ka"], ["ね", "invites a nod", "ne"], ["よ", "hands over news", "yo"]] },
         body:
           "No do-you, no word flipping: put か on the end and the sentence becomes a question. ねこですか, " +
           "is it a cat? In casual speech the か often drops and the voice just rises: ねこ？",
@@ -899,6 +933,7 @@ export const LESSONS: Lesson[] = [
     sections: [
       {
         heading: "から: the starting point",
+        visual: { kind: "stickers", items: [["えき", "the station", "から"], ["よる", "night", "まで"]], caption: "where it starts, how far it goes" },
         body:
           "から marks where or when something starts: えきから (from the station), 9じから (from nine " +
           "o'clock). Anything with a beginning can wear it.",
@@ -983,10 +1018,11 @@ export const LESSONS: Lesson[] = [
       },
       {
         heading: "The two families",
+        visual: { kind: "morph", steps: [["かく", "write"], ["かきます", "く shifts to き"]], caption: "う-group: the last sound shifts before ます" },
         body:
           "Verbs conjugate in two patterns. る-group verbs (like たべる, みる) drop る and take endings: たべ→ " +
           "たべます. う-group verbs (like かく, のむ, and many ending in る!) shift their last sound instead: " +
-          "かく→かき→かきます. Which family a る-ending verb belongs to has to be learned, the playground " +
+          "かく→かき→かきます.\n\nWhich family a る-ending verb belongs to has to be learned, the playground " +
           "tab is built for exactly that experimenting.",
         examples: [
           { jp: "たべる → たべます", r: "taberu → tabemasu", en: "eat, る-group: る drops off" },
@@ -1057,6 +1093,7 @@ export const LESSONS: Lesson[] = [
     sections: [
       {
         heading: "ない: not",
+        visual: { kind: "morph", steps: [["たべる", "eat"], ["たべない", "don't eat"], ["たべなかった", "didn't eat"]], caption: "the bends stack" },
         body:
           "To say something doesn't happen, verbs bend to ない: たべる→たべない (don't eat). る-group verbs " +
           "swap る for ない; う-group verbs shift to their a-row first: かく→かかない, のむ→のまない. A word " +
@@ -1081,7 +1118,7 @@ export const LESSONS: Lesson[] = [
         heading: "The bends stack",
         body:
           "Didn't happen, in the past? ない first, then bend the ない like an い-word: たべない→たべなかった " +
-          "(didn't eat). Politely, ます has its own set: たべません (don't eat), たべました (ate), たべません" +
+          "(didn't eat).\n\nPolitely, ます has its own set: たべません (don't eat), たべました (ate), たべません" +
           "でした (didn't eat). Four plain forms, four polite forms, that's the whole tense system.",
         examples: [
           { jp: "たべなかった", r: "tabenakatta", en: "(I) didn't eat." },
@@ -1130,10 +1167,14 @@ export const LESSONS: Lesson[] = [
     sections: [
       {
         heading: "What て looks like",
+        visual: { kind: "morph", steps: [["のむ", "drink"], ["のんで", "drink-and…"]], caption: "む goes to んで" },
         body:
-          "る-group: swap る for て (たべる→たべて). う-group endings pair up: う・つ・る→って (かう→かって), " +
-          "む・ぬ・ぶ→んで (のむ→のんで), く→いて (かく→かいて), ぐ→いで, す→して. する→して, くる→きて, and " +
-          "the one oddball: いく→いって.",
+          "る-group: swap る for て (たべる→たべて).\n\n" +
+          "う-group endings pair up:\n" +
+          "う・つ・る→って (かう→かって)\n" +
+          "む・ぬ・ぶ→んで (のむ→のんで)\n" +
+          "く→いて (かく→かいて), ぐ→いで, す→して\n" +
+          "する→して, くる→きて, and the one oddball: いく→いって.",
         examples: [
           { jp: "たべる → たべて", r: "taberu → tabete", en: "eat → eating-and…" },
           { jp: "のむ → のんで", r: "nomu → nonde", en: "drink → drinking-and…" },
@@ -1223,6 +1264,7 @@ export const LESSONS: Lesson[] = [
       },
       {
         heading: "い-words bend like verbs do",
+        visual: { kind: "morph", steps: [["あかい", "red"], ["あかくない", "isn't red"], ["あかかった", "was red"]] },
         body:
           "Drop the い and bend: あかくない (isn't red), あかかった (was red), あかくなかった (wasn't red), " +
           "あかくて (red and…). One warning: never put だ after an い-word, the “is” is already inside.",
@@ -1236,7 +1278,7 @@ export const LESSONS: Lesson[] = [
         body:
           "Words like きれい, しずか, げんき are really thing-words at heart. To end a sentence they borrow だ " +
           "(うみが しずかだ), and to sit in front of a thing they wear な: しずかな うみ, a quiet sea. That " +
-          "な is where the name comes from. Watch out: きれい ends in い but is a な-word, きれいな はな.",
+          "な is where the name comes from.\n\nWatch out: きれい ends in い but is a な-word, きれいな はな.",
         examples: [
           { jp: "うみが しずかだ", r: "umi ga shizuka da", en: "The sea is quiet." },
           { jp: "しずかな うみ", r: "shizuka na umi", en: "a quiet sea" },
@@ -1294,10 +1336,11 @@ export const LESSONS: Lesson[] = [
     sections: [
       {
         heading: "だけ and しか: only, two ways",
+        visual: { kind: "tags", items: [["だけ", "only", "dake"], ["しか", "only + negative", "shika"], ["ぐらい", "about", "gurai"], ["ごろ", "around", "goro"], ["けど", "but", "kedo"]] },
         body:
           "だけ means “only”, plainly: みずだけ のむ. I drink only water. しか also means “only” but demands a " +
           "negative ending and adds a note of “no more than that”: みずしか のまない. I drink nothing but " +
-          "water. だけ counts what's there; しか laments what isn't.",
+          "water.\n\nだけ counts what's there; しか laments what isn't.",
         examples: [
           { jp: "みずだけ のむ", r: "mizu dake nomu", en: "(I) drink only water." },
           { jp: "みずしか のまない", r: "mizu shika nomanai", en: "(I) drink nothing but water." },
