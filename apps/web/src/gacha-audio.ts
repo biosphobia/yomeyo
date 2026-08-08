@@ -31,6 +31,8 @@ export interface Sfx {
   growl: () => void;
   /** Something is about to go badly, and the music knows first. */
   menace: (seconds: number) => void;
+  /** A low mechanical drone from behind a closed door, quiet and patient. */
+  hum: (seconds: number) => void;
   /** Getting in or out of water. */
   splash: () => void;
   /** A counter bell nobody answers. */
@@ -51,6 +53,7 @@ const SILENT: Sfx = {
   smack: () => undefined,
   growl: () => undefined,
   menace: () => undefined,
+  hum: () => undefined,
   splash: () => undefined,
   bell: () => undefined,
   stop: () => undefined,
@@ -228,6 +231,15 @@ export function createSfx(): Sfx {
         }
         tone({ duration: seconds, gain: 0.09, from: 300, to: 1500, type: "triangle" });
         burst({ duration: seconds, gain: 0.08, type: "bandpass", from: 200, to: 1800, q: 3 });
+      })(),
+    hum: (seconds) =>
+      guard(() => {
+        // Two low tones a rough semitone apart, beating slowly against each
+        // other, with a whisper of filtered noise: machinery, or breathing.
+        tone({ duration: seconds, gain: 0.06, from: 55, to: 57, type: "sine" });
+        tone({ duration: seconds, gain: 0.05, from: 58.3, to: 56.5, type: "sine" });
+        tone({ duration: seconds, gain: 0.025, from: 110, to: 113, type: "triangle" });
+        burst({ duration: seconds, gain: 0.02, type: "lowpass", from: 220, to: 140 });
       })(),
     splash: guard(() => {
       burst({ duration: 0.42, gain: 0.34, type: "highpass", from: 900, to: 3400 });

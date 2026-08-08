@@ -244,8 +244,14 @@ interface Room {
   cupFish: any;
   /** Three racing fish, floor-grade. */
   racers: any[];
+  /** The scrap-built race track, shown only on race days. */
+  raceTrack: any;
+  /** The crowd: cans on benches. Each remembers its seat in userData. */
+  cans: any[];
   /** The light leaking under the mystery door, for the loop to breathe. */
   doorGlow: any;
+  /** The lamp over the door, wired badly on purpose: it flickers. */
+  doorLight: any;
   bulbs: any[];
   neon: any;
   pink: any;
@@ -421,6 +427,11 @@ function buildRoom(THREE: any, scene: any): Room {
   doorGlow.rotation.x = -Math.PI / 2;
   doorGlow.position.set(4.6, 0.012, -6.05);
   scene.add(doorGlow);
+  // The lamp above the door. Its wiring is not up to code: the loop
+  // flickers it, harder when someone is standing there looking.
+  const doorLight = new THREE.PointLight(0xa06fff, 3, 8, 1.7);
+  doorLight.position.set(4.6, 2.3, -5.4);
+  scene.add(doorLight);
 
   // The shell game: three cups face-down on the felt, one fish.
   const cupMat = matte(0x8a4a2e, 0.55);
@@ -455,6 +466,91 @@ function buildRoom(THREE: any, scene: any): Room {
   const cupFish = fishBody(0x4fd1c5);
   // The racers: teal, orange, ivory. Nobody asks where they swim to.
   const racers = [0x4fd1c5, 0xf0a860, 0xe8e2d2].map((colour) => fishBody(colour));
+
+  // The race track, built the only way anything here gets built: out of
+  // scrap. Salvaged plates for a bed, pipes for rails, a checkered strip
+  // for a finish, and the crowd is tinned — rows of cans on benches.
+  const raceTrack = new THREE.Group();
+  raceTrack.visible = false;
+  scene.add(raceTrack);
+  const put = (mesh: any, x: number, y: number, z: number): any => {
+    mesh.position.set(x, y, z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    raceTrack.add(mesh);
+    return mesh;
+  };
+  const SCRAP = [0x5a5f66, 0x6e6257, 0x4e565e, 0x715c48];
+  for (let i = 0; i < 9; i++) {
+    const plate = put(
+      new THREE.Mesh(new THREE.BoxGeometry(1.3 + (i % 3) * 0.3, 0.035, 1.72), matte(SCRAP[i % SCRAP.length], 0.9)),
+      -3.3 + i * 0.83,
+      0.02 + (i % 2) * 0.012,
+      -2.55,
+    );
+    plate.rotation.y = (i % 2 === 0 ? 1 : -1) * 0.045;
+  }
+  const pipeMat = matte(0x3c444e, 0.45);
+  for (const z of [-1.72, -3.38]) {
+    const rail = put(new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 7.4, 10), pipeMat), 0, 0.14, z);
+    rail.rotation.z = Math.PI / 2;
+    for (let x = -3.4; x <= 3.5; x += 1.7) {
+      put(new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.14, 0.08), pipeMat), x, 0.07, z);
+    }
+  }
+  // The finish: a checkered strip on the bed and a gantry over it.
+  const checkCanvas = document.createElement("canvas");
+  checkCanvas.width = 32;
+  checkCanvas.height = 128;
+  const checkPaint = checkCanvas.getContext("2d")!;
+  for (let row = 0; row < 8; row++) {
+    for (let col = 0; col < 2; col++) {
+      checkPaint.fillStyle = (row + col) % 2 === 0 ? "#e8e2d2" : "#20242c";
+      checkPaint.fillRect(col * 16, row * 16, 16, 16);
+    }
+  }
+  const finish = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.26, 1.66),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(checkCanvas) }),
+  );
+  finish.rotation.x = -Math.PI / 2;
+  finish.position.set(3.0, 0.05, -2.55);
+  raceTrack.add(finish);
+  put(new THREE.Mesh(new THREE.BoxGeometry(0.09, 1.15, 0.09), pipeMat), 3.0, 0.57, -1.72);
+  put(new THREE.Mesh(new THREE.BoxGeometry(0.09, 1.15, 0.09), pipeMat), 3.0, 0.57, -3.38);
+  put(new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.16, 1.85), matte(0x8a4a2e, 0.7)), 3.0, 1.18, -2.55);
+  // The crowd: two tiers of benches a side, cans standing on them, a few
+  // already leaning. Each can remembers its seat so events can knock it
+  // over and the next race can put it back.
+  const CAN_COLOURS = [0xb8bcc2, 0xa33232, 0x6e7d46, 0xc2952e, 0x4a6e8a];
+  const cans: any[] = [];
+  for (const [zRow, away] of [
+    [-1.48, 1],
+    [-3.62, -1],
+  ] as [number, number][]) {
+    put(new THREE.Mesh(new THREE.BoxGeometry(6.8, 0.1, 0.3), matte(0x4e4438, 0.85)), 0, 0.16, zRow);
+    put(new THREE.Mesh(new THREE.BoxGeometry(6.8, 0.1, 0.3), matte(0x5a5f66, 0.85)), 0, 0.36, zRow + away * 0.34);
+    for (let tier = 0; tier < 2; tier++) {
+      for (let i = 0; i < 11; i++) {
+        const can = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.055, 0.055, 0.15, 10),
+          matte(CAN_COLOURS[(i + tier * 2) % CAN_COLOURS.length], 0.35),
+        );
+        const seat = {
+          x: -3.1 + i * 0.62 + tier * 0.31,
+          y: (tier === 0 ? 0.21 : 0.41) + 0.075,
+          z: zRow + away * 0.34 * tier + Math.sin(i * 7 + tier) * 0.05,
+          lean: i % 5 === 4 ? 0.16 : 0,
+        };
+        can.userData.seat = seat;
+        can.position.set(seat.x, seat.y, seat.z);
+        can.rotation.z = seat.lean;
+        can.castShadow = true;
+        raceTrack.add(can);
+        cans.push(can);
+      }
+    }
+  }
 
   const mine = [0, 1, 2].map(() => makeDie(THREE, false));
   const theirs = [0, 1, 2].map(() => makeDie(THREE, true));
@@ -528,7 +624,7 @@ function buildRoom(THREE: any, scene: any): Room {
     coins.push(coin);
   }
 
-  return { drawSlots, cups, cupFish, racers, doorGlow, bulbs, neon, pink, winLight, mine, theirs, card, paintCard, coins };
+  return { drawSlots, cups, cupFish, racers, raceTrack, cans, doorGlow, doorLight, bulbs, neon, pink, winLight, mine, theirs, card, paintCard, coins };
 }
 
 // ---------------- the render ----------------
@@ -622,15 +718,18 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
     highlow: { pos: [TX - 1.1, 1.85, -0.8], look: [TX + 0.1, 0.95, TZ + 0.3] },
     // Over the felt for the shells, wide across the floor for the race.
     cups: { pos: [TX - 0.3, 2.0, -1.0], look: [TX, 0.95, TZ + 0.15] },
-    race: { pos: [0, 2.15, 0.7], look: [0, 0.35, -2.7] },
+    // High and wide enough to hold the whole scrap track and its crowd.
+    race: { pos: [0, 2.7, 1.7], look: [0, 0.25, -2.65] },
     // Standing off from the mystery door, at a respectful distance.
-    door: { pos: [4.3, 1.55, -2.9], look: [4.6, 1.5, -6.1] },
+    door: { pos: [4.0, 1.65, -2.2], look: [4.6, 1.5, -6.1] },
   };
   const DICE_ZOOM = { pos: [TX, 1.95, -1.25], look: [TX, 0.9, TZ] };
-  const DOOR_ZOOM = { pos: [4.5, 1.5, -4.35], look: [4.6, 1.3, -6.1] };
+  const DOOR_ZOOM = { pos: [4.45, 1.5, -3.95], look: [4.6, 1.3, -6.1] };
   /** Yuuri's trip from her stool to bar the door, timed from its start. */
   let guard: { start: number } | null = null;
   let doorFlareUntil = 0;
+  /** When the door hums next; zero means the moment the tab is opened. */
+  let nextHum = 0;
   const smooth = (x: number): number => x * x * (3 - 2 * x);
   // Seated, the hips ride about 0.7 above the root, so parking her ON the
   // 0.63 stool means the root sits just below the floor line.
@@ -794,9 +893,20 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
       room!.pink.intensity = strobing ? 16 + Math.sin(t * 18) * 12 : 16;
       room!.neon.material.color.setHSL(strobing ? (t * 1.5) % 1 : 0, strobing ? 0.5 : 0, 1);
       room!.winLight.intensity = Math.max(0, fx.flashUntil - t) * 60;
-      // Whatever is behind the mystery door, it's awake.
+      // Whatever is behind the mystery door, it's awake. The lamp over it
+      // flickers like bad wiring — two incommensurate sines and a random
+      // dropout — and both flicker harder when someone stands looking.
+      const dropout = Math.sin(t * 11.3) * Math.sin(t * 5.1) < -0.88 ? 0.15 : 1;
+      const flicker = (0.55 + 0.45 * Math.abs(Math.sin(t * 7.3) + Math.sin(t * 17.7) * 0.4) * 0.7) * dropout;
+      room!.doorLight.intensity = (game === "door" ? 6 : 2.4) * flicker + (t < doorFlareUntil ? 9 : 0);
       room!.doorGlow.material.opacity =
-        0.45 + Math.sin(t * 0.7) * 0.2 + Math.max(0, Math.sin(t * 0.13) - 0.98) * 12 + (t < doorFlareUntil ? 0.35 : 0);
+        (0.45 + Math.sin(t * 0.7) * 0.2 + Math.max(0, Math.sin(t * 0.13) - 0.98) * 12 + (t < doorFlareUntil ? 0.35 : 0)) *
+        (0.6 + flicker * 0.4);
+      // And it hums. Low, patient, only really audible standing at it.
+      if (game === "door" && t > nextHum) {
+        nextHum = t + 5 + Math.random() * 4;
+        sfx.hum(4.5);
+      }
 
       const target = t < zoomUntil && zoomTarget ? zoomTarget : CAMS[game];
       camPos.lerp(new THREE.Vector3(...target.pos), 0.045);
@@ -870,6 +980,7 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
     for (const cup of room.cups) cup.visible = false;
     room.cupFish.visible = false;
     for (const racer of room.racers) racer.visible = false;
+    room.raceTrack.visible = false;
   };
 
   // ---- the card in the air ----
@@ -1341,12 +1452,27 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
 
   // ---- the fish race ----
 
-  const RACE_START = -2.4;
-  const RACE_END = 2.4;
+  const RACE_START = -3.0;
+  const RACE_END = 2.9;
   const RACE_LANES = [-2.1, -2.55, -3.0];
+  const RACE_NAMES = ["the teal one", "the orange one", "the ivory one"];
+
+  /** Every can back on its seat, upright, ready to be knocked off again. */
+  const seatTheCrowd = (): void => {
+    if (!room) return;
+    for (const can of room.cans) {
+      const seat = can.userData.seat;
+      can.position.set(seat.x, seat.y, seat.z);
+      can.rotation.set(0, 0, seat.lean);
+    }
+  };
 
   const drawRace = (): void => {
     hideDice();
+    if (room) {
+      room.raceTrack.visible = true;
+      seatTheCrowd();
+    }
     gameBox.innerHTML = `
       ${betRow()}
       <div class="row-actions" style="justify-content:center">
@@ -1354,7 +1480,7 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
         <button class="cas-big" data-fish="1">🧡 ORANGE</button>
         <button class="cas-big" data-fish="2">🤍 IVORY</button>
       </div>
-      <div class="cas-result" id="cas-result">Three fish, no water, one carpet. Pick yours; the winner pays ×2.7.</div>
+      <div class="cas-result" id="cas-result">A track of scrap, a crowd of cans, no water anywhere. Pick yours; the winner pays ×2.7.</div>
     `;
     wireBets();
     const result = gameBox.querySelector<HTMLDivElement>("#cas-result")!;
@@ -1366,12 +1492,18 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
         const pick = Number(button.dataset.fish);
         result.textContent = "They're off. Somehow.";
         sfx.splash();
+        seatTheCrowd();
         room.racers.forEach((racer: any, i: number) => {
           racer.visible = true;
           racer.position.set(RACE_START, 0.14, RACE_LANES[i]);
           racer.rotation.y = 0; // the tail is already at the back; nose to the finish
         });
         const speeds = [0, 0, 0].map(() => 0.55 + Math.random() * 0.2);
+        // Race events: a burst, a stall, a can on the track, a rattling
+        // crowd — each holds a per-fish multiplier for a moment.
+        const boosts: { mult: number; until: number }[] = [0, 0, 0].map(() => ({ mult: 1, until: 0 }));
+        let nextEvent = performance.now() + 1100 + Math.random() * 900;
+        let rattleUntil = 0;
         let winner = -1;
         let lastSplash = 0;
         await new Promise<void>((resolve) => {
@@ -1381,14 +1513,55 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
             const now = performance.now();
             const dt = Math.min(0.05, (now - previous) / 1000);
             previous = now;
+            const leading = Math.max(...room.racers.map((racer: any) => racer.position.x));
+            if (now > nextEvent && leading < RACE_END - 0.9) {
+              nextEvent = now + 1400 + Math.random() * 1200;
+              const who = Math.floor(Math.random() * 3);
+              const what = Math.floor(Math.random() * 4);
+              if (what === 0) {
+                boosts[who] = { mult: 2.3, until: now + 750 };
+                result.textContent = `${RACE_NAMES[who]} surges ahead!`;
+                sfx.whoosh();
+              } else if (what === 1) {
+                boosts[who] = { mult: 0.05, until: now + 750 };
+                result.textContent = `${RACE_NAMES[who]} stops to think about water.`;
+                sfx.boing();
+              } else if (what === 2) {
+                // A spectator comes off the bench and onto the track,
+                // right in somebody's lane.
+                const fallen = room.cans[Math.floor(Math.random() * room.cans.length)];
+                fallen.position.set(
+                  room.racers[who].position.x + 0.5,
+                  0.075,
+                  RACE_LANES[who] + (Math.random() - 0.5) * 0.2,
+                );
+                fallen.rotation.set(0, Math.random() * 3, Math.PI / 2);
+                boosts[who] = { mult: 0.35, until: now + 950 };
+                result.textContent = `A can rolls into ${RACE_NAMES[who]}'s lane!`;
+                sfx.clatter();
+              } else {
+                rattleUntil = now + 1300;
+                result.textContent = "The crowd is rattling!";
+                sfx.clatter();
+                sfx.bell();
+              }
+            }
             room.racers.forEach((racer: any, i: number) => {
               // Wandering speeds, so the lead trades hands.
               speeds[i] = Math.max(0.3, Math.min(1.1, speeds[i] + (Math.random() - 0.5) * 0.12));
-              racer.position.x += speeds[i] * dt;
-              racer.position.y = 0.14 + Math.abs(Math.sin(now / 90 + i * 2)) * 0.05;
-              racer.rotation.z = Math.sin(now / 70 + i) * 0.25;
+              const boost = now < boosts[i].until ? boosts[i].mult : 1;
+              racer.position.x += speeds[i] * boost * dt;
+              const wriggle = boost < 0.5 ? 2.2 : 1; // a stalled fish panics
+              racer.position.y = 0.14 + Math.abs(Math.sin(now / 90 + i * 2)) * 0.05 * wriggle;
+              racer.rotation.z = Math.sin(now / 70 + i) * 0.25 * wriggle;
               if (racer.position.x >= RACE_END && winner < 0) winner = i;
             });
+            if (now < rattleUntil) {
+              room.cans.forEach((can: any, i: number) => {
+                if (can.rotation.z > 1) return; // the fallen stay fallen
+                can.position.y = can.userData.seat.y + Math.abs(Math.sin(now / 55 + i * 1.7)) * 0.03;
+              });
+            }
             if (now - lastSplash > 700) {
               lastSplash = now;
               sfx.splash();
@@ -1399,16 +1572,15 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
           tick();
         });
         sfx.clatter();
-        const names = ["the teal one", "the orange one", "the ivory one"];
         if (winner === pick) {
           await payout(Math.floor(stake * 2.7));
-          celebrate(false, [0, 1.2, -2.5]);
+          celebrate(false, [RACE_END, 1.2, -2.55]);
           react(0, "cheer");
-          result.textContent = `${names[winner]} takes it! +${formatYennies(Math.floor(stake * 2.7) - stake)}`;
+          result.textContent = `${RACE_NAMES[winner]} takes it! +${formatYennies(Math.floor(stake * 2.7) - stake)}`;
         } else {
           sfx.growl();
           react(0, "hurt", 1.8);
-          result.textContent = `${names[winner]} takes it. Yours is still apologising.`;
+          result.textContent = `${RACE_NAMES[winner]} takes it. Yours is still apologising.`;
         }
         busy = false;
       });

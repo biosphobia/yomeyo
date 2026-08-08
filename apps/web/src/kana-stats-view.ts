@@ -23,11 +23,16 @@ const CONFUSIONS = 10;
 export async function renderKanaStats(body: HTMLDivElement): Promise<void> {
   body.innerHTML = `<div class="card-panel"><div class="msg">Reading your record…</div></div>`;
 
-  const [stats, games, bestStreak] = await Promise.all([
+  const [rawStats, games, bestStreak] = await Promise.all([
     kanaStats(),
     kanaGameLog(),
     getMeta<number>(BEST_STREAK_KEY),
   ]);
+  // Lone kana only. Word answers no longer touch this record, but the old
+  // word drills left whole words in it, and a word row here teaches nothing.
+  const stats = Object.fromEntries(
+    Object.entries(rawStats).filter(([kana]) => [...kana].length === 1),
+  );
 
   const answered = Object.values(stats);
   if (answered.length === 0) {
