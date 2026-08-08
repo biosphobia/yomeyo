@@ -167,8 +167,12 @@ const RECIPES: Recipe[] = [
     hint: "Tap X and Y to change the words. Tap ＋ to bend です or end the sentence.",
     forms: BE_FORMS,
     jp: (s) => `${s.x.kana}は ${s.y.kana}${BE_FORMS[s.form].make(s)}${s.ender}`,
+    // The honest reading, not a guess at the natural one: は sets a topic,
+    // so あなたはテストです is "as for you, it is a test", which may really
+    // mean "you have a test". Claude supplies the natural meaning; this
+    // frame never lies in the meantime.
     en: (s) => {
-      const base = `${s.x.gloss} ${BE_EN[s.form]} ${s.y.gloss}`;
+      const base = `as for ${s.x.gloss}, it ${BE_EN[s.form]} ${s.y.gloss}`;
       if (s.ender === "か") return `${base}?`;
       if (s.ender === "ね") return `${base}, right?`;
       if (s.ender === "よ") return `${base}, I'm telling you`;
@@ -184,8 +188,8 @@ const RECIPES: Recipe[] = [
     jp: (s) => `${s.x.kana}は ${s.y.kana}を ${DO_FORMS[s.form].make(s)}${s.ender}`,
     en: (s) => {
       const v = s.verb!.gloss;
-      const forms = [`${v}s`, `${v}s`, `doesn't ${v}`, `${pastOf(v)}`, `wants to ${v}`];
-      const base = `${s.x.gloss} ${forms[s.form]} ${s.y.gloss}`;
+      const forms = [v, v, `doesn't ${v}`, `${pastOf(v)}`, `wants to ${v}`];
+      const base = `as for ${s.x.gloss}, ${forms[s.form]} ${s.y.gloss}`;
       if (s.ender === "か") return `${base}?`;
       if (s.ender === "ね") return `${base}, right?`;
       if (s.ender === "よ") return `${base}, I'm telling you`;
@@ -224,21 +228,37 @@ async function loadStates(): Promise<Record<string, RecipeState>> {
 
 // ---------------- translation ----------------
 
-const translations = new Map<string, string>();
+interface Translation {
+  en: string;
+  note?: string;
+}
+
+const translations = new Map<string, Translation>();
 let translateSeq = 0;
 
+function drawTranslation(box: HTMLElement, t: Translation): void {
+  box.innerHTML = `<span class="rc-en-text">“${escapeHtml(t.en)}”</span>${
+    t.note ? `<span class="rc-en-note">${escapeHtml(t.note)}</span>` : ""
+  }`;
+}
+
+/**
+ * The real meaning, from Claude. The literal frame on screen is honest but
+ * wooden; only a translator that knows は marks a topic can say that
+ * あなたはテストです is probably about an exam, not an identity crisis.
+ */
 async function refineTranslation(host: HTMLElement, recipe: Recipe, s: RecipeState): Promise<void> {
   const jp = recipe.jp(s).replace(/\s+/g, "");
   const box = host.querySelector<HTMLElement>(`#rc-en-${recipe.id}`);
   if (!box) return;
   const cached = translations.get(jp);
   if (cached) {
-    box.textContent = `“${cached}”`;
+    drawTranslation(box, cached);
     return;
   }
   if (!(await generationAvailable())) return;
   const seq = ++translateSeq;
-  await new Promise((r) => setTimeout(r, 700));
+  await new Promise((r) => setTimeout(r, 400));
   if (seq !== translateSeq || !box.isConnected) return;
 
   const words = [
@@ -247,13 +267,16 @@ async function refineTranslation(host: HTMLElement, recipe: Recipe, s: RecipeSta
     ...(s.verb ? [`${s.verb.kana} = ${s.verb.gloss}`] : []),
   ].join(", ");
   const prompt = [
-    `A beginner built this sentence from the pattern ${recipe.title} (“${recipe.pattern}”):`,
+    "A beginner built a Japanese sentence in a pattern playground.",
+    `Pattern: ${recipe.title} (rough shape: "${recipe.pattern}").`,
+    `Sentence: ${jp}`,
+    `Words: ${words}.`,
     "",
-    jp,
-    `Words used: ${words}.`,
-    "",
-    'Give "en": the natural English of the whole sentence, as short as real speech.',
-    "Do not give a note.",
+    "は marks the topic, not the grammatical subject, so the natural meaning can differ from the " +
+      'literal shape: あなたはテストです usually means "you have a test", not "you are a test". Judge ' +
+      "from these words what a real speaker would most likely mean.",
+    'Give "en": that most natural English meaning, short, as real speech.',
+    'Give "note": the literal topic reading, in the shape "literally: as for you, it is a test".',
   ].join("\n");
   try {
     const res = await fetch(assetUrl("grammar.php"), {
@@ -263,12 +286,16 @@ async function refineTranslation(host: HTMLElement, recipe: Recipe, s: RecipeSta
     });
     if (!res.ok) return;
     const { raw } = (await res.json()) as { raw?: string };
-    const parsed = JSON.parse(raw ?? "{}") as { en?: string };
+    const parsed = JSON.parse(raw ?? "{}") as { en?: string; note?: string };
     if (typeof parsed.en !== "string" || !parsed.en.trim()) return;
-    translations.set(jp, parsed.en.trim());
-    if (seq === translateSeq && box.isConnected) box.textContent = `“${parsed.en.trim()}”`;
+    const value: Translation = {
+      en: parsed.en.trim(),
+      ...(typeof parsed.note === "string" && parsed.note.trim() ? { note: parsed.note.trim() } : {}),
+    };
+    translations.set(jp, value);
+    if (seq === translateSeq && box.isConnected) drawTranslation(box, value);
   } catch {
-    // The template already on screen is the answer then.
+    // The literal frame already on screen is the answer then.
   }
 }
 
@@ -457,15 +484,13 @@ function plusPanelHtml(recipe: Recipe, s: RecipeState): string {
     <div class="rc-panel">
       <div class="pg-panel-title">${recipe.id === "be" ? "Bend です:" : "Bend the action:"}</div>
       ${recipe.forms
-        .map((form, i) => {
-          const preview = recipe.jp({ ...s, form: i });
-          return `
+        .map(
+          (form, i) => `
           <button class="pg-opt${i === s.form ? " on" : ""}" data-form="${i}">
             <span class="pg-opt-jp" lang="ja">${escapeHtml(form.label)}</span>
             <span class="pg-opt-name">${escapeHtml(form.name)}</span>
-            <span class="pg-opt-preview" lang="ja">→ ${escapeHtml(preview)}</span>
-          </button>`;
-        })
+          </button>`,
+        )
         .join("")}
       <div class="pg-panel-title">End the sentence:</div>
       ${ENDERS.map(
@@ -473,7 +498,6 @@ function plusPanelHtml(recipe: Recipe, s: RecipeState): string {
         <button class="pg-opt${s.ender === e.ender ? " on" : ""}" data-ender="${e.ender}">
           <span class="pg-opt-jp" lang="ja">〜${e.ender}</span>
           <span class="pg-opt-name">${escapeHtml(e.name)}</span>
-          <span class="pg-opt-preview" lang="ja">→ ${escapeHtml(recipe.jp({ ...s, ender: s.ender === e.ender ? "" : e.ender }))}</span>
         </button>`,
       ).join("")}
     </div>`;

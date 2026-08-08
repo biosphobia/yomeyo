@@ -160,10 +160,13 @@ $body = [
     "format" => ["type" => "json_schema", "schema" => $schema],
   ],
   "system" => $translate
-    ? "You translate single conjugated Japanese words for a learner's " .
-      "playground. Give the shortest natural English that carries the form — " .
-      "tense, politeness, negation and all. Plain words only, no grammar " .
-      "jargon, and never guess: if the word is not real Japanese, say so in " .
+    ? "You translate a learner's playground output: a single conjugated " .
+      "Japanese word, or a short sentence built from a pattern. Give the " .
+      "shortest natural English that carries the form, tense, politeness, " .
+      "negation and all. For a sentence, say what a real speaker would most " .
+      "likely mean by it: は marks a topic, not a subject, so a literal " .
+      "reading is often not the meaning. Plain words only, no grammar " .
+      "jargon, and never guess: if it is not real Japanese, say so in " .
       "\"en\" plainly."
     : ($deck
     ? "You build Japanese vocabulary decks. Every card is studied as fact, " .

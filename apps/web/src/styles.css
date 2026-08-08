@@ -4785,3 +4785,10 @@ button.gram-swap-line:hover {
 .rc-embed .rc-en {
   margin-left: 36px;
 }
+
+.rc-en-note {
+  display: block;
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-top: 2px;
+}
