@@ -112,9 +112,9 @@
       "type": "gif",
       "name": "burger",
       "rarity": "common",
-      "on": "correct",
+      "on": "wrong",
       "image": "gifs/burger.webp",
-      "text": "burger"
+      "text": "eat you!!"
     },
     {
       "id": "gif-pears",
@@ -123,7 +123,7 @@
       "rarity": "common",
       "on": "correct",
       "image": "gifs/pears.gif",
-      "text": "pears"
+      "text": "yippie"
     },
     {
       "id": "gif-sorry",
