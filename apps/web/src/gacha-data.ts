@@ -168,6 +168,8 @@ export interface PrizeOverride {
   name?: string;
   text?: string;
   rarity?: string;
+  /** For gifs: which answers it reacts to. */
+  on?: "correct" | "wrong";
 }
 
 const OVERRIDES_KEY = "prizeOverrides";
@@ -247,6 +249,7 @@ export function prizeTable(): Promise<PrizeTable> {
         if (typeof edit.rarity === "string" && edit.rarity in rarities) merged.rarity = edit.rarity;
         if ((merged.type === "gif" || merged.type === "item") && typeof edit.text === "string" && edit.text.trim())
           merged.text = edit.text.trim();
+        if (merged.type === "gif" && (edit.on === "correct" || edit.on === "wrong")) merged.on = edit.on;
         return merged;
       };
       const prizes = (

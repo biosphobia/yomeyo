@@ -158,7 +158,7 @@ if (!array_key_exists("patch", $body) || $body["patch"] === null) {
     http_response_code(400);
     exit;
   }
-  // Only the three editable fields, only as short strings.
+  // Only the editable fields, only as short strings.
   $clean = [];
   foreach (["name", "text", "rarity"] as $field) {
     if (isset($patch[$field]) && is_string($patch[$field])) {
@@ -167,6 +167,9 @@ if (!array_key_exists("patch", $body) || $body["patch"] === null) {
         $clean[$field] = $value;
       }
     }
+  }
+  if (isset($patch["on"]) && in_array($patch["on"], ["correct", "wrong"], true)) {
+    $clean["on"] = $patch["on"];
   }
   if (count($clean) === 0) {
     unset($overrides[$id]);

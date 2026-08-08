@@ -344,9 +344,19 @@ async function openPrizeEditor(
         <input id="pe-name" value="${escapeAttr(prize.name)}" autocomplete="off" />
       </label>
       ${
-        prize.type === "gif"
-          ? `<label class="pe-field">Caption
+        prize.type === "gif" || prize.type === "item"
+          ? `<label class="pe-field">${prize.type === "gif" ? "Caption" : "Text"}
               <textarea id="pe-text" rows="2">${escapeHtml(prize.text)}</textarea>
+            </label>`
+          : ""
+      }
+      ${
+        prize.type === "gif"
+          ? `<label class="pe-field">Shows on
+              <select id="pe-on">
+                <option value="correct" ${prize.on === "correct" ? "selected" : ""}>right answers</option>
+                <option value="wrong" ${prize.on === "wrong" ? "selected" : ""}>wrong answers</option>
+              </select>
             </label>`
           : ""
       }
@@ -380,19 +390,22 @@ async function openPrizeEditor(
   });
   scrim.querySelector(".rc-close")!.addEventListener("click", close);
 
-  const patchFromForm = (): { name?: string; text?: string; rarity?: string } => {
+  const patchFromForm = (): { name?: string; text?: string; rarity?: string; on?: "correct" | "wrong" } => {
     const name = scrim.querySelector<HTMLInputElement>("#pe-name")?.value.trim();
     const text = scrim.querySelector<HTMLTextAreaElement>("#pe-text")?.value.trim();
     const rarity = scrim.querySelector<HTMLSelectElement>("#pe-rarity")?.value;
+    const on = scrim.querySelector<HTMLSelectElement>("#pe-on")?.value;
     return {
       ...(name ? { name } : {}),
-      ...(text && prize.type === "gif" ? { text } : {}),
+      ...(text && (prize.type === "gif" || prize.type === "item") ? { text } : {}),
       ...(rarity ? { rarity } : {}),
+      ...(prize.type === "gif" && (on === "correct" || on === "wrong") ? { on } : {}),
     };
   };
 
   scrim.querySelector("#pe-save")!.addEventListener("click", async () => {
     await setPrizeOverride(prize.id, patchFromForm());
+    if (prize.type === "gif") forgetReactions();
     close();
     refresh();
   });
@@ -403,6 +416,7 @@ async function openPrizeEditor(
     if (outcome === "ok") {
       // The global copy now carries the edit; a stale local one would shadow it.
       await setPrizeOverride(prize.id, null);
+      if (prize.type === "gif") forgetReactions();
       close();
       refresh();
       return;
@@ -417,6 +431,7 @@ async function openPrizeEditor(
   scrim.querySelector("#pe-clear")!.addEventListener("click", async () => {
     await setPrizeOverride(prize.id, null);
     if (canPublish) void publishPrizeOverride(prize.id, null);
+    if (prize.type === "gif") forgetReactions();
     close();
     refresh();
   });
