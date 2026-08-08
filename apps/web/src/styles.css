@@ -4792,3 +4792,30 @@ button.gram-swap-line:hover {
   font-size: 0.8rem;
   margin-top: 2px;
 }
+
+/* the recipe slots, colour-coded: X and Y match their blocks everywhere */
+.rc-x {
+  color: #4fd1c5;
+  font-weight: 700;
+}
+
+.rc-y {
+  color: #f6ad55;
+  font-weight: 700;
+}
+
+.pg-block.rc-slot-x {
+  border-color: rgba(79, 209, 197, 0.6);
+}
+
+.pg-block.rc-slot-x .pg-block-jp {
+  color: #4fd1c5;
+}
+
+.pg-block.rc-slot-y {
+  border-color: rgba(246, 173, 85, 0.6);
+}
+
+.pg-block.rc-slot-y .pg-block-jp {
+  color: #f6ad55;
+}

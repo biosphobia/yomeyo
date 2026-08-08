@@ -203,7 +203,7 @@ async function drawLesson(
     void renderLessons(body, isCurrent);
   });
   const recipesHost = body.querySelector<HTMLDivElement>("#lesson-recipes");
-  if (recipesHost) void renderRecipes(recipesHost);
+  if (recipesHost) void renderRecipes(recipesHost, { only: ["be"] });
   for (const row of body.querySelectorAll<HTMLElement>(".lesson-example")) {
     row.querySelector(".speaker")!.addEventListener("click", () => {
       void speak(row.dataset.say ?? "", { rate: 0.85 }).catch(() => undefined);
@@ -239,13 +239,20 @@ function spokenOf(jp: string): string {
 
 /**
  * A lesson body, laid out: blank lines split paragraphs, single newlines
- * become line breaks — so a body can hold a short list without a wall of
- * text, and old single-paragraph bodies render as before.
+ * become line breaks, so a body can hold a short list without a wall of
+ * text. The {x} and {y} tokens become the coloured slot letters, matching
+ * the blocks in the live pattern below.
  */
 function bodyHtml(body: string): string {
   return body
     .split(/\n\n+/)
-    .map((para) => `<p>${escapeHtml(para).replace(/\n/g, "<br>")}</p>`)
+    .map(
+      (para) =>
+        `<p>${escapeHtml(para)
+          .replace(/\n/g, "<br>")
+          .replace(/\{x\}/g, '<span class="rc-x">X</span>')
+          .replace(/\{y\}/g, '<span class="rc-y">Y</span>')}</p>`,
+    )
     .join("");
 }
 

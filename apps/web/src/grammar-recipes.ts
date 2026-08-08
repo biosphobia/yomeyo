@@ -149,7 +149,6 @@ interface Recipe {
   id: "be" | "do";
   title: string;
   pattern: string;
-  hint: string;
   forms: FormChoice[];
   /** The full sentence, spaced for the eye. */
   jp: (s: RecipeState) => string;
@@ -162,9 +161,8 @@ const BE_EN = ["is", "was", "isn't", "wasn't"];
 const RECIPES: Recipe[] = [
   {
     id: "be",
-    title: "＿は ＿です",
-    pattern: "A is B",
-    hint: "Tap X and Y to change the words. Tap ＋ to bend です or end the sentence.",
+    title: "Xは Yです",
+    pattern: "X is Y",
     forms: BE_FORMS,
     jp: (s) => `${s.x.kana}は ${s.y.kana}${BE_FORMS[s.form].make(s)}${s.ender}`,
     // The honest reading, not a guess at the natural one: は sets a topic,
@@ -181,9 +179,8 @@ const RECIPES: Recipe[] = [
   },
   {
     id: "do",
-    title: "＿は ＿を ＿",
-    pattern: "A does something to B",
-    hint: "Tap the slots to change the words. Tap ＋ to bend the action or end the sentence.",
+    title: "Xは Yを …",
+    pattern: "X does something to Y",
     forms: DO_FORMS,
     jp: (s) => `${s.x.kana}は ${s.y.kana}を ${DO_FORMS[s.form].make(s)}${s.ender}`,
     en: (s) => {
@@ -209,8 +206,6 @@ function pastOf(verb: string): string {
 // ---------------- state ----------------
 
 let states: Record<string, RecipeState> | null = null;
-/** What each card's lower panel is showing: nothing, the ＋ options, or a slot picker. */
-const panel: Record<string, "plus" | null> = { be: null, do: null };
 
 function freshStates(): Record<string, RecipeState> {
   return {
@@ -410,23 +405,32 @@ function openPicker(host: HTMLElement, spot: PickerSpot, onPick: (w: SlotWord) =
 
 // ---------------- drawing ----------------
 
-export async function renderRecipes(host: HTMLDivElement): Promise<void> {
+export interface RecipeOptions {
+  /** Show only these recipes; both when absent. Chapter 1 embeds just "be". */
+  only?: ("be" | "do")[];
+}
+
+export async function renderRecipes(host: HTMLDivElement, options: RecipeOptions = {}): Promise<void> {
   const state = await loadStates();
   if (!host.isConnected) return;
+  const shown = RECIPES.filter((recipe) => !options.only || options.only.includes(recipe.id));
 
-  host.innerHTML = `
-    <div class="glosses rc-intro">One pattern is many sentences. Change the words, bend the ending,
-      and watch the English follow.</div>
-    ${RECIPES.map((recipe) => cardHtml(recipe, state[recipe.id])).join("")}
-  `;
+  host.innerHTML = shown.map((recipe) => cardHtml(recipe, state[recipe.id])).join("");
 
-  for (const recipe of RECIPES) wire(host, recipe);
-  for (const recipe of RECIPES) void refineTranslation(host, recipe, state[recipe.id]);
+  for (const recipe of shown) wire(host, recipe, options);
+  for (const recipe of shown) void refineTranslation(host, recipe, state[recipe.id]);
+}
+
+/** The pattern with its slots lit: X one colour, Y the other, everywhere. */
+function patternHtml(text: string): string {
+  return escapeHtml(text)
+    .replace(/X/g, '<span class="rc-x">X</span>')
+    .replace(/Y/g, '<span class="rc-y">Y</span>');
 }
 
 function cardHtml(recipe: Recipe, s: RecipeState): string {
   const form = recipe.forms[s.form];
-  const tail = recipe.id === "be" ? form.make(s) : DO_FORMS[s.form].make(s);
+  const tail = form.make(s);
   const slots: string[] = [
     slotHtml(recipe.id, "x", s.x),
     `<span class="rc-fixed" lang="ja">は</span>`,
@@ -456,10 +460,10 @@ function cardHtml(recipe: Recipe, s: RecipeState): string {
   const jp = recipe.jp(s);
   return `
     <div class="card-panel rc-card" data-card="${recipe.id}">
-      <div class="rc-title"><b lang="ja">${escapeHtml(recipe.title)}</b>: ${escapeHtml(recipe.pattern)}</div>
+      <div class="rc-title"><b lang="ja">${patternHtml(recipe.title)}</b>: ${patternHtml(recipe.pattern)}</div>
       <div class="pg-chain rc-chain">
         ${slots.join("")}
-        <button class="pg-endcap rc-plus${panel[recipe.id] === "plus" ? " on" : ""}" data-recipe="${recipe.id}">＋</button>
+        <button class="pg-endcap rc-plus" data-recipe="${recipe.id}" title="Bend the ending">＋</button>
       </div>
       <div class="rc-sentence">
         <button class="speaker rc-say" data-recipe="${recipe.id}" title="Say it" aria-label="Say it">🔊</button>
@@ -467,50 +471,79 @@ function cardHtml(recipe: Recipe, s: RecipeState): string {
       </div>
       <div class="rc-romaji">${escapeHtml(romajiOf(jp))}</div>
       <div class="rc-en" id="rc-en-${recipe.id}">“${escapeHtml(recipe.en(s))}”</div>
-      ${panel[recipe.id] === "plus" ? plusPanelHtml(recipe, s) : `<div class="glosses rc-hint">${escapeHtml(recipe.hint)}</div>`}
     </div>`;
 }
 
 function slotHtml(recipeId: string, slot: "x" | "y", w: SlotWord): string {
   return `
-    <button class="pg-block rc-slot" data-recipe="${recipeId}" data-slot="${slot}">
+    <button class="pg-block rc-slot rc-slot-${slot}" data-recipe="${recipeId}" data-slot="${slot}">
       <span class="pg-block-jp" lang="ja">${escapeHtml(w.kana)}</span>
       <span class="pg-block-sub">${escapeHtml(w.gloss)}</span>
     </button>`;
 }
 
-function plusPanelHtml(recipe: Recipe, s: RecipeState): string {
-  return `
-    <div class="rc-panel">
-      <div class="pg-panel-title">${recipe.id === "be" ? "Bend です:" : "Bend the action:"}</div>
-      ${recipe.forms
-        .map(
-          (form, i) => `
+/** The ＋: the ending options, in the same popup the slots use. */
+function openEndings(host: HTMLElement, recipe: Recipe, s: RecipeState, redraw: () => void): void {
+  host.querySelector(".rc-scrim")?.remove();
+  const scrim = document.createElement("div");
+  scrim.className = "rc-scrim";
+  scrim.innerHTML = `
+    <div class="rc-pop card-panel" role="dialog" aria-modal="true">
+      <div class="rc-pop-head">
+        <b>${recipe.id === "be" ? "Bend です" : "Bend the action"}</b>
+        <button class="rc-close ghost" aria-label="Close">✕</button>
+      </div>
+      <div class="rc-pop-list">
+        ${recipe.forms
+          .map(
+            (form, i) => `
           <button class="pg-opt${i === s.form ? " on" : ""}" data-form="${i}">
             <span class="pg-opt-jp" lang="ja">${escapeHtml(form.label)}</span>
             <span class="pg-opt-name">${escapeHtml(form.name)}</span>
           </button>`,
-        )
-        .join("")}
-      <div class="pg-panel-title">End the sentence:</div>
-      ${ENDERS.map(
-        (e) => `
-        <button class="pg-opt${s.ender === e.ender ? " on" : ""}" data-ender="${e.ender}">
-          <span class="pg-opt-jp" lang="ja">〜${e.ender}</span>
-          <span class="pg-opt-name">${escapeHtml(e.name)}</span>
-        </button>`,
-      ).join("")}
+          )
+          .join("")}
+        <div class="pg-panel-title">End the sentence:</div>
+        ${ENDERS.map(
+          (e) => `
+          <button class="pg-opt${s.ender === e.ender ? " on" : ""}" data-ender="${e.ender}">
+            <span class="pg-opt-jp" lang="ja">〜${e.ender}</span>
+            <span class="pg-opt-name">${escapeHtml(e.name)}</span>
+          </button>`,
+        ).join("")}
+      </div>
     </div>`;
+  host.appendChild(scrim);
+
+  for (const option of scrim.querySelectorAll<HTMLButtonElement>("[data-form]")) {
+    option.addEventListener("click", () => {
+      s.form = Number(option.dataset.form);
+      scrim.remove();
+      redraw();
+    });
+  }
+  for (const option of scrim.querySelectorAll<HTMLButtonElement>("[data-ender]")) {
+    option.addEventListener("click", () => {
+      const ender = option.dataset.ender as "か" | "ね" | "よ";
+      s.ender = s.ender === ender ? "" : ender;
+      scrim.remove();
+      redraw();
+    });
+  }
+  scrim.addEventListener("click", (ev) => {
+    if (ev.target === scrim) scrim.remove();
+  });
+  scrim.querySelector(".rc-close")!.addEventListener("click", () => scrim.remove());
 }
 
-function wire(host: HTMLDivElement, recipe: Recipe): void {
+function wire(host: HTMLDivElement, recipe: Recipe, options: RecipeOptions): void {
   const card = host.querySelector<HTMLDivElement>(`[data-card="${recipe.id}"]`);
   if (!card || !states) return;
   const s = states[recipe.id];
 
   const redraw = (): void => {
     void setMeta(STATE_KEY, states);
-    void renderRecipes(host);
+    void renderRecipes(host, options);
   };
 
   for (const slot of card.querySelectorAll<HTMLButtonElement>(".rc-slot")) {
@@ -525,25 +558,11 @@ function wire(host: HTMLDivElement, recipe: Recipe): void {
     });
   }
   card.querySelector<HTMLButtonElement>(".rc-plus")!.addEventListener("click", () => {
-    panel[recipe.id] = panel[recipe.id] === "plus" ? null : "plus";
-    void renderRecipes(host);
+    openEndings(host, recipe, s, redraw);
   });
   card.querySelector<HTMLButtonElement>(".rc-say")!.addEventListener("click", () => {
     void speak(recipe.jp(s).replace(/\s+/g, ""), { rate: 0.85 }).catch(() => undefined);
   });
-  for (const option of card.querySelectorAll<HTMLButtonElement>("[data-form]")) {
-    option.addEventListener("click", () => {
-      s.form = Number(option.dataset.form);
-      redraw();
-    });
-  }
-  for (const option of card.querySelectorAll<HTMLButtonElement>("[data-ender]")) {
-    option.addEventListener("click", () => {
-      const ender = option.dataset.ender as "か" | "ね" | "よ";
-      s.ender = s.ender === ender ? "" : ender;
-      redraw();
-    });
-  }
 }
 
 /**

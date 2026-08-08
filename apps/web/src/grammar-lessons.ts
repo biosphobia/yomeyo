@@ -93,22 +93,15 @@ export const LESSONS: Lesson[] = [
         ],
       },
       {
-        heading: "Sentence recipes",
+        heading: "The first sentence pattern",
         recipes: true,
         body:
-          "Most sentences you'll want at the start follow a few patterns. ＿ is a slot you drop a word " +
-          "into.\n\n" +
-          "1. ＿は ＿です means \"A is B\". The \"is\" lives in です, not in は. は only says \"as for A…\".\n" +
-          "2. ＿は ＿を (action) means \"A does something to B\".\n" +
-          "3. ＿は ＿に いく means \"A goes to B\".\n" +
-          "4. Add か to the end of any of these and it becomes a question. Nothing moves around.\n\n" +
-          "Recipes 1 and 2 are live right below. Tap the slots, change the words, and watch the sentence " +
-          "follow.",
+          "{x}は {y}です means \"{x} is {y}\".\n\n" +
+          "The \"is\" lives in です, not in は. は only says \"as for {x}\". Add か to the end and it " +
+          "becomes a question.",
         examples: [
-          { jp: "わたしは トムです", r: "watashi wa tomu desu", en: "I am Tom. (recipe 1)" },
-          { jp: "わたしは みずを のむ", r: "watashi wa mizu wo nomu", en: "I drink water. (recipe 2)" },
-          { jp: "わたしは がっこうに いく", r: "watashi wa gakkou ni iku", en: "I go to school. (recipe 3)" },
-          { jp: "これは ねこですか", r: "kore wa neko desu ka", en: "Is this a cat? (recipe 1 + か)" },
+          { jp: "わたしは トムです", r: "watashi wa tomu desu", en: "I am Tom." },
+          { jp: "これは ねこですか", r: "kore wa neko desu ka", en: "Is this a cat?" },
         ],
       },
       {
@@ -156,7 +149,7 @@ export const LESSONS: Lesson[] = [
           "The word for “the”",
         ],
         answer: 1,
-        why: "が, を, に and friends each stick to the word BEFORE them and announce its job.",
+        why: "が, を, に and friends each stick to the word before them and announce its job.",
       },
       {
         q: "Which word does を belong to here?",
@@ -170,14 +163,14 @@ export const LESSONS: Lesson[] = [
         jp: "わたしは みず＿ のむ",
         choices: ["は", "が", "を", "に"],
         answer: 2,
-        why: "The water is what the drinking lands on, and を is the lands-on sticker. Recipe 2: ＿は ＿を (action).",
+        why: "The water is what the drinking lands on, and を is the lands-on sticker.",
       },
       {
         q: "What does this mean?",
         jp: "みずを さくらが のむ",
         choices: ["The water drinks Sakura", "Sakura drinks water", "Sakura is water", "Water and Sakura drink"],
         answer: 1,
-        why: "が is still stuck to Sakura, so she's still the doer, moving blocks doesn't move the jobs.",
+        why: "が is still stuck to Sakura, so she's still the doer. Moving words doesn't move the jobs.",
       },
       {
         q: "How do you turn これは ねこです into a question?",
@@ -188,7 +181,7 @@ export const LESSONS: Lesson[] = [
           "Change です to だ",
         ],
         answer: 1,
-        why: "Any recipe + か at the very end becomes a question, no rearranging, ever.",
+        why: "か at the very end makes any sentence a question. Nothing gets rearranged.",
       },
       {
         q: "Is のむ on its own a real sentence?",
@@ -382,7 +375,7 @@ export const LESSONS: Lesson[] = [
       {
         heading: "は and が in the same sentence",
         body:
-          "One very common pattern uses both: ＿は ＿が ＿, “as for A, its B is C”.\n\n" +
+          "One very common pattern uses both: Xは Yが Z, “as for X, its Y is Z”.\n\n" +
           "かれは めが おおきい is literally “as for him, the eyes are big”. English just says “his eyes are " +
           "big”. When you see は and が together, the は part is the headline and the が part is the detail.",
         examples: [
@@ -444,7 +437,7 @@ export const LESSONS: Lesson[] = [
         jp: "かれは めが おおきい",
         choices: ["He is an eye", "His eyes are big", "The eye watches him", "Big things have eyes"],
         answer: 1,
-        why: "＿は ＿が ＿: “as for him, the eyes are big.” は gives the headline, が gives the detail.",
+        why: "Xは Yが Z: “as for him, the eyes are big.” は gives the headline, が gives the detail.",
       },
     ],
   },

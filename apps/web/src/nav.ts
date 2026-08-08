@@ -52,14 +52,16 @@ export const NAV: NavGroup[] = [
   {
     label: "Play",
     items: [
-      { route: "calendar", label: "Calendar", icon: "📅" },
       { route: "gacha", label: "Gacha", icon: "🎁" },
       { route: "games", label: "Games", icon: "🕹️" },
     ],
   },
   {
     label: "You",
-    items: [{ route: "settings", label: "Settings", icon: "⚙️" }],
+    items: [
+      { route: "calendar", label: "Calendar", icon: "📅" },
+      { route: "settings", label: "Settings", icon: "⚙️" },
+    ],
     tail: true,
   },
 ];
