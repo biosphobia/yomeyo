@@ -328,7 +328,9 @@ function bodyHtml(body: string): string {
         `<p>${escapeHtml(para)
           .replace(/\n/g, "<br>")
           .replace(/\{x\}/g, '<span class="rc-x">X</span>')
-          .replace(/\{y\}/g, '<span class="rc-y">Y</span>')}</p>`,
+          .replace(/\{y\}/g, '<span class="rc-y">Y</span>')
+          .replace(/\{x:([^}]+)\}/g, '<span class="rc-x" lang="ja">$1</span>')
+          .replace(/\{y:([^}]+)\}/g, '<span class="rc-y" lang="ja">$1</span>')}</p>`,
     )
     .join("");
 }

@@ -84,10 +84,18 @@ export const LESSONS: Lesson[] = [
         recipes: true,
         body:
           "{x}は {y}です means \"{x} is {y}\".\n\n" +
-          "The \"is\" lives in です, not in は. は only says \"as for {x}\". Add か to the end and it " +
-          "becomes a question.",
+          "The \"is\" lives in です, not in は. は only sets the topic: {x}は literally means \"as for " +
+          "{x}\", and you can drop it entirely when it's obvious.\n\n" +
+          "Introducing yourself: {x:わたし}は {y:ピエトロ}です, \"as for me, it is Pietro\". But everyone " +
+          "can see you're talking about yourself, so {y:ピエトロ}です is enough.\n\n" +
+          "So は never means \"is\", it only points at the topic. At a restaurant you can tell the " +
+          "waitress {x:わたし}は {y:ライス}です. You are not rice: わたしは says \"about me\", ライスです " +
+          "says \"it's rice\", and from context you've just ordered.\n\n" +
+          "Add か to the end and it becomes a question.",
         examples: [
-          { jp: "わたしは トムです", r: "watashi wa tomu desu", en: "I am Tom." },
+          { jp: "わたしは ピエトロです", r: "watashi wa pietoro desu", en: "As for me, it's Pietro. = I'm Pietro." },
+          { jp: "ピエトロです", r: "pietoro desu", en: "Enough on its own: the topic was obvious." },
+          { jp: "わたしは ライスです", r: "watashi wa raisu desu", en: "As for me, it's rice. = I'll have rice." },
           { jp: "これは ねこですか", r: "kore wa neko desu ka", en: "Is this a cat?" },
         ],
       },
@@ -109,14 +117,10 @@ export const LESSONS: Lesson[] = [
         body:
           "Japanese drops anything that's obvious. のむ on its own is a complete, natural sentence: " +
           "someone, clear from the situation, drinks. No \"I\", \"him\" or \"it\" needed if it's clear from " +
-          "context. Japanese drops words like this a lot.\n\n" +
-          "It's also common when introducing yourself to say ピエトロです instead of わたしは ピエトロです " +
-          "(\"as for me, I am Pietro\"). Everyone already knows you're talking about yourself: you are the " +
-          "topic, so you don't need to state it again.",
+          "context. Japanese drops words like this a lot, just like the topic above.",
         examples: [
           { jp: "のむ", r: "nomu", en: "(I'll) drink. A full sentence." },
           { jp: "あつい", r: "atsui", en: "(It's) hot. Also a full sentence." },
-          { jp: "ピエトロです", r: "pietoro desu", en: "(I'm) Pietro. The topic goes unsaid." },
         ],
       },
     ],
