@@ -7,7 +7,11 @@ export const KANA_REVIEW_GOAL = 3000;
 
 /** Every question ever answered in the kana games, all sessions counted. */
 export async function totalKanaReviews(): Promise<number> {
-  return (await allGames()).reduce((sum, game) => sum + (game.questions ?? 0), 0);
+  const total = (await allGames()).reduce((sum, game) => sum + (game.questions ?? 0), 0);
+  // Anyone who crossed the line before the door existed is owed the key:
+  // any read of the total settles that debt, no new answer required.
+  if (total >= KANA_REVIEW_GOAL) void unlockAchievement("kana-3000");
+  return total;
 }
 
 /**

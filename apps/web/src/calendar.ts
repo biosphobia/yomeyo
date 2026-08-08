@@ -10,6 +10,7 @@ import {
 import { screenHeader } from "./screen.js";
 import { levelState } from "./levels.js";
 import { renderAchievements } from "./achievements.js";
+import { totalKanaReviews } from "./kana-stats.js";
 
 /**
  * The Calendar: a month of days, each carrying its quests.
@@ -63,6 +64,9 @@ export async function renderCalendar(main: HTMLElement, isCurrent: () => boolean
     <div id="cal-achievements"></div>
   `;
 
+  // Reading the total also settles any achievement earned before the
+  // achievement existed, so the list below is honest before it draws.
+  await totalKanaReviews().catch(() => 0);
   void renderAchievements(main.querySelector<HTMLElement>("#cal-achievements")!);
 
   // Tapping the countdown goes to the day itself, which is where the exam
