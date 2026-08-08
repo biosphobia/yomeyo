@@ -35,7 +35,7 @@ type Mode = "voice" | "tts";
  * Raising this number throws the whole cache away once, on the next play,
  * and everything comes back correct.
  */
-const CACHE_VERSION = 3;
+const CACHE_VERSION = 4;
 const CACHE_VERSION_KEY = "audioCacheVersion";
 const CACHE_PREFIX = "audioClip:";
 
@@ -56,22 +56,23 @@ function cacheReady(): Promise<void> {
 }
 
 /**
- * What to actually say for one kana: its katakana twin, always.
+ * What to actually say for one kana: the kana itself, with three exceptions.
  *
- * Speech engines read text by deciding what the text IS, and hiragana
- * invites decisions: は on its own comes out "wa", へ comes out "e", and a
- * lone vowel can come out as a hum, a hesitation, or nothing at all.
- * Katakana is Japanese's own spelling for bare sounds — names, noises,
- * things from nowhere — so the engine is handed the katakana twin and has
- * nothing to interpret. The learner still sees the kana they chose.
+ * は on its own comes out "wa" and へ comes out "e" — the particle readings —
+ * and を is a particle outright, so those three are handed their katakana
+ * twins, which can never be particles and are said as the bare sound.
+ *
+ * Everything ELSE is sent exactly as written. Converting the whole syllabary
+ * to katakana was tried here once, on the theory that katakana is Japanese's
+ * own spelling for bare sounds; the synthesis chain disagreed and said lone
+ * katakana wrong across the board. Hiragana singles come back right, so
+ * hiragana it is — and the katakana groups' own cards were katakana to begin
+ * with, which is what their drill should say anyway.
  */
+const SPOKEN_KANA: Record<string, string> = { は: "ハ", へ: "ヘ", を: "ヲ" };
+
 export function spokenKana(kana: string): string {
-  return [...kana]
-    .map((ch) => {
-      const code = ch.codePointAt(0)!;
-      return code >= 0x3041 && code <= 0x3096 ? String.fromCodePoint(code + 0x60) : ch;
-    })
-    .join("");
+  return SPOKEN_KANA[kana] ?? kana;
 }
 
 /** Synthesis and recordings cache apart: a word can be held as both. */
