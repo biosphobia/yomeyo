@@ -4948,3 +4948,119 @@ button.gram-swap-line:hover {
   color: var(--muted);
   font-size: 1.3rem;
 }
+
+/* ---------------- the casino ---------------- */
+
+.cas-stage {
+  height: min(46vh, 380px);
+  border-radius: 16px;
+  overflow: hidden;
+  background: #140d1a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.cas-stage canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.cas-loading {
+  padding: 20px;
+  text-align: center;
+}
+
+.cas-bar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.cas-balance {
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: #f6ad55;
+}
+
+.cas-tabs {
+  margin-bottom: 10px;
+}
+
+.cas-bets {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+
+.cas-chip {
+  border-radius: 999px;
+  min-width: 54px;
+  padding: 8px 0;
+  border: 2px dashed var(--border, rgba(255, 255, 255, 0.2));
+  background: var(--panel-2, rgba(255, 255, 255, 0.04));
+  font-weight: 700;
+}
+
+.cas-chip.on {
+  border-color: #f6ad55;
+  color: #f6ad55;
+}
+
+.cas-big {
+  font-size: 1.05rem;
+  font-weight: 800;
+  padding: 12px 22px;
+  letter-spacing: 0.04em;
+}
+
+.cas-result {
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin-top: 10px;
+  min-height: 1.4em;
+}
+
+.cas-dice {
+  text-align: center;
+  margin: 6px 0;
+}
+
+.cas-dice-row {
+  font-size: 2.6rem;
+  line-height: 1.2;
+  letter-spacing: 0.15em;
+}
+
+.cas-card-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin: 8px 0 12px;
+}
+
+.cas-card {
+  width: 74px;
+  height: 104px;
+  border-radius: 10px;
+  background: #f4efe6;
+  color: #8a1f3a;
+  font-size: 2.2rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+.cas-pot {
+  font-weight: 700;
+  color: #f6ad55;
+}

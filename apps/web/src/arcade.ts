@@ -7,6 +7,7 @@ import { PER_CORRECT, earnYennies, formatYennies, spendYennies, yennies } from "
 import { kanaStats, startGameSession, type GameSession, type KanaStat } from "./kana-stats.js";
 import { renderKanaStats } from "./kana-stats-view.js";
 import { screenHeader } from "./screen.js";
+import { lazyImport } from "./lazy.js";
 import { assetUrl, loadDictionary } from "./store.js";
 import { KANA_GROUPS, isCorrect, isSmallTsu, kanaSegments, type KanaEntry, type KanaGroup } from "./kana-data.js";
 import type { DictEntry } from "@yomeyo/core";
@@ -342,7 +343,7 @@ function primaryRomaji(kana: string): string {
 // ---------------- the screens ----------------
 
 /** Play or the record of playing. Remembered while the app is open. */
-let view: "play" | "stats" = "play";
+let view: "play" | "casino" | "stats" = "play";
 
 export async function renderArcade(main: HTMLElement, isCurrent: () => boolean = () => true): Promise<void> {
   // Warmed as the screen opens, not as a level starts: the reactions have to
@@ -365,6 +366,7 @@ export async function renderArcade(main: HTMLElement, isCurrent: () => boolean =
     ${screenHeader("Game centre", await yennies())}
     <div class="segmented">
       <button data-view="play" class="${view === "play" ? "on" : ""}">Play</button>
+      <button data-view="casino" class="${view === "casino" ? "on" : ""}">🎰 Casino</button>
       <button data-view="stats" class="${view === "stats" ? "on" : ""}">Stats</button>
     </div>
     <div id="kana-body"></div>
@@ -379,7 +381,11 @@ export async function renderArcade(main: HTMLElement, isCurrent: () => boolean =
 
   const body = main.querySelector<HTMLDivElement>("#kana-body")!;
   if (view === "stats") void renderKanaStats(body);
-  else renderSelection(body, game, main, isCurrent);
+  else if (view === "casino") {
+    void lazyImport(() => import("./casino.js")).then(({ renderCasino }) => {
+      if (body.isConnected && isCurrent()) void renderCasino(body, isCurrent);
+    });
+  } else renderSelection(body, game, main, isCurrent);
 }
 
 function renderSelection(
