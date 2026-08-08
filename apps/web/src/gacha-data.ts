@@ -181,19 +181,22 @@ export function publishAvailable(): Promise<boolean> {
 
 /**
  * Publish one prize's edit for everyone, via the server's overrides file.
- * "denied" means the key was wrong; anything else that goes wrong is
- * "error". On success the table cache is dropped so the next load shows it.
+ * The signed-in account is the credential: the first account ever to
+ * publish holds the seat, and "denied" means this one doesn't. On success
+ * the table cache is dropped so the next load shows the edit.
  */
 export async function publishPrizeOverride(
   id: string,
   patch: PrizeOverride | null,
-  key: string,
-): Promise<"ok" | "denied" | "error"> {
+): Promise<"ok" | "denied" | "signedout" | "error"> {
+  const { idToken } = await import("./cloud.js");
+  const token = await idToken();
+  if (!token) return "signedout";
   try {
     const res = await fetch(assetUrl("prizes-admin.php"), {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ key, id, patch }),
+      body: JSON.stringify({ token, id, patch }),
     });
     if (res.status === 204) {
       loaded = null;

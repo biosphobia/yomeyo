@@ -19,11 +19,6 @@ import {
 import { forgetReactions } from "./feedback.js";
 import { applySkin } from "./skins.js";
 import { unlockAll, unlockAllNow } from "./unlock.js";
-import { getMeta, setMeta } from "./db.js";
-
-/** Where the admin's publish key rests between edits. */
-const PUBLISH_KEY = "gachaPublishKey";
-
 /**
  * The Gacha tab: what yennies are for.
  *
@@ -295,7 +290,6 @@ async function openPrizeEditor(
   refresh: () => void,
 ): Promise<void> {
   const canPublish = await publishAvailable();
-  const storedKey = (await getMeta<string>(PUBLISH_KEY)) ?? "";
   main.querySelector(".rc-scrim")?.remove();
   const scrim = document.createElement("div");
   scrim.className = "rc-scrim";
@@ -325,14 +319,6 @@ async function openPrizeEditor(
             .join("")}
         </select>
       </label>
-      ${
-        canPublish
-          ? `<label class="pe-field">Publish key
-              <input id="pe-key" type="password" value="${escapeAttr(storedKey)}"
-                placeholder="the GACHA_ADMIN_KEY secret" autocomplete="off" />
-            </label>`
-          : ""
-      }
       <div class="row-actions" style="margin-top:10px">
         ${canPublish ? `<button id="pe-publish">Publish to everyone</button>` : ""}
         <button id="pe-save" class="${canPublish ? "secondary" : ""}">Save on this device</button>
@@ -341,7 +327,7 @@ async function openPrizeEditor(
       </div>
       <div class="glosses" id="pe-msg" style="margin-top:8px">${
         canPublish
-          ? "Publish writes the server's overrides file, for every device. Save keeps it here only."
+          ? "Publish applies it for every device, as your signed-in account. Save keeps it here only."
           : "Saved on this device. prizes.json on GitHub is the source for everyone else."
       }</div>
     </div>`;
@@ -371,27 +357,25 @@ async function openPrizeEditor(
   });
   scrim.querySelector("#pe-publish")?.addEventListener("click", async () => {
     const message = scrim.querySelector<HTMLElement>("#pe-msg")!;
-    const key = scrim.querySelector<HTMLInputElement>("#pe-key")?.value.trim() ?? "";
-    if (!key) {
-      message.textContent = "The publish key is the GACHA_ADMIN_KEY repository secret.";
-      return;
-    }
     message.textContent = "Publishing…";
-    const outcome = await publishPrizeOverride(prize.id, patchFromForm(), key);
+    const outcome = await publishPrizeOverride(prize.id, patchFromForm());
     if (outcome === "ok") {
-      await setMeta(PUBLISH_KEY, key);
       // The global copy now carries the edit; a stale local one would shadow it.
       await setPrizeOverride(prize.id, null);
       close();
       refresh();
-    } else {
-      message.textContent = outcome === "denied" ? "Wrong key." : "Couldn't reach the server.";
+      return;
     }
+    message.textContent =
+      outcome === "signedout"
+        ? "Sign in first (Settings → Account); publishing rides your account."
+        : outcome === "denied"
+          ? "A different account holds the publisher seat."
+          : "Couldn't reach the server.";
   });
   scrim.querySelector("#pe-clear")!.addEventListener("click", async () => {
     await setPrizeOverride(prize.id, null);
-    const key = scrim.querySelector<HTMLInputElement>("#pe-key")?.value.trim() ?? "";
-    if (canPublish && key) await publishPrizeOverride(prize.id, null, key);
+    if (canPublish) void publishPrizeOverride(prize.id, null);
     close();
     refresh();
   });

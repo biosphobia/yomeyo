@@ -163,19 +163,31 @@ jobs:
             echo "No ANTHROPIC_API_KEY secret set - grammar uses its built-in sentences."
           fi
 
-      # The gacha editor's publish key, same pattern: with the
-      # GACHA_ADMIN_KEY secret set (any passphrase you choose), the admin's
-      # in-app prize edits can be published to everyone via prizes-admin.php.
-      - name: Write the gacha admin key for the cPanel upload
+      # Who may publish gacha prize edits is decided by Firebase sign-in:
+      # prizes-admin.php verifies each poster's ID token against the site's
+      # own Firebase project and pins the first publisher's account. All the
+      # server needs is the project id, taken from the same FIREBASE_CONFIG
+      # secret the app already builds with — no extra secret to manage.
+      - name: Write the firebase project id for the cPanel upload
         env:
-          GACHA_ADMIN_KEY: ${{ secrets.GACHA_ADMIN_KEY }}
+          FIREBASE_CONFIG: ${{ secrets.FIREBASE_CONFIG }}
         run: |
-          if [ -n "$GACHA_ADMIN_KEY" ]; then
-            printf '<?php return base64_decode("%s");\n' "$(printf %s "$GACHA_ADMIN_KEY" | base64 -w0)" > apps/web/dist/admin-key.php
-            echo "Gacha admin publishing enabled."
-          else
-            echo "No GACHA_ADMIN_KEY secret set - prize edits stay device-local."
-          fi
+          node <<'EOF'
+          const fs = require("fs");
+          const raw = process.env.FIREBASE_CONFIG || "";
+          let id = "";
+          try { id = JSON.parse(raw).projectId || ""; } catch {}
+          if (!id) {
+            const m = raw.match(/projectId["' ]*[:=]["' ]*([\w-]+)/);
+            if (m) id = m[1];
+          }
+          if (id) {
+            fs.writeFileSync("apps/web/dist/firebase-project.php", `<?php return ${JSON.stringify(id)};\n`);
+            console.log("Gacha publishing bound to Firebase project " + id);
+          } else {
+            console.log("No FIREBASE_CONFIG projectId - prize edits stay device-local.");
+          }
+          EOF
 
       # Publishing path 1: your own web host, over FTP(S) — how a cPanel host
       # gets updated on every push. Runs only when the CPANEL_FTP_* secrets

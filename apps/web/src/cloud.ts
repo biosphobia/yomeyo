@@ -407,6 +407,22 @@ export async function firestoreApi(): Promise<{
  * that rather than the card's own `updatedAt`, so devices with skewed clocks
  * cannot cause changes to be skipped.
  */
+/**
+ * The signed-in user's ID token: proof of who is asking, for a server-side
+ * endpoint that wants more than the client's word. Null when nobody is
+ * signed in, or Firebase isn't configured here at all.
+ */
+export async function idToken(): Promise<string | null> {
+  try {
+    const { auth } = await load();
+    const user = auth.currentUser;
+    if (!user) return null;
+    return (await user.getIdToken()) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function firestoreBackend(): Promise<SyncBackend> {
   const { auth, db, mod } = await load();
   const user = auth.currentUser;
