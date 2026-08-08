@@ -1,0 +1,57 @@
+# Yomeyo on an Apache/cPanel host. GitHub Pages ignores this file (and
+# forces HTTPS on its own), so the same build serves both. The app is
+# hash-routed, so no routing rewrites are needed — every real URL is a real
+# file.
+
+Options -Indexes
+
+# HTTPS only. A plain-http visit — a typed address, an old bookmark — is
+# redirected before anything is served: the deck, the sync token and the
+# audio all travel encrypted or not at all. The X-Forwarded-Proto check
+# keeps hosts that terminate TLS on a proxy from redirecting in a loop.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{HTTPS} !=on
+  RewriteCond %{HTTP:X-Forwarded-Proto} !https [NC]
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+</IfModule>
+
+# The audio API key lives in this file, read only by audio.php. Executed
+# directly it outputs nothing, but if PHP were ever switched off Apache
+# would serve the source — so the web never gets to ask for it at all.
+<Files "audio-key.php">
+  Require all denied
+</Files>
+
+# The Anthropic key, read only by grammar.php, protected the same way.
+<Files "grammar-key.php">
+  Require all denied
+</Files>
+
+<IfModule mod_headers.c>
+  # Keep it that way: HSTS makes the browser refuse plain http for this
+  # hostname for the next year, so even the first request of a later visit
+  # never leaves unencrypted. Note it applies to the whole hostname, not
+  # just this folder — right for a host that serves everything over TLS.
+  Header always set Strict-Transport-Security "max-age=31536000" env=HTTPS
+  # And if any content ever names an http:// resource, the browser asks for
+  # the https version instead of loading it insecurely.
+  Header always set Content-Security-Policy "upgrade-insecure-requests"
+
+  # Built assets carry a content hash in their name, so they never change in
+  # place and can be cached forever.
+  <FilesMatch "-[A-Za-z0-9_-]{8}\.(js|css)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+  # The entry points and the service worker must be revalidated, or an
+  # update sits behind a stale copy until the cache expires on its own.
+  <FilesMatch "^(index\.html|sync\.html|sw\.js|manifest\.webmanifest)$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+</IfModule>
+
+<IfModule mod_deflate.c>
+  # The dictionary is a large binary that compresses to less than half its
+  # size; hosts do not compress application/octet-stream unless asked.
+  AddOutputFilterByType DEFLATE text/html text/css text/javascript application/javascript application/json application/manifest+json application/octet-stream image/svg+xml
+</IfModule>

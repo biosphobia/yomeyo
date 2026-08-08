@@ -1,0 +1,11 @@
+{
+  "_comment": "Reactions for the kana quiz and the grammar drills. Images and texts are paired in order: the first image always says the first line, the second the second, and so on — a gif and its caption are one joke. Give one line and every image says it; give more lines than images and the extras become alternatives for the image they land on, one picked at random. An image is a filename in this folder or a full https:// URL — gif, animated webp, avif, png or jpeg, any size: it is shown in a box of its own, and each deploy squeezes its own copy of it. Changes deploy with the next push.",
+  "correct": {
+    "images": ["correct.gif"],
+    "texts": ["good job!!"]
+  },
+  "wrong": {
+    "images": ["wrong.gif"],
+    "texts": ["DUMB FAGGOT!!!!"]
+  }
+}

@@ -1,0 +1,1069 @@
+{
+    "description": "DO NOT DELETE THIS FILE. This file is used to keep track of which files have been synced in the most recent deployment. If you delete this file a resync will need to be done (which can take a while) - read more: https://github.com/SamKirkland/FTP-Deploy-Action",
+    "version": "1.0.0",
+    "generatedTime": 1786202660697,
+    "data": [
+        {
+            "type": "file",
+            "name": ".htaccess",
+            "size": 2622,
+            "hash": "95f59dfbe005578f2eb884a7f0c525903d843893c702497fe2d9d4d86a6399a8"
+        },
+        {
+            "type": "file",
+            "name": ".nojekyll",
+            "size": 0,
+            "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+            "type": "folder",
+            "name": "assets"
+        },
+        {
+            "type": "file",
+            "name": "audio-key.php",
+            "size": 96,
+            "hash": "3f836b65c1e794df39d0a02e00358321fad59183877abb81ab55254f5fb6f522"
+        },
+        {
+            "type": "file",
+            "name": "audio.php",
+            "size": 5885,
+            "hash": "30b526a6c495b668c66262ae99f679e677c5718240c7a6e654ef03d8ff35ad8c"
+        },
+        {
+            "type": "folder",
+            "name": "dict"
+        },
+        {
+            "type": "folder",
+            "name": "feedback"
+        },
+        {
+            "type": "file",
+            "name": "firebase-project.php",
+            "size": 29,
+            "hash": "f94de6d7bbc6c8b0a22f60354787c847385ba398a2fdc98425360afcb2444cb2"
+        },
+        {
+            "type": "folder",
+            "name": "gacha"
+        },
+        {
+            "type": "file",
+            "name": "grammar-key.php",
+            "size": 176,
+            "hash": "d75ccc64a04f983bc41da5c2fe13ee9a53cfed69303c36e88bc4831b4e1823aa"
+        },
+        {
+            "type": "file",
+            "name": "grammar.php",
+            "size": 7710,
+            "hash": "669a0816ca6d72de90a558f7501973783fbdeb72e950ddbcd8e254d143c649b0"
+        },
+        {
+            "type": "folder",
+            "name": "icons"
+        },
+        {
+            "type": "file",
+            "name": "index.html",
+            "size": 1371,
+            "hash": "a57b9805206ff5042e1dbcd234ffa1c486deb26f7785f7243c5cd90e93db2fb8"
+        },
+        {
+            "type": "folder",
+            "name": "kanji"
+        },
+        {
+            "type": "file",
+            "name": "manifest.webmanifest",
+            "size": 806,
+            "hash": "b343d7fb716c1649a918e190a78a92dcfb7d282fda1b80c0bc354ed9e56f084d"
+        },
+        {
+            "type": "file",
+            "name": "prizes-admin.php",
+            "size": 5888,
+            "hash": "b5c633f6202afd7e06ef19ce3857873ce4a8cbf83f5895f1bd1316ed57516b60"
+        },
+        {
+            "type": "file",
+            "name": "sw.js",
+            "size": 7556,
+            "hash": "97485102228f2c3c44022780c7cc54a3351a0d005da59f5a4fd705e08da3344f"
+        },
+        {
+            "type": "file",
+            "name": "sync.html",
+            "size": 532,
+            "hash": "2d8c0f50f09a821191f35704d1104af844e531d650f20fc04fa93504127c32c1"
+        },
+        {
+            "type": "file",
+            "name": "yomeyo-extension-chromium.zip",
+            "size": 11578705,
+            "hash": "d5dab847f57d9d71cfcf62fc6b241adc220555f463ecbace3b59047c103907ec"
+        },
+        {
+            "type": "file",
+            "name": "yomeyo-extension-firefox.zip",
+            "size": 11578768,
+            "hash": "1fa7064ced7ec373269a26b9c3843cd19213056b2554a084d746fa85d027dca6"
+        },
+        {
+            "type": "file",
+            "name": "yomeyo-extension.zip",
+            "size": 11578705,
+            "hash": "d5dab847f57d9d71cfcf62fc6b241adc220555f463ecbace3b59047c103907ec"
+        },
+        {
+            "type": "file",
+            "name": "assets/GLTFLoader-DRLU0o5U.js",
+            "size": 45218,
+            "hash": "bfbc7df774155a7eb5ebf9425d867f346d8c3ca51cb16ec6c4f58ee613bda6ab"
+        },
+        {
+            "type": "file",
+            "name": "assets/SkeletonUtils-PH-FjEqV.js",
+            "size": 4144,
+            "hash": "119bf5ca3a8ed8183a6b63abffa4c746baaf89c44dad4e0b06d4674f328d1e53"
+        },
+        {
+            "type": "file",
+            "name": "assets/accounts-WTK4qg94.js",
+            "size": 4271,
+            "hash": "ad22a0f03e1c0c8a8bd87900d98ee71e980bfd38f72a512a9c84330264167fd5"
+        },
+        {
+            "type": "file",
+            "name": "assets/anki-import-BcqP_Wq9.js",
+            "size": 6290,
+            "hash": "3e37a37f7aff041c6a71b252516a0ca4cc4a3510aab1377843b06d2dca04d5e6"
+        },
+        {
+            "type": "file",
+            "name": "assets/card-DloYQ9Ck.js",
+            "size": 3079,
+            "hash": "1da136604a72c94740a7548eab9556d1cb5c2b6fc1f5cbccb290b9d1feeb47e4"
+        },
+        {
+            "type": "file",
+            "name": "assets/casino-CK1qjOx2.js",
+            "size": 41141,
+            "hash": "58f4870117f85756f870fa50b4c46b99ef3917929efb294e818c131dd7e9fbe4"
+        },
+        {
+            "type": "file",
+            "name": "assets/casino-gate-DtpzB93p.js",
+            "size": 6881,
+            "hash": "6176e073ff33625e119c5dac2031c9f5bfa2ccaf5caf95b5d77b53b5dbb2ad2b"
+        },
+        {
+            "type": "file",
+            "name": "assets/cloud-BrAf8IS0.js",
+            "size": 7487,
+            "hash": "1f27af8e808e89d6785a1a0151d2f53dc186eacb24509e30c471911e7cba152a"
+        },
+        {
+            "type": "file",
+            "name": "assets/deck-edit-C5287PMD.js",
+            "size": 17222,
+            "hash": "0c35eca672c47f737e5ae458ff519ef65a8a94a383b1d06c49c4cb31d8ef624f"
+        },
+        {
+            "type": "file",
+            "name": "assets/deck-sync-AHrIQBeC.js",
+            "size": 2147,
+            "hash": "733ece849c7fbdedf8a17314f8b5d1f30925be5b3434350cbd46e3d40382f117"
+        },
+        {
+            "type": "file",
+            "name": "assets/firebase-C4lFWwSx.js",
+            "size": 910447,
+            "hash": "506140fdbcf51cc67841de33ef9dc1e9953722daf73548d0f0cf27bc53de6d49"
+        },
+        {
+            "type": "file",
+            "name": "assets/gacha-BcoIoU6P.js",
+            "size": 13984,
+            "hash": "9acd9f8e62d3c996f87f1ac55c51a1ea8fc79c28d45eea57df0d79265b552bba"
+        },
+        {
+            "type": "file",
+            "name": "assets/gacha-collection-CB8hFBPg.js",
+            "size": 867,
+            "hash": "fe3ba74d7331f3f1100b2b67ed094c238060618c301255553b5b9b8c2ed929c7"
+        },
+        {
+            "type": "file",
+            "name": "assets/gacha-data-CaT_Zqip.js",
+            "size": 4619,
+            "hash": "8f6486d34a7b9568716c5fcbffcd3052cc7bb896c736bd63e53eeff889fea9aa"
+        },
+        {
+            "type": "file",
+            "name": "assets/gacha-roll-PtFkHMTq.js",
+            "size": 1789,
+            "hash": "3ef0cee0f423b65d8e778335d298b50a0292807dae4e4247ebd2afbe0fe297c8"
+        },
+        {
+            "type": "file",
+            "name": "assets/gacha-scene-DtWv1Tj3.js",
+            "size": 43833,
+            "hash": "d360a163cdc818f33c7d543c04bd6c49c733bdc74c1bf69394e2ed4ead4c04de"
+        },
+        {
+            "type": "file",
+            "name": "assets/index-B6BmWXm8.css",
+            "size": 63318,
+            "hash": "fe7c853b26b0f9556ee76418d4b25e867a16f4bb729bfeb945a7494388add3b9"
+        },
+        {
+            "type": "file",
+            "name": "assets/index-CGRRECQs.js",
+            "size": 404162,
+            "hash": "2f2b1fc4a576e862bb2b74106b49c6c4a01f8d23e5fa60ff5b726a6e2085213c"
+        },
+        {
+            "type": "file",
+            "name": "assets/kana-duel-CMjbBTMx.js",
+            "size": 2022,
+            "hash": "fc25174490f60affa796be49a79623b0c45c27d67f6b4906fc356bccf7bf4f54"
+        },
+        {
+            "type": "file",
+            "name": "assets/modulepreload-polyfill-B5Qt9EMX.js",
+            "size": 711,
+            "hash": "d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0"
+        },
+        {
+            "type": "file",
+            "name": "assets/profile-VM8BKhqX.js",
+            "size": 3177,
+            "hash": "bbfe4accfbd553c9ed8fb5514ca27ef44c5ac01a64d7ac7b9cab264c6ced3958"
+        },
+        {
+            "type": "file",
+            "name": "assets/library-BxlHCIkX.js",
+            "size": 2477,
+            "hash": "8ec7202ccc9d2ead79c041fe4a16c6ae5a2118b0380f577633a9f283dd46ffb4"
+        },
+        {
+            "type": "file",
+            "name": "assets/skins-D9f5ijRb.js",
+            "size": 551,
+            "hash": "4d8c885dc7ff3a098fc6a938f2a5c8f0b0137f26e18608b4add149552da8eb11"
+        },
+        {
+            "type": "file",
+            "name": "assets/store-Dxti2Gd4.js",
+            "size": 22089,
+            "hash": "8a187bdc7c8fca20512027af4a1479dde9dbc525ac821004695d09052fa1b3e3"
+        },
+        {
+            "type": "file",
+            "name": "assets/sync-Ci_V7IYI.js",
+            "size": 1366,
+            "hash": "5e938428a47f3e74bac2e88345e0e571ec7fd2dbe803520f9d20984eddfac8c8"
+        },
+        {
+            "type": "file",
+            "name": "assets/three.module-BmFnT5so.js",
+            "size": 734439,
+            "hash": "6b6e46de9a59b9446ffa11291d23c445c549ace7c562d8ebe1d69823b0651a6d"
+        },
+        {
+            "type": "file",
+            "name": "assets/unlock-CrtL2933.js",
+            "size": 4636,
+            "hash": "b93b6823be2bc93a9d3a3f6b6e2f740262e380e5e1c2ed51ca465223e929af40"
+        },
+        {
+            "type": "file",
+            "name": "dict/dict.bin",
+            "size": 31276617,
+            "hash": "e5021c61bb1650bffa50199200a430aa02763a7837ff22314e38833d0a0ffe21"
+        },
+        {
+            "type": "file",
+            "name": "feedback/correct.gif",
+            "size": 242289,
+            "hash": "0ce970b289bcfc246fcac4aca104dc33f3580ce1af61c8055feeacda57d671c6"
+        },
+        {
+            "type": "file",
+            "name": "feedback/feedback.json",
+            "size": 765,
+            "hash": "f6c5a6ce5f96cc309692ad446c13d5c579159708f7d3c0bbcadfd2a8fc3cc6ae"
+        },
+        {
+            "type": "file",
+            "name": "feedback/wrong.gif",
+            "size": 241524,
+            "hash": "5720f55ea11ee52541575627d6a2c5473bed3e5cb835c05ff94f073ea5acc2c9"
+        },
+        {
+            "type": "folder",
+            "name": "gacha/gifs"
+        },
+        {
+            "type": "folder",
+            "name": "gacha/models"
+        },
+        {
+            "type": "file",
+            "name": "gacha/prizes.json",
+            "size": 11197,
+            "hash": "09dcf5c6ccaa625ac754887b24ffb3d13d60cfb64e31a55e3b4f8545fcbb99f0"
+        },
+        {
+            "type": "file",
+            "name": "icons/icon-128.png",
+            "size": 511,
+            "hash": "05559e485ab6c607cb55203a5e0c1af27b7e6af1c5521f9de996a7457795ce00"
+        },
+        {
+            "type": "file",
+            "name": "icons/icon-192.png",
+            "size": 894,
+            "hash": "35c57a45978de67ae94046f76dc5ca5bd452e0b056f931c385d54cc2216d5f97"
+        },
+        {
+            "type": "file",
+            "name": "icons/icon-48.png",
+            "size": 203,
+            "hash": "507081fbe76e9d2431ecfee72d2c799457c24fd33473cb9f98e3cb8f90a46998"
+        },
+        {
+            "type": "file",
+            "name": "icons/icon-512.png",
+            "size": 4377,
+            "hash": "0a0ef099157f7c4ebd29495c37e622d47bc98517428760760e4fb1a210b98131"
+        },
+        {
+            "type": "file",
+            "name": "icons/icon.svg",
+            "size": 362,
+            "hash": "9225f15b049ab5732a26bf01fa5c3ff0e37b7d7e7a8bce9d21d056d369314e65"
+        },
+        {
+            "type": "file",
+            "name": "kanji/index.json",
+            "size": 850315,
+            "hash": "8165602bd3777824d07a642b8eb8de0d1fc520bc8eebcd410c4850b3d2b856b2"
+        },
+        {
+            "type": "folder",
+            "name": "kanji/strokes"
+        },
+        {
+            "type": "file",
+            "name": "gacha/gifs/README.md",
+            "size": 496,
+            "hash": "0d072df3dbc34a6cf29d4d4dd69e51168b7b77530afc3fee8f0fd21fae01df0e"
+        },
+        {
+            "type": "file",
+            "name": "gacha/gifs/blow.gif",
+            "size": 248057,
+            "hash": "5df9da862a71aa73b3f1c2932c8456ddd10edf6f3104c7f56dfc6ba4653fc3df"
+        },
+        {
+            "type": "file",
+            "name": "gacha/gifs/brain.gif",
+            "size": 23528,
+            "hash": "331813c4ecb095d2b9d93c959f3a8e9c96c33186ba929b638ad0cdc85ffd0bdb"
+        },
+        {
+            "type": "file",
+            "name": "gacha/gifs/die.gif",
+            "size": 258150,
+            "hash": "5e3a8db1e6bb12adc9bc2e88a5198ca9c9198a798fd5f9a15608e5c77ecd9f96"
+        },
+        {
+            "type": "file",
+            "name": "gacha/gifs/burger.webp",
+            "size": 204000,
+            "hash": "af7d850151773722fb90e823f5c3aa47e33ff543d59887b082f3449201dea6de"
+        },
+        {
+            "type": "file",
+            "name": "gacha/gifs/disagree.avif",
+            "size": 640353,
+            "hash": "0fa4209fcf83edcf5a51dae603abe08b313f5d8ab7a72cdcaf8a8a7eb36cfb63"
+        },
+        {
+            "type": "file",
+            "name": "gacha/gifs/goochie.gif",
+            "size": 90610,
+            "hash": "db09f88ad880c0abe5a46a33a0830c7cc1d9df44ec1ed31f5f82dea96b389ac3"
+        },
+        {
+            "type": "file",
+            "name": "gacha/gifs/haircut.gif",
+            "size": 255876,
+            "hash": "039d0b57980a470d2eae961894ddd4284e9132f0302b9fe00e917307927f8e63"
+        },
+        {
+            "type": "file",
+            "name": "gacha/gifs/hips.gif",
+            "size": 125410,
+            "hash": "529032f632be8aded5e1b68da1ab91ba9f0ed575326e55d3a08fd5a63cdacdbc"
+        },
+        {
+            "type": "file",
+            "name": "gacha/gifs/hors.gif",
+            "size": 193376,
+            "hash": "6e9e8652dc9c1cb2e430bd5e39e31f7c29d0ca35708d75d2a3cb987f26bfdf29"
+        },
+        {
+            "type": "file",
+            "name": "gacha/gifs/japan.avif",
+            "size": 120825,
+            "hash": "d359d78473df4dfbce54da23dfdffbcc3ecdc73cd072dba1ecdda1e40b0b4d2a"
+        },
+        {
+            "type": "file",
+            "name": "gacha/gifs/keaj.gif",
+            "size": 240124,
+            "hash": "842925e94994f1be8bdd937b1a7687eb0b5dab651d2ff1b4c9096c6982988fcf"
+        },
+        {
+            "type": "file",
+            "name": "gacha/gifs/kiss.gif",
+            "size": 236243,
+            "hash": "5a35b23e678d9ddf871e166fdd6f0f23a6486d3ff01af7c388b68d3855a24aba"
+        },
+        {
+            "type": "file",
+            "name": "gacha/gifs/nyaa.avif",
+            "size": 230571,
+            "hash": "ec71051b698882ff57f47cdb3b986b76ccb4346308e66ba1f2ead6a18c2f3c25"
+        },
+        {
+            "type": "file",
+            "name": "gacha/gifs/old.avif",
+            "size": 153347,
+            "hash": "78e7e32777b0cd9430b9145c73bbe5314c18029d754572bb3ca572e720585b91"
+        },
+        {
+            "type": "file",
+            "name": "gacha/gifs/oomfie.gif",
+            "size": 246443,
+            "hash": "23038783d62dc204ea457992621746a54b8b822bba9de98bc8ab4e0e6fcbae39"
+        },
+        {
+            "type": "file",
+            "name": "gacha/gifs/oshi.gif",
+            "size": 228039,
+            "hash": "c5c27b7d9ad22153421044c41924b641832bc1b3632980feeb5c41e1e43cb84e"
+        },
+        {
+            "type": "file",
+            "name": "gacha/gifs/pears.gif",
+            "size": 259000,
+            "hash": "21c2868f42d95878ed8a527d97091edc8708e85bfa3823d1899a94f4df00588d"
+        },
+        {
+            "type": "file",
+            "name": "gacha/gifs/phone.gif",
+            "size": 147300,
+            "hash": "dcc17638264583b08f0df6a3d0d0cc9fafc06642494c0041d84a95e508540b0d"
+        },
+        {
+            "type": "file",
+            "name": "gacha/gifs/plays.gif",
+            "size": 53437,
+            "hash": "353784e518b82db1c63c3f6bd9df8840ed38c05582576db8f43bc8ee66fff657"
+        },
+        {
+            "type": "file",
+            "name": "gacha/gifs/rubrub.gif",
+            "size": 66179,
+            "hash": "76f7d1dd835689bdc938e91689b63b3f96f582a8169a9c340363b2ba8770d984"
+        },
+        {
+            "type": "file",
+            "name": "gacha/gifs/shower.avif",
+            "size": 64630,
+            "hash": "aedf2826d11a5307c2f607b28f3fe9f56ebef0a22a3dbed3ffeabaa96a68c421"
+        },
+        {
+            "type": "file",
+            "name": "gacha/gifs/slop.gif",
+            "size": 258321,
+            "hash": "73021d09e7b5dd5ece0498c2fd05ae0ee53c482962b10e1322c1d028bb91293d"
+        },
+        {
+            "type": "file",
+            "name": "gacha/gifs/soft.gif",
+            "size": 100642,
+            "hash": "b2bf0839cc1690c555bdd2fb45ab95c4a9334a72dd150830585d88bcaf096e2e"
+        },
+        {
+            "type": "file",
+            "name": "gacha/gifs/sorry.gif",
+            "size": 177282,
+            "hash": "9021f6e933a70c3c590e2ddbe64be2592889168d31b7744777e9dbcf42f965c1"
+        },
+        {
+            "type": "file",
+            "name": "gacha/gifs/stamp.gif",
+            "size": 2081,
+            "hash": "68c1990d78bf400321f0cc55af6cb9b8a5d7c24b2546860af870c3b576399379"
+        },
+        {
+            "type": "file",
+            "name": "gacha/gifs/stomp.gif",
+            "size": 253037,
+            "hash": "f440586884bad97935c913d7c3184eeabdc1695929bc1a86e80d11658989d85c"
+        },
+        {
+            "type": "file",
+            "name": "gacha/gifs/talk.gif",
+            "size": 87709,
+            "hash": "c1fb74d012464e9ea6b926a3c3db0f18115c4343e41d53720e0036030f4c5323"
+        },
+        {
+            "type": "file",
+            "name": "gacha/gifs/threat.gif",
+            "size": 249860,
+            "hash": "4fbc11084e732e038e21e3f82080d694555eca5d4ad11534f315dc76281deb5c"
+        },
+        {
+            "type": "file",
+            "name": "gacha/gifs/touch.gif",
+            "size": 98999,
+            "hash": "7faf30a7463a2ffaf5010b6ca63db0d7fff0d4ab2c3d809e956fdf3bbd6f3ded"
+        },
+        {
+            "type": "file",
+            "name": "gacha/gifs/what.gif",
+            "size": 22552,
+            "hash": "3c40bf7eb6d5ca37543c3d39665da3453d10edf4b3bf2ad846b545cd839c15f5"
+        },
+        {
+            "type": "file",
+            "name": "gacha/models/chito.glb",
+            "size": 561576,
+            "hash": "d5e7a6c911c1399cf2e5fef4a21abe56ee282032c747e5b99dfbb5e755b5ecec"
+        },
+        {
+            "type": "file",
+            "name": "gacha/models/yuuri.glb",
+            "size": 523184,
+            "hash": "71ec82f4c01e974ce4220f86fb64c2c73fc6f38e328db528d0d38ec2299c2afe"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/200.json",
+            "size": 1046,
+            "hash": "4905ceb384e771bce43858ceea9d6c93601a8a21fa744e1bf02f2339976ff5c7"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/20b.json",
+            "size": 555,
+            "hash": "454808138f8f1f873fb23fa7a587d0fd24af96827277db25f86b1804f2961a26"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/34.json",
+            "size": 1867,
+            "hash": "7e40bc22d1f9c674474b0759c549ebea218a217e539de3f61d4a0b0c0acd0aa2"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/4e.json",
+            "size": 53812,
+            "hash": "4a61f1c44db22312984249ae8acbecf6f9c3b166852ea4d51137533c150ec744"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/4f.json",
+            "size": 63088,
+            "hash": "ebe49b1b9bea238bb644362ced34cc7e0c2d69bba05432b1f3e02fae383b09b1"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/50.json",
+            "size": 76324,
+            "hash": "60df7341a4180d50be173ab1c269dd684b095f8ff5f87dae805ce28634ed5d74"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/51.json",
+            "size": 87469,
+            "hash": "261cb55a7ab880c11005639dbb27a22b18707a1dc9e8a4d09b172684e8bb7021"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/52.json",
+            "size": 87066,
+            "hash": "5842811a4e051bbea9bbf2a3c7439099d23686d8f79821c65af7dcf8ca8edd21"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/53.json",
+            "size": 71463,
+            "hash": "20a338acfe9a9ad14727a38bb8ab28a5d12af49cad6cccc069d301dc2ddd8707"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/54.json",
+            "size": 64067,
+            "hash": "b982a1767ae317214c067b9ab613993cb29867cbfc8391a5954875c9d03393f9"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/55.json",
+            "size": 64159,
+            "hash": "7eb892bd67c883a2282d7e42b2bc858d1339cd48d147046c7ca985be4a65c653"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/56.json",
+            "size": 74129,
+            "hash": "59d8a85c6b4095f83f5472022043ae37826d1e944badb7806651ec4a7b01e889"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/58.json",
+            "size": 93141,
+            "hash": "9b0efc262996c39cd7654c030b4ea7e8b45d5a8eb4fa7b82ebb0e632a0ce1e79"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/57.json",
+            "size": 55002,
+            "hash": "1bdbe8824b0b8d8028d4d960182b73e9345bd5d01a45e4135988ed46e53cd629"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/59.json",
+            "size": 65849,
+            "hash": "792e317e9126b957df0dde9faa728194c337dbb521c82d6d006bca6168aa3c37"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/5a.json",
+            "size": 46809,
+            "hash": "20293568da3b2f65628984699561f3a42df7a10f26340a292988bbe1d9501a4e"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/5b.json",
+            "size": 92961,
+            "hash": "5b5c45d608eede54808d637f8dbb55ddaa52f7b473a46561c5e75ba83b311591"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/5c.json",
+            "size": 68543,
+            "hash": "30f6377cf4229615ee39480b5119fb9a7552ae9d2ec9039dbaf0f81006d9602f"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/5d.json",
+            "size": 66441,
+            "hash": "aff936460fd2170b59457efab12a12b7557b2b6673ea76e0f11ba098893fe9b1"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/5e.json",
+            "size": 92943,
+            "hash": "94a94e68863319e7b35c68fc030a0787ea64546284659729c7e1a83f684ebc4e"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/5f.json",
+            "size": 90463,
+            "hash": "2e6c35dc241bf2e83ef73309e155b61d88c53567956fd495c0d80cb056652f72"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/60.json",
+            "size": 77154,
+            "hash": "ea7ce9bb07b0afb88daa4e4578559e8907da88ead7b900a2c351588f452c6542"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/61.json",
+            "size": 107928,
+            "hash": "ff883e897119f8e6dd7c9ae116cfd22018102559b58022ef9052d0b8e9f36a27"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/62.json",
+            "size": 84470,
+            "hash": "b7e450d41f35b980c871580e582e50513baab2d43872c6fc1092ac2e70ca9cbd"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/63.json",
+            "size": 76223,
+            "hash": "538727c56aee1681d8730445505503106d207c9964053d68694849b9d83bd85d"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/64.json",
+            "size": 84427,
+            "hash": "1c58aeee645ddb94e5b1b83dde4e569e702efbb65b0ef8bbda2c13203d7aae99"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/66.json",
+            "size": 87133,
+            "hash": "6a1bfa17863b8049aa94f84e417a993383861bdc7f1cdde88ec44df159a0b8c0"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/65.json",
+            "size": 88745,
+            "hash": "e60de5b1e33c9789da1a691e0ee20973732597e8805b96d468f6c1bc227f530d"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/67.json",
+            "size": 77460,
+            "hash": "a96150fc22d896db7fb689c118bec552781c9217d7dbb96a838676d5ab94e13a"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/68.json",
+            "size": 79975,
+            "hash": "ebd5a7c7d6015a3f40eeeae98a395861120056b8cf5789452c368dde11c84b1a"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/69.json",
+            "size": 100836,
+            "hash": "7ae9f89170701c68bd28bc5943f0c03a22961369aab37f52a6b4d9759483dae5"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/6a.json",
+            "size": 88072,
+            "hash": "74862125c71100fa26db8e633a8e9e5aeafa040c055d403e6b30766807945baa"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/6b.json",
+            "size": 87286,
+            "hash": "b4688b1e52ed6cdc444e89a633e44021ac451928f78eadce107e3fddd7bf790f"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/6c.json",
+            "size": 48940,
+            "hash": "8438340a19bcce55fb7d1733dc0e9a28468695ddc6c138eadb8a677e2de741dc"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/6d.json",
+            "size": 60509,
+            "hash": "4277cdad7bae3225d2390885891dd693b0acc8b070e43901c75c649f6619c77e"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/6f.json",
+            "size": 86719,
+            "hash": "19cf753a5cb1c8756bab24d3b9c4a6e028869b0eafd9a7a8d10ce06031e68809"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/6e.json",
+            "size": 79797,
+            "hash": "dd0b27c2c01cad68a25d63fa7694557969bf0c6bdf62f90b43d944d22ae4bdfa"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/70.json",
+            "size": 53381,
+            "hash": "a288dac6d28c8c282c810cbf93cd5e5ff13a5a621c660ff5ddaf45b7bdaebf66"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/71.json",
+            "size": 66301,
+            "hash": "0e9e17cef746b34f63fbd1ce4aac344ca5a488b01fa3af1b260fdb903b032a49"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/72.json",
+            "size": 61093,
+            "hash": "1c129be2842fc58c07bf5efc88ece5c31c0d1d36a1178f5515fda7480151ba3e"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/73.json",
+            "size": 53775,
+            "hash": "4438a8ebcc2b8f2e14818dbe2a16a11f921f875796843192faf01a3f78b4e97b"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/74.json",
+            "size": 62088,
+            "hash": "ff5fd8ecbc508853febfbb0785af667c1cd4bf5ecc86927109bf7169730b99ca"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/75.json",
+            "size": 100766,
+            "hash": "41de3b5b41be893c5662535d8c2b313861553f1a69fedbb66535fb93c580a3ae"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/76.json",
+            "size": 90434,
+            "hash": "ae0d3b8824c7489dfb99b98b9db83334caaf9b2299945aa0c804299f06269abb"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/77.json",
+            "size": 64266,
+            "hash": "70ee50e97bd94c58b54f155167c5d9c7d8bfba46ef6bb4a8beab620c77870291"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/78.json",
+            "size": 62354,
+            "hash": "a21f659a2d42f2cc630e9ad946dc42071f3941883323747d3320b05fd3769267"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/79.json",
+            "size": 74908,
+            "hash": "c63fc1c85b5a5dd64836b91f9b6dd59b211662e34c5e43b0165b70a112c2812e"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/7a.json",
+            "size": 102028,
+            "hash": "74061315695977e12b5d3a777ecdb250b09aee39f215ba9ee5e7b904c4acdd67"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/7b.json",
+            "size": 84065,
+            "hash": "ab39d7977ff1c730a1be44475a465a7ad401189c8c2d894a7a84f597ef5a5764"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/7c.json",
+            "size": 103648,
+            "hash": "0f7219c1b6a816c9d5b0bd6a6b04444b10cf11720bf1e8f1595e4d88aacdfa74"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/7d.json",
+            "size": 114250,
+            "hash": "4d05dd22b07efb43888adfc6c0e038636c3a2ba196dcea16279c806da144dd94"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/7f.json",
+            "size": 79479,
+            "hash": "06f187588dc7954ed0a32d576ec0acd81d6a3d4c2b692b96247aa806f33f064d"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/81.json",
+            "size": 96484,
+            "hash": "9b48b76a242252233bd2bcd6dbf0e33bd99004d471ae341479a7e79585ebca8c"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/80.json",
+            "size": 79088,
+            "hash": "f5afc6ceacb3761bc1e6d53c20c9f97fdda2429197ae591d6a3a75b721efbc5b"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/7e.json",
+            "size": 99591,
+            "hash": "0e6b1583350d6142178daafe976561c9b31c3e8dee00c1ef5bc2c6cd282890a6"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/82.json",
+            "size": 82560,
+            "hash": "9b6e1590a769ecb51146b82f5bf022b9a9011f9e771e93d0861392826ee966f7"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/83.json",
+            "size": 61400,
+            "hash": "68890072a2fa2bbad307f220dbe513734b58a584bac41c2dee3c3c6f53498ccf"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/84.json",
+            "size": 75023,
+            "hash": "82ee2e805c2411388cd8700ccdc2bbff14bc16ea2d25b43c1286fa8f46b5dec3"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/86.json",
+            "size": 65295,
+            "hash": "97a77fbc3fb45887e35ce6a57c851ffb1ec49abcb5eee89540064a8df7b4a9ae"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/85.json",
+            "size": 98408,
+            "hash": "ffe7d78d0a2957ed154956542a3a681500b57ac8f93d873582860f2373e5038f"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/87.json",
+            "size": 77162,
+            "hash": "1db082a3bbb43262114f8e516944db4e1dad2a99ff4733439c9c914cb7d1c6b5"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/88.json",
+            "size": 90338,
+            "hash": "c449d6466bcf9aa386aee94779d1b3cbd74cfd11d65387be5792383a37b40aa9"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/89.json",
+            "size": 89336,
+            "hash": "b060a3c5bad5dbe545a9d1653079284a9b2a6ba4269aff79de31f780b8d5c5ce"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/8a.json",
+            "size": 121401,
+            "hash": "893c69a08e3c0e803dd8e00c26d71cc7eebec632b34aef398200618694fc9b93"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/8b.json",
+            "size": 90227,
+            "hash": "89de9d2f2737e68865e5f5049e32e3aea82d0c9e3e9255a642966c0d6003b555"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/8c.json",
+            "size": 81562,
+            "hash": "1d0545c1705d054e830f73ab911617d6b54bcc4aed0041569425d2fe8b6be1c8"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/8d.json",
+            "size": 55869,
+            "hash": "f3b3743d76b9753b4861a586b1ee0883d4998889bd2372575571ff22276f5441"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/8e.json",
+            "size": 85002,
+            "hash": "ce1bada02d0ddf1bb8016d8e243ddee9386e0694edeb625924d77dd5c6102a77"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/8f.json",
+            "size": 90347,
+            "hash": "62eb430ce6e69545d783585028ebc978baa207b9deb61243bf5f1ce0fd355bfb"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/90.json",
+            "size": 113266,
+            "hash": "11abffa9a65a44d65123e06cbc439abc0b3ddbbfec38e76e98472c4d55fde27f"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/91.json",
+            "size": 82165,
+            "hash": "020f9c5b365bdabd539854c1b26890308f972cd7ebeb92b8482611a9e2c0dc6d"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/92.json",
+            "size": 56527,
+            "hash": "610cb195c15733d7d2c3ffeb1ae8746e91a1debfdeadd6bb041aaff0b641c238"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/93.json",
+            "size": 76557,
+            "hash": "fb5850042979006b7fe8752fe2f13dc340e48203d8d30656e8829d712b96547d"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/94.json",
+            "size": 57997,
+            "hash": "77a5022d3664cbcf117ec1405ebf8192543872806efbff3eb07e20650d0606e9"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/95.json",
+            "size": 47090,
+            "hash": "74f12a6f075ed0795376c6fe47f9afeae929d74dd5e9af515aabb6c6f15b3c66"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/96.json",
+            "size": 97246,
+            "hash": "8cde91f70286978e6d03a29134008472a613f9edc8abed77db8fe1e14c7cfc3c"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/97.json",
+            "size": 104724,
+            "hash": "c19e72e8a351f34186afb88edd4433795e9b96e7e79f8cae6f744659891358af"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/98.json",
+            "size": 82959,
+            "hash": "8de9e31e07e7f7c29c47152e1aecdf4c8c54a5ba8191ed2ff3a10ae086c32da9"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/99.json",
+            "size": 79017,
+            "hash": "0563cd5d12c7a66b3772398207e5aa07f6d3232884d5e2e61a1bfcad5a81c2b7"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/9a.json",
+            "size": 80540,
+            "hash": "0aaafea2ca7e4b3174a700d62ff307f9514eeb26467e91f335341099d7b07cbc"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/9b.json",
+            "size": 91311,
+            "hash": "7f10d4dc37e70424de356b611a9bfebcd9309ab66d8a2543671e368d1e475534"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/9c.json",
+            "size": 64496,
+            "hash": "22bbe5aa6121e5c2e152ebb0eb3f0d019ec84387f4ec693e882e305c37125b22"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/9d.json",
+            "size": 90058,
+            "hash": "bd8c108db22a4b1260ebb35dfa2f34d426ae133fae8755f7b38760e1191b556e"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/9e.json",
+            "size": 79451,
+            "hash": "e2bb857c83a31ac9d9df1b7be635a15ee0b5e76e0d56f316906f789d8484dd91"
+        },
+        {
+            "type": "file",
+            "name": "kanji/strokes/9f.json",
+            "size": 48329,
+            "hash": "253de88b0f8a5e7f4189e9419022a7acde5a7577f6e5905ea2b7437470dc35e3"
+        }
+    ]
+}
