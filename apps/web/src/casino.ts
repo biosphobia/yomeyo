@@ -88,6 +88,13 @@ function pose(bones: Record<string, any> | null, name: string, amount = 1, t = 0
       set(bones.Spine, -0.08 + Math.sin(t * 1.1) * 0.03);
       set(bones.Head, Math.sin(t * 0.9) * 0.06);
       break;
+    case "deal":
+      // Hands over the felt, working.
+      set(bones.LeftArm, -1.0, 0, -0.3);
+      set(bones.RightArm, -1.0, 0, 0.3);
+      set(bones.LeftForeArm, -1.0);
+      set(bones.RightForeArm, -1.0 + Math.sin(t * 1.6) * 0.1);
+      break;
     case "clear":
       for (const bone of Object.values(bones)) bone?.rotation.set(0, 0, 0);
       break;
@@ -251,6 +258,11 @@ interface Room {
   winLight: any;
   mine: Die[];
   theirs: Die[];
+  /** The high-low card, lying on the felt, repaintable per rank. */
+  card: any;
+  paintCard: (rank: string) => void;
+  /** A pool of gold coins for the win showers. */
+  coins: any[];
 }
 
 function buildRoom(THREE: any, scene: any): Room {
@@ -361,7 +373,75 @@ function buildRoom(THREE: any, scene: any): Room {
   const theirs = [0, 1, 2].map(() => makeDie(THREE, true));
   for (const die of [...mine, ...theirs]) scene.add(die.group);
 
-  return { reels, bulbs, neon, pink, winLight, mine, theirs };
+  // The high-low card: a real card on the felt, face on top, back below,
+  // its rank repainted on a shared canvas per deal.
+  const faceCanvas = document.createElement("canvas");
+  faceCanvas.width = 256;
+  faceCanvas.height = 358;
+  const facePaint = faceCanvas.getContext("2d")!;
+  const faceTexture = new THREE.CanvasTexture(faceCanvas);
+  const paintCard = (rank: string): void => {
+    facePaint.fillStyle = "#faf6ec";
+    facePaint.fillRect(0, 0, 256, 358);
+    facePaint.strokeStyle = "#b8b0a0";
+    facePaint.lineWidth = 6;
+    facePaint.strokeRect(8, 8, 240, 342);
+    facePaint.fillStyle = "#a32548";
+    facePaint.textAlign = "center";
+    facePaint.font = "bold 170px 'Hiragino Sans', sans-serif";
+    facePaint.fillText(rank, 128, 235);
+    facePaint.font = "bold 54px 'Hiragino Sans', sans-serif";
+    facePaint.textAlign = "left";
+    facePaint.fillText(rank, 22, 66);
+    facePaint.textAlign = "right";
+    facePaint.fillText(rank, 234, 336);
+    faceTexture.needsUpdate = true;
+  };
+  paintCard("?");
+  const backCanvas = document.createElement("canvas");
+  backCanvas.width = 256;
+  backCanvas.height = 358;
+  const backPaint = backCanvas.getContext("2d")!;
+  backPaint.fillStyle = "#5a1a30";
+  backPaint.fillRect(0, 0, 256, 358);
+  backPaint.strokeStyle = "rgba(230, 176, 96, 0.6)";
+  backPaint.lineWidth = 4;
+  for (let i = -3; i < 6; i++) {
+    backPaint.beginPath();
+    backPaint.moveTo(i * 64, 0);
+    backPaint.lineTo(i * 64 + 179, 358);
+    backPaint.stroke();
+    backPaint.beginPath();
+    backPaint.moveTo(i * 64 + 179, 0);
+    backPaint.lineTo(i * 64, 358);
+    backPaint.stroke();
+  }
+  const edge = matte(0xf2ede0, 0.5);
+  const card = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.012, 0.47), [
+    edge,
+    edge,
+    new THREE.MeshStandardMaterial({ map: faceTexture, roughness: 0.45 }),
+    new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(backCanvas), roughness: 0.55 }),
+    edge,
+    edge,
+  ]);
+  card.castShadow = true;
+  card.visible = false;
+  card.position.set(TX, 0.93, TZ + 0.35);
+  scene.add(card);
+
+  // Coins, waiting in the dark for somebody to win.
+  const coinMat = new THREE.MeshStandardMaterial({ color: 0xe8b24c, roughness: 0.25, metalness: 0.6 });
+  const coinGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.016, 10);
+  const coins: any[] = [];
+  for (let i = 0; i < 22; i++) {
+    const coin = new THREE.Mesh(coinGeo, coinMat);
+    coin.visible = false;
+    scene.add(coin);
+    coins.push(coin);
+  }
+
+  return { reels, bulbs, neon, pink, winLight, mine, theirs, card, paintCard, coins };
 }
 
 // ---------------- the render ----------------
@@ -405,13 +485,34 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
     reaction = { who, name, until: performance.now() / 1000 + seconds };
   };
 
+  // Coins in flight: mesh plus velocity, run by the render loop.
+  const flyingCoins: { mesh: any; vx: number; vy: number; vz: number }[] = [];
+  const showerCoins = (origin: [number, number, number], count: number): void => {
+    if (!room) return;
+    const idle = room.coins.filter((coin: any) => !coin.visible).slice(0, count);
+    for (const coin of idle) {
+      coin.visible = true;
+      coin.position.set(origin[0] + (Math.random() - 0.5) * 0.4, origin[1], origin[2] + (Math.random() - 0.5) * 0.3);
+      coin.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+      flyingCoins.push({
+        mesh: coin,
+        vx: (Math.random() - 0.5) * 1.6,
+        vy: 1.6 + Math.random() * 1.6,
+        vz: (Math.random() - 0.5) * 1.2 + 0.6,
+      });
+    }
+    setTimeout(() => sfx.clatter(), 350);
+    setTimeout(() => sfx.clatter(), 550);
+  };
+
   // The light show: a flash that decays, a strobe that outstays it.
   const fx = { flashUntil: 0, strobeUntil: 0 };
-  const celebrate = (big: boolean): void => {
+  const celebrate = (big: boolean, at: [number, number, number]): void => {
     const now = performance.now() / 1000;
     fx.flashUntil = now + 0.6;
     fx.strobeUntil = now + (big ? 2.8 : 1.3);
     sfx.bell();
+    showerCoins(at, big ? 18 : 8);
     if (big) {
       setTimeout(() => sfx.bell(), 220);
       setTimeout(() => sfx.bell(), 440);
@@ -426,9 +527,22 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
     // an angle, and Yuuri on her stool in profile.
     slots: { pos: [1.0, 1.8, -0.7], look: [MX + 0.2, 1.2, MZ + 0.3] },
     dice: { pos: [TX, 2.05, -0.9], look: [TX, 0.95, TZ] },
-    highlow: { pos: [TX, 2.05, -0.9], look: [TX, 0.95, TZ] },
+    // The card table from a lower, angled seat: same felt, different chair.
+    highlow: { pos: [TX - 0.85, 1.6, -1.5], look: [TX + 0.1, 0.95, TZ + 0.3] },
   };
   const ZOOM = { pos: [TX, 1.6, -2.05], look: [TX, 0.95, TZ + 0.1] };
+
+  // The picture leans with the pointer, a few centimetres of parallax.
+  const pointer = { x: 0, y: 0, tx: 0, ty: 0 };
+  stageHost.addEventListener("pointermove", (ev: PointerEvent) => {
+    const rect = stageHost.getBoundingClientRect();
+    pointer.tx = ((ev.clientX - rect.left) / Math.max(1, rect.width) - 0.5) * 2;
+    pointer.ty = ((ev.clientY - rect.top) / Math.max(1, rect.height) - 0.5) * 2;
+  });
+  stageHost.addEventListener("pointerleave", () => {
+    pointer.tx = 0;
+    pointer.ty = 0;
+  });
 
   try {
     const { THREE, models } = (await warmUpCutscene()) as { THREE: any; models: any[] };
@@ -489,19 +603,42 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
     // ---- the loop ----
     const camPos = new THREE.Vector3(0, 1.7, 0.5);
     const camLook = new THREE.Vector3(MX, 1.2, MZ);
+    let lastFrame = performance.now();
     const frame = (): void => {
       if (mySeq !== seq || !stageHost.isConnected) {
         renderer.dispose();
         return;
       }
       requestAnimationFrame(frame);
-      const t = performance.now() / 1000;
+      const now = performance.now();
+      const dt = Math.min(0.05, (now - lastFrame) / 1000);
+      lastFrame = now;
+      const t = now / 1000;
 
       if (yuuri) {
         pose(yuuri.bones, "sit", 1);
         pose(yuuri.bones, "lean", 1, t);
       }
-      if (chito) pose(chito.bones, "lean", 1, t + 3);
+      if (chito) {
+        pose(chito.bones, "lean", 1, t + 3);
+        // At the card table she's working; at the dice bowl, just watching.
+        if (game === "highlow") pose(chito.bones, "deal", 0.7, t);
+      }
+
+      // Coins fall, bounce nowhere, and are swept away.
+      for (let i = flyingCoins.length - 1; i >= 0; i--) {
+        const coin = flyingCoins[i];
+        coin.vy -= 6.5 * dt;
+        coin.mesh.position.x += coin.vx * dt;
+        coin.mesh.position.y += coin.vy * dt;
+        coin.mesh.position.z += coin.vz * dt;
+        coin.mesh.rotation.x += 6 * dt;
+        coin.mesh.rotation.z += 4 * dt;
+        if (coin.mesh.position.y < 0.04) {
+          coin.mesh.visible = false;
+          flyingCoins.splice(i, 1);
+        }
+      }
       if (reaction && t < reaction.until) {
         const actor = cast[reaction.who];
         if (actor) {
@@ -525,8 +662,14 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
       const target = t < zoomUntil ? ZOOM : CAMS[game];
       camPos.lerp(new THREE.Vector3(...target.pos), 0.045);
       camLook.lerp(new THREE.Vector3(...target.look), 0.045);
-      camera.position.set(camPos.x + Math.sin(t * 0.4) * 0.05, camPos.y, camPos.z);
-      camera.lookAt(camLook);
+      pointer.x += (pointer.tx - pointer.x) * 0.06;
+      pointer.y += (pointer.ty - pointer.y) * 0.06;
+      camera.position.set(
+        camPos.x + Math.sin(t * 0.4) * 0.05 + pointer.x * 0.16,
+        camPos.y - pointer.y * 0.1,
+        camPos.z,
+      );
+      camera.lookAt(camLook.x - pointer.x * 0.06, camLook.y + pointer.y * 0.04, camLook.z);
       renderer.render(scene, camera);
     };
     frame();
@@ -584,7 +727,64 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
   const hideDice = (): void => {
     if (!room) return;
     for (const die of [...room.mine, ...room.theirs]) die.group.visible = false;
+    room.card.visible = false;
   };
+
+  // ---- the card in the air ----
+
+  const CARD_REST = { x: TX, y: 0.93, z: TZ + 0.35 };
+
+  /** Hop, spin a full turn, land face-up showing `rank` (repainted mid-air). */
+  const flipCard = (rank: string): Promise<void> =>
+    new Promise((resolve) => {
+      if (!room) return resolve();
+      const card = room.card;
+      card.visible = true;
+      sfx.whoosh();
+      const start = performance.now();
+      const DUR = 620;
+      let painted = false;
+      const tick = (): void => {
+        if (mySeq !== seq) return resolve();
+        const p = Math.min(1, (performance.now() - start) / DUR);
+        const hop = Math.sin(p * Math.PI) * 0.5;
+        card.position.set(CARD_REST.x, CARD_REST.y + hop, CARD_REST.z);
+        card.rotation.z = Math.PI * 2 * p;
+        card.rotation.y = 0.25 - Math.sin(p * Math.PI) * 0.3;
+        if (!painted && p >= 0.45) {
+          painted = true;
+          room!.paintCard(rank);
+        }
+        if (p >= 1) {
+          card.rotation.set(0, 0.25, 0);
+          sfx.open();
+          resolve();
+        } else requestAnimationFrame(tick);
+      };
+      tick();
+    });
+
+  /** The pot's card slides across the felt to the dealer and is gone. */
+  const loseCard = (): Promise<void> =>
+    new Promise((resolve) => {
+      if (!room) return resolve();
+      const card = room.card;
+      const start = performance.now();
+      const DUR = 700;
+      const fromZ = card.position.z;
+      const tick = (): void => {
+        if (mySeq !== seq) return resolve();
+        const p = Math.min(1, (performance.now() - start) / DUR);
+        card.position.z = fromZ - p * 1.0;
+        card.position.x = CARD_REST.x + Math.sin(p * Math.PI) * 0.12;
+        card.rotation.y = 0.25 + p * 1.2;
+        if (p >= 1) {
+          card.visible = false;
+          resolve();
+        } else requestAnimationFrame(tick);
+      };
+      tick();
+    });
 
   // ---- the games ----
 
@@ -680,7 +880,7 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
       const won = Math.floor(bet * mult);
       await payout(won);
       if (won > 0) {
-        celebrate(mult >= 14);
+        celebrate(mult >= 14, [MX, 2.3, MZ + 0.5]);
         react(0, "cheer");
         if (mult >= 20) react(1, "hurt", 2.6);
         result.textContent = `${line} — +${formatYennies(won)}`;
@@ -733,6 +933,7 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
       const player = handOf(playerDice);
       result.textContent = `You: ${player.name}…`;
       await new Promise((r) => setTimeout(r, 500));
+      sfx.creak();
       const dealerDice = roll3();
       await throwDice(room.theirs, dealerDice, TZ - 0.5);
       const dealer = handOf(dealerDice);
@@ -740,7 +941,7 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
       if (player.score > dealer.score && player.score > 0) {
         const mult = big ? 3 : 2;
         await payout(bet * mult);
-        celebrate(big);
+        celebrate(big, [TX, 1.5, TZ]);
         react(0, "cheer");
         react(1, "hurt", 2.0);
         result.textContent = `You: ${player.name}. Chito: ${dealer.name}. +${formatYennies(bet * mult - bet)}!`;
@@ -761,7 +962,17 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
   const drawCard = (): number => 1 + Math.floor(Math.random() * 13);
 
   const drawHighlow = (): void => {
-    hideDice();
+    if (room) {
+      for (const die of [...room.mine, ...room.theirs]) die.group.visible = false;
+      if (pot > 0) {
+        room.paintCard(RANK[card]);
+        room.card.visible = true;
+        room.card.position.set(TX, 0.93, TZ + 0.35);
+        room.card.rotation.set(0, 0.25, 0);
+      } else {
+        room.card.visible = false;
+      }
+    }
     const playing = pot > 0;
     gameBox.innerHTML = `
       ${playing ? "" : betRow()}
@@ -783,9 +994,11 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
     wireBets();
     gameBox.querySelector("#cas-deal")?.addEventListener("click", async () => {
       if (!(await take(bet))) return;
+      busy = true;
       pot = bet;
       card = drawCard();
-      sfx.open();
+      await flipCard(RANK[card]);
+      busy = false;
       drawHighlow();
     });
     const guess = async (higher: boolean): Promise<void> => {
@@ -795,9 +1008,10 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
       while (next === card) next = drawCard();
       const win = higher ? next > card : next < card;
       card = next;
+      await flipCard(RANK[card]);
       if (win) {
         pot *= 2;
-        celebrate(pot >= bet * 8);
+        celebrate(pot >= bet * 8, [TX, 1.5, TZ + 0.3]);
         react(0, "cheer", 1.4);
         busy = false;
         drawHighlow();
@@ -807,6 +1021,7 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
         sfx.growl();
         react(0, "hurt", 1.8);
         react(1, "point", 2.0);
+        await loseCard();
         pot = 0;
         busy = false;
         drawHighlow();
@@ -820,7 +1035,7 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
       await payout(pot);
       say(`Cashed out ${formatYennies(pot)}.`);
       react(0, "cheer", 1.6);
-      sfx.bell();
+      celebrate(pot >= bet * 8, [TX, 1.5, TZ + 0.3]);
       pot = 0;
       drawHighlow();
     });
@@ -837,6 +1052,7 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
     tab.addEventListener("click", () => {
       if (busy) return;
       game = tab.dataset.g as GameId;
+      sfx.whoosh();
       for (const other of body.querySelectorAll(".cas-tabs button")) other.classList.toggle("on", other === tab);
       drawGame();
     });
