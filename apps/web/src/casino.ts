@@ -118,6 +118,14 @@ function pose(bones: Record<string, any> | null, name: string, amount = 1, t = 0
       set(bones.LeftForeArm, -1.0);
       set(bones.RightForeArm, -1.0 + Math.sin(t * 1.6) * 0.1);
       break;
+    case "flail":
+      // Every limb its own opinion: the ragdoll special.
+      set(bones.LeftArm, Math.sin(t * 21) * 1.4, 0, -0.6 + Math.sin(t * 17 + 2) * 0.7);
+      set(bones.RightArm, Math.sin(t * 19 + 1) * 1.4, 0, 0.6 + Math.sin(t * 23 + 4) * 0.7);
+      set(bones.LeftUpLeg, Math.sin(t * 18 + 3) * 1.2);
+      set(bones.RightUpLeg, Math.sin(t * 22 + 5) * 1.2);
+      set(bones.Spine, Math.sin(t * 9 + 1) * 0.4);
+      break;
     case "clear":
       for (const bone of Object.values(bones)) bone?.rotation.set(0, 0, 0);
       break;
@@ -253,8 +261,8 @@ interface Die {
 interface Room {
   /** Redraw the slot screen: three column positions in cells, win rows lit. */
   drawSlots: (positions: number[], highlight: boolean) => void;
-  /** The pachinko machine: its tilted board, the ball, pegs in board space. */
-  pachinko: { group: any; ball: any; pegs: { x: number; y: number }[] };
+  /** The pachinko machine: tilted board, ball, pegs, marquee and windmill. */
+  pachinko: { group: any; ball: any; pegs: { x: number; y: number }[]; bulbs: any[]; spinner: any };
   /** The shell game's cups and the fish that hides under one. */
   cups: any[];
   cupFish: any;
@@ -402,29 +410,57 @@ function buildRoom(THREE: any, scene: any): Room {
   slab(gold, 1.4, 0.12, 0.8, PKX, 2.32, MZ);
   slab(gold, 1.4, 0.12, 0.8, PKX, 0.06, MZ);
   const pachinkoGroup = new THREE.Group();
-  pachinkoGroup.position.set(PKX, 1.42, MZ + 0.34);
+  // Proud of the cabinet face even at the top of the lean-back, so the
+  // board never sinks into the box behind it.
+  pachinkoGroup.position.set(PKX, 1.42, MZ + 0.46);
   pachinkoGroup.rotation.x = -0.07;
   scene.add(pachinkoGroup);
   const boardCanvas = document.createElement("canvas");
   boardCanvas.width = 256;
   boardCanvas.height = 384;
   const boardPaint = boardCanvas.getContext("2d")!;
-  boardPaint.fillStyle = "#1a1030";
+  boardPaint.fillStyle = "#140a26";
   boardPaint.fillRect(0, 0, 256, 384);
-  // A rising sun of arcs behind the pins, parlour-loud.
-  for (let ring = 6; ring >= 1; ring--) {
+  // A full sunburst behind the pins, parlour-loud.
+  for (let ray = 0; ray < 16; ray++) {
     boardPaint.beginPath();
-    boardPaint.arc(128, 150, ring * 26, 0, Math.PI * 2);
-    boardPaint.fillStyle = ring % 2 === 0 ? "#3a1e56" : "#552138";
+    boardPaint.moveTo(128, 150);
+    const a1 = (ray / 16) * Math.PI * 2;
+    const a2 = ((ray + 1) / 16) * Math.PI * 2;
+    boardPaint.arc(128, 150, 190, a1, a2);
+    boardPaint.closePath();
+    boardPaint.fillStyle = ray % 2 === 0 ? "#3a1e56" : "#552138";
     boardPaint.fill();
   }
+  for (let ring = 3; ring >= 1; ring--) {
+    boardPaint.beginPath();
+    boardPaint.arc(128, 150, ring * 34, 0, Math.PI * 2);
+    boardPaint.fillStyle = ring % 2 === 0 ? "#6a2a7a" : "#8a2548";
+    boardPaint.fill();
+  }
+  boardPaint.shadowColor = "#ffd97a";
+  boardPaint.shadowBlur = 24;
   boardPaint.fillStyle = "#e8b24c";
   boardPaint.beginPath();
-  boardPaint.arc(128, 150, 20, 0, Math.PI * 2);
+  boardPaint.arc(128, 150, 22, 0, Math.PI * 2);
   boardPaint.fill();
+  // The marquee name, glowing, and a sprinkle of stars.
+  boardPaint.shadowColor = "#9be8ff";
+  boardPaint.shadowBlur = 16;
+  boardPaint.fillStyle = "#c9ecff";
+  boardPaint.font = "bold 34px 'Hiragino Sans', 'Noto Sans JP', sans-serif";
+  boardPaint.textAlign = "center";
+  boardPaint.fillText("パチンコ", 128, 40);
+  boardPaint.shadowBlur = 8;
+  for (let i = 0; i < 26; i++) {
+    const sx = (i * 97) % 256;
+    const sy = 60 + ((i * 53) % 260);
+    boardPaint.fillStyle = i % 3 === 0 ? "#9be8ff" : "#ffd97a";
+    boardPaint.fillRect(sx, sy, 3, 3);
+  }
+  boardPaint.shadowBlur = 0;
   // The pockets, marked where the fins will stand.
   boardPaint.font = "bold 26px 'Hiragino Sans', sans-serif";
-  boardPaint.textAlign = "center";
   boardPaint.fillStyle = "#ffd97a";
   boardPaint.fillText("×8", 128, 356);
   boardPaint.fillStyle = "#b8a8d8";
@@ -435,6 +471,31 @@ function buildRoom(THREE: any, scene: any): Room {
     new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(boardCanvas) }),
   );
   pachinkoGroup.add(board);
+  // A gold frame around the glass, wearing a marquee of chasing bulbs.
+  const framePiece = (w: number, h: number, x: number, y: number): void => {
+    const piece = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.06), gold);
+    piece.position.set(x, y, 0.0);
+    pachinkoGroup.add(piece);
+  };
+  framePiece(1.08, 0.06, 0, 0.75);
+  framePiece(1.08, 0.06, 0, -0.75);
+  framePiece(0.06, 1.56, -0.51, 0);
+  framePiece(0.06, 1.56, 0.51, 0);
+  const pkBulbs: any[] = [];
+  const bulbAt = (x: number, y: number): void => {
+    const bulb = new THREE.Mesh(
+      new THREE.SphereGeometry(0.028, 8, 6),
+      new THREE.MeshBasicMaterial({ color: 0x2a3444 }),
+    );
+    bulb.position.set(x, y, 0.05);
+    pachinkoGroup.add(bulb);
+    pkBulbs.push(bulb);
+  };
+  for (let i = 0; i < 5; i++) bulbAt(-0.4 + i * 0.2, 0.75);
+  for (let i = 0; i < 4; i++) {
+    bulbAt(-0.51, -0.55 + i * 0.36);
+    bulbAt(0.51, -0.55 + i * 0.36);
+  }
   const pegMat = matte(0xd8c060, 0.3);
   const pegGeo = new THREE.CylinderGeometry(0.012, 0.012, 0.06, 8);
   const pegSpots: { x: number; y: number }[] = [];
@@ -449,6 +510,22 @@ function buildRoom(THREE: any, scene: any): Room {
       pachinkoGroup.add(peg);
     }
   }
+  // The windmill, the classic deflector: it spins all day, and whatever
+  // is falling bounces off it like any other pin.
+  // Just off-centre, so it teases the money pocket without guarding it.
+  pegSpots.push({ x: 0.09, y: -0.4 });
+  const spinner = new THREE.Group();
+  spinner.position.set(0.09, -0.4, 0.035);
+  const bladeMat = matte(0xd4508a, 0.35);
+  for (const angle of [0, Math.PI / 2]) {
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.022, 0.022), bladeMat);
+    blade.rotation.z = angle;
+    spinner.add(blade);
+  }
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.034, 8), gold);
+  hub.rotation.x = Math.PI / 2;
+  spinner.add(hub);
+  pachinkoGroup.add(spinner);
   // Fins divide the bottom into pockets; the middle one is the money.
   for (const x of [-0.3, -0.15, -0.035, 0.035, 0.15, 0.3]) {
     const fin = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.12, 0.055), gold);
@@ -715,7 +792,7 @@ function buildRoom(THREE: any, scene: any): Room {
 
   return {
     drawSlots,
-    pachinko: { group: pachinkoGroup, ball: pachinkoBall, pegs: pegSpots },
+    pachinko: { group: pachinkoGroup, ball: pachinkoBall, pegs: pegSpots, bulbs: pkBulbs, spinner },
     cups,
     cupFish,
     racers,
@@ -775,6 +852,8 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
   // ---- the stage ----
   let room: Room | null = null;
   let THREE_: any = null;
+  /** Palm-sized clones of the girls, for launching into the pachinko. */
+  const dolls: { root: any; bones: Record<string, any>; name: string }[] = [];
   let reaction: { who: number; name: string; until: number } | null = null;
   const react = (who: number, name: string, seconds = 2.2): void => {
     reaction = { who, name, until: performance.now() / 1000 + seconds };
@@ -918,6 +997,29 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
       chito.root.rotation.y = 0;
     }
 
+    // The pachinko dolls: the same two, cloned at palm size and centred
+    // on their middles so they tumble about themselves, not an ankle.
+    const DOLL_NAMES = ["Yuuri", "Chito"];
+    models.forEach((gltf: any, i: number) => {
+      if (!gltf || !room) return;
+      const model = clone(gltf.scene);
+      model.updateMatrixWorld(true);
+      const bounds = new THREE.Box3().setFromObject(model);
+      const height = Math.max(0.001, bounds.max.y - bounds.min.y);
+      const scale = 0.15 / height;
+      model.scale.setScalar(scale);
+      model.position.y = -(bounds.min.y + height / 2) * scale;
+      const root = new THREE.Group();
+      root.add(model);
+      root.visible = false;
+      room.pachinko.group.add(root);
+      const bones: Record<string, any> = {};
+      model.traverse((node: any) => {
+        if (node.isBone) bones[node.name] = node;
+      });
+      dolls.push({ root, bones, name: DOLL_NAMES[i] ?? "Somebody" });
+    });
+
     // ---- the loop ----
     const camPos = new THREE.Vector3(0, 1.7, 0.5);
     const camLook = new THREE.Vector3(MX, 1.2, MZ);
@@ -1004,6 +1106,14 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
       });
       room!.pink.intensity = strobing ? 16 + Math.sin(t * 18) * 12 : 16;
       room!.neon.material.color.setHSL(strobing ? (t * 1.5) % 1 : 0, strobing ? 0.5 : 0, 1);
+      // The pachinko marquee chases all day, faster with someone playing,
+      // and its windmill never stops.
+      const pkPace = game === "pachinko" ? 11 : 4;
+      room!.pachinko.bulbs.forEach((bulb: any, i: number) => {
+        const lit = Math.floor(t * pkPace + i) % 3 === i % 3;
+        bulb.material.color.setHex(lit ? (i % 2 === 0 ? 0x9be8ff : 0xffd97a) : 0x2a3444);
+      });
+      room!.pachinko.spinner.rotation.z = t * (game === "pachinko" ? 7 : 3);
       room!.winLight.intensity = Math.max(0, fx.flashUntil - t) * 60;
       // Whatever is behind the mystery door, it's awake. The lamp over it
       // flickers like bad wiring — two incommensurate sines and a random
@@ -1093,6 +1203,8 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
     room.cupFish.visible = false;
     for (const racer of room.racers) racer.visible = false;
     room.raceTrack.visible = false;
+    room.pachinko.ball.visible = false;
+    for (const doll of dolls) doll.root.visible = false;
   };
 
   // ---- the card in the air ----
@@ -1288,6 +1400,7 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
    * nothing. Simulated at every dial setting: the best returns 0.97,
    * an average hand more like 0.8.
    */
+  // Re-simulated with the windmill pin in play: 0.87 at the best dial.
   const pocketMult = (x: number): number => (Math.abs(x) < 0.035 ? 8 : Math.abs(x) < 0.15 ? 2 : 0);
 
   const drawPachinko = (): void => {
@@ -1302,7 +1415,7 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
       <div class="row-actions" style="justify-content:center">
         <button id="cas-launch" class="cas-big">LAUNCH — <span id="cas-cost">${bet}</span> ¥</button>
       </div>
-      <div class="cas-result" id="cas-result">One ball a launch. The dial is the plunger: harder comes in further left. Centre pocket ×8, neighbours ×2.</div>
+      <div class="cas-result" id="cas-result">The plunger takes whoever is nearest. Harder comes in further left. Centre pocket ×8, neighbours ×2.</div>
     `;
     wireBets(() => {
       const cost = gameBox.querySelector("#cas-cost");
@@ -1316,24 +1429,42 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
       const stake = bet;
       result.textContent = "…";
       const { ball, pegs } = room.pachinko;
+      // One of the girls, at palm size, in place of the steel ball. The
+      // ball itself only flies if the models never arrived.
+      const doll = dolls.length > 0 ? dolls[Math.floor(Math.random() * dolls.length)] : null;
+      const body = doll ? doll.root : ball;
+      const bodyZ = doll ? 0.06 : 0.04;
+      const who = doll ? doll.name : "The ball";
       const strength = Number(dial.value) / 100;
       // Up the right rail, over the top, and in — the dial decides how far
-      // across the board the ball comes down, give or take a wobble.
+      // across the board the launch comes down, give or take a wobble.
       const entryX = Math.max(-0.38, Math.min(0.3, -0.36 + (1 - strength) * 0.62 + (Math.random() - 0.5) * 0.08));
-      ball.visible = true;
+      body.visible = true;
+      body.rotation.set(0, 0, 0);
       sfx.whoosh();
+      if (doll) sfx.boing();
       await new Promise<void>((resolve) => {
         const start = performance.now();
         const RAIL = 620;
+        let whistled = false;
         const tick = (): void => {
           if (mySeq !== seq) return resolve();
           const p = Math.min(1, (performance.now() - start) / RAIL);
           if (p < 0.45) {
             const q = p / 0.45;
-            ball.position.set(0.45, -0.5 + q * 1.12, 0.04);
+            body.position.set(0.45, -0.5 + q * 1.12, bodyZ);
           } else {
             const q = (p - 0.45) / 0.55;
-            ball.position.set(0.45 + (entryX - 0.45) * q, 0.62 + Math.sin(q * Math.PI) * 0.06, 0.04);
+            body.position.set(0.45 + (entryX - 0.45) * q, 0.62 + Math.sin(q * Math.PI) * 0.06, bodyZ);
+            if (doll && !whistled) {
+              whistled = true;
+              sfx.falling(0.9); // the launch, from her side of it
+            }
+          }
+          if (doll) {
+            // A full cartwheel up the rail and over the top.
+            body.rotation.z = p * Math.PI * 2;
+            pose(doll.bones, "flail", 1, performance.now() / 1000);
           }
           if (p >= 1) resolve();
           else requestAnimationFrame(tick);
@@ -1347,6 +1478,8 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
       let y = 0.64;
       let vx = -0.05 - strength * 0.15;
       let vy = 0;
+      let spin = (Math.random() - 0.5) * 8;
+      let angle = 0;
       let lastPing = 0;
       await new Promise<void>((resolve) => {
         let previous = performance.now();
@@ -1374,9 +1507,10 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
                 vx -= 1.45 * dot * nx;
                 vy -= 1.45 * dot * ny;
                 vx += (Math.random() - 0.5) * 0.3;
-                if (now - lastPing > 70) {
+                spin = (Math.random() - 0.5) * 16; // a fresh tumble per pin
+                if (now - lastPing > 60) {
                   lastPing = now;
-                  sfx.step();
+                  sfx.ping();
                 }
               }
             }
@@ -1389,40 +1523,50 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
             x = 0.45;
             vx = -Math.abs(vx) * 0.5;
           }
-          ball.position.set(x, y, 0.04);
+          body.position.set(x, y, bodyZ);
+          if (doll) {
+            angle += spin * dt;
+            spin *= 1 - 0.25 * dt;
+            body.rotation.z = angle;
+            pose(doll.bones, "flail", 1, now / 1000);
+          }
           if (y <= -0.5) return resolve();
           requestAnimationFrame(step);
         };
         step();
       });
       const mult = pocketMult(x);
-      // The ball drops into whichever pocket it earned.
+      // Whoever it was drops into whichever pocket they earned.
       await new Promise<void>((resolve) => {
         const start = performance.now();
         const fromY = y;
         const tick = (): void => {
           if (mySeq !== seq) return resolve();
           const p = Math.min(1, (performance.now() - start) / 240);
-          ball.position.y = fromY - p * 0.1;
+          body.position.y = fromY - p * 0.1;
+          if (doll) body.rotation.z = angle + p * 0.6;
           if (p >= 1) resolve();
           else requestAnimationFrame(tick);
         };
         tick();
       });
-      ball.visible = false;
+      body.visible = false;
+      if (doll) pose(doll.bones, "clear", 1);
       sfx.clatter();
       const won = Math.floor(stake * mult);
       await payout(won);
-      if (mult >= 10) {
+      if (mult >= 8) {
         celebrate(true, [-4.3, 2.2, MZ + 0.6]);
         react(0, "cheer");
-        result.textContent = `The centre pocket! +${formatYennies(won)}`;
+        result.textContent = `${who} lands in the centre pocket! +${formatYennies(won)}`;
       } else if (mult > 0) {
         celebrate(false, [-4.3, 2.2, MZ + 0.6]);
-        result.textContent = `A side pocket. +${formatYennies(won)}`;
+        result.textContent = `${who} finds a side pocket. +${formatYennies(won)}`;
       } else {
         sfx.growl();
-        result.textContent = "Through the pins and out the bottom. The house keeps the ball.";
+        result.textContent = doll
+          ? `${who} drops out the bottom. She's fine. Probably.`
+          : "Through the pins and out the bottom. The house keeps the ball.";
       }
       busy = false;
     });

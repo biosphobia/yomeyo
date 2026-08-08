@@ -33,6 +33,8 @@ export interface Sfx {
   menace: (seconds: number) => void;
   /** A low mechanical drone from behind a closed door, quiet and patient. */
   hum: (seconds: number) => void;
+  /** A bright parlour tick, pitched a little differently every time. */
+  ping: () => void;
   /** Getting in or out of water. */
   splash: () => void;
   /** A counter bell nobody answers. */
@@ -54,6 +56,7 @@ const SILENT: Sfx = {
   growl: () => undefined,
   menace: () => undefined,
   hum: () => undefined,
+  ping: () => undefined,
   splash: () => undefined,
   bell: () => undefined,
   stop: () => undefined,
@@ -241,6 +244,11 @@ export function createSfx(): Sfx {
         tone({ duration: seconds, gain: 0.025, from: 110, to: 113, type: "triangle" });
         burst({ duration: seconds, gain: 0.02, type: "lowpass", from: 220, to: 140 });
       })(),
+    ping: guard(() => {
+      const f = 1700 + Math.random() * 1700;
+      tone({ duration: 0.09, gain: 0.13, from: f, to: f * 0.96, type: "triangle" });
+      tone({ duration: 0.05, gain: 0.05, from: f * 2, to: f * 1.9, type: "sine" });
+    }),
     splash: guard(() => {
       burst({ duration: 0.42, gain: 0.34, type: "highpass", from: 900, to: 3400 });
       tone({ duration: 0.3, gain: 0.18, from: 420, to: 120 });
