@@ -2,7 +2,7 @@ import { levelState } from "./levels.js";
 import { screenHeader } from "./screen.js";
 import { toast } from "./toast.js";
 import { earnYennies, formatYennies, levelReward, spendYennies, yennies } from "./yennies.js";
-import { addItem, addOwned, equipSkin, equippedSkin, itemCounts, owned } from "./gacha-collection.js";
+import { ITEM_LIMIT, addItem, addOwned, equipSkin, equippedSkin, itemCounts, owned } from "./gacha-collection.js";
 import {
   cutsceneLines,
   cutsceneTitle,
@@ -255,10 +255,14 @@ async function drawInventory(main: HTMLElement, table: PrizeTable, have: Set<str
       const rarity = table.rarities[prize.rarity];
       const count = prize.type === "item" ? (counts[prize.id] ?? 0) : 1;
       const note = prize.type === "item" || prize.type === "gif" ? prize.text : "a look for the whole app";
+      // Items always show their count against the cap, even at one, so
+      // the limit is visible the moment the first one arrives.
+      const stack =
+        prize.type === "item" ? ` <b class="inv-count">×${count}<span class="inv-cap"> / ${ITEM_LIMIT}</span></b>` : "";
       return `<div class="inv-row" style="--rarity:${escapeAttr(rarity?.color ?? "#94a3b8")}">
         <span class="inv-face">${prizeFace(prize)}</span>
         <span class="inv-body">
-          <span class="inv-name">${escapeHtml(prize.name)}${count > 1 ? ` <b class="inv-count">×${count}</b>` : ""}</span>
+          <span class="inv-name">${escapeHtml(prize.name)}${stack}</span>
           <span class="glosses">${escapeHtml(note)}</span>
         </span>
         <span class="inv-rarity">${escapeHtml(rarity?.label ?? "")}</span>
@@ -485,10 +489,10 @@ async function openCrate(main: HTMLElement, table: PrizeTable, isCurrent: () => 
     return;
   }
   let isNew = await addOwned(prize.id);
-  // A stackable item is never a dupe: a second bag of food is another bag.
+  // A stackable item is only a dupe once the stack is full: a second bag
+  // of food is another bag, a sixth is a refund.
   if (prize.type === "item") {
-    await addItem(prize.id);
-    isNew = true;
+    isNew = (await addItem(prize.id)) !== null;
   }
   // A won gif joins the drills' pool. Told now, so the next question can
   // show it rather than the one after the app is next opened.
@@ -553,8 +557,12 @@ async function openCrate(main: HTMLElement, table: PrizeTable, isCurrent: () => 
         isNew
           ? prize.type === "skin"
             ? "A new skin. Tap it in your collection to wear it."
-            : "A new reaction. It will turn up in the drills from now on."
-          : `Already yours — ${refund.toLocaleString()} ¥ back.`
+            : prize.type === "item"
+              ? "Into the inventory."
+              : "A new reaction. It will turn up in the drills from now on."
+          : prize.type === "item"
+            ? `You can only carry ${ITEM_LIMIT} — ${refund.toLocaleString()} ¥ back.`
+            : `Already yours — ${refund.toLocaleString()} ¥ back.`
       }</div>
       <div class="row-actions" style="justify-content:center;margin-top:12px">
         <button id="gacha-again">Open another</button>

@@ -26,15 +26,23 @@ onAccountChange(() => {
   itemsCache = null;
 });
 
+/** No stack goes past this: five bento boxes is enough bento boxes. */
+export const ITEM_LIMIT = 5;
+
 /** How many of each stackable item is held, by prize id. */
 export async function itemCounts(): Promise<Record<string, number>> {
   itemsCache ??= (await getMeta<Record<string, number>>(ITEMS_KEY)) ?? {};
   return itemsCache;
 }
 
-/** One more of a stackable item. Returns the new count. */
-export async function addItem(id: string): Promise<number> {
+/**
+ * One more of a stackable item, up to the limit. Returns the new count,
+ * or null when the stack was already full — the caller refunds, the same
+ * as pulling a duplicate gif.
+ */
+export async function addItem(id: string): Promise<number | null> {
   const counts = await itemCounts();
+  if ((counts[id] ?? 0) >= ITEM_LIMIT) return null;
   counts[id] = (counts[id] ?? 0) + 1;
   await setMeta(ITEMS_KEY, counts);
   return counts[id];

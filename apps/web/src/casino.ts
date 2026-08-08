@@ -17,14 +17,18 @@ import { warmUpCutscene } from "./gacha-scene.js";
  * losses get a growl and a head-clutch. All of it is yennies.
  */
 
-type GameId = "slots" | "dice" | "highlow" | "cups" | "race" | "door";
+type GameId = "slots" | "pachinko" | "dice" | "highlow" | "cups" | "race" | "door";
 
 let game: GameId = "slots";
 
 // ---------------- the reels ----------------
 
-/** Ten cells per column; 月 and ☆ appear twice, so they hit often. */
-const REEL: string[] = ["７", "ゆ", "🐟", "月", "🍐", "🥫", "☆", "🐱", "月", "☆"];
+/**
+ * Fifteen cells per column. Everything appears twice except the pear,
+ * which appears once — so 🍐🍐🍐 is the rarest line on the machine, eight
+ * times rarer than any other triple, and it pays like it.
+ */
+const REEL: string[] = ["７", "ゆ", "🐟", "月", "🍐", "🥫", "☆", "🐱", "月", "７", "☆", "ゆ", "🥫", "🐟", "🐱"];
 const SYMBOL_COLOUR: Record<string, string> = {
   "７": "#e8862c",
   ゆ: "#d4508a",
@@ -32,32 +36,36 @@ const SYMBOL_COLOUR: Record<string, string> = {
   "☆": "#c9a227",
 };
 
-/** Multiplier for three of a kind. */
+/** Multiplier for three of a kind. YAY PEARS outranks everything. */
 const TRIPLE_PAY: Record<string, number> = {
-  "７": 60,
-  ゆ: 30,
-  "🐱": 25,
-  "🐟": 20,
-  "🍐": 18,
-  "🥫": 15,
-  月: 8,
-  "☆": 8,
+  "🍐": 120,
+  "７": 40,
+  ゆ: 25,
+  "🐱": 20,
+  "🐟": 16,
+  "🥫": 12,
+  月: 6,
+  "☆": 6,
 };
 /** Multiplier for exactly two of a kind, for the two worth pairing. */
-const PAIR_PAY: Record<string, number> = { "７": 4, ゆ: 2, "🥫": 3 };
+const PAIR_PAY: Record<string, number> = { "７": 2, ゆ: 1.5, "🥫": 1.5 };
 
 /**
  * The payline, read the casino's way: triples first, then the house
  * specials — ゆ mistaken for a fish, the cat catching one, a night sky —
- * then the pairs worth anything.
+ * then the pairs worth anything. Full enumeration of the 15-cell reels
+ * puts the return at 0.92 with a hit on one spin in three.
  */
 function slotResult(cells: number[]): { mult: number; line: string } {
   const [a, b, c] = cells.map((cell) => REEL[cell]);
   const line = [a, b, c];
   const has = (symbol: string): boolean => line.includes(symbol);
-  if (a === b && b === c) return { mult: TRIPLE_PAY[a] ?? 8, line: `${a} ${a} ${a} — three of a kind!` };
-  if (has("ゆ") && has("🐟")) return { mult: 3, line: "ゆ is not a fish. The machine disagrees" };
-  if (has("🐱") && has("🐟")) return { mult: 3, line: "the cat gets the fish" };
+  if (a === b && b === c) {
+    if (a === "🍐") return { mult: TRIPLE_PAY[a], line: "🍐 🍐 🍐 — YAY PEARS!" };
+    return { mult: TRIPLE_PAY[a] ?? 6, line: `${a} ${a} ${a} — three of a kind!` };
+  }
+  if (has("ゆ") && has("🐟")) return { mult: 2, line: "ゆ is not a fish. The machine disagrees" };
+  if (has("🐱") && has("🐟")) return { mult: 2, line: "the cat gets the fish" };
   if (line.every((s) => s === "月" || s === "☆")) return { mult: 2, line: "a clear night sky" };
   for (const symbol of Object.keys(PAIR_PAY)) {
     if (line.filter((s) => s === symbol).length === 2) {
@@ -239,6 +247,8 @@ interface Die {
 interface Room {
   /** Redraw the slot screen: three column positions in cells, win rows lit. */
   drawSlots: (positions: number[], highlight: boolean) => void;
+  /** The pachinko machine: its tilted board, the ball, pegs in board space. */
+  pachinko: { group: any; ball: any; pegs: { x: number; y: number }[] };
   /** The shell game's cups and the fish that hides under one. */
   cups: any[];
   cupFish: any;
@@ -376,6 +386,79 @@ function buildRoom(THREE: any, scene: any): Room {
   // Her stool, in front of the machine with knee room.
   slab(matte(0x51392a), 0.16, 0.55, 0.16, MX, 0.28, MZ + 1.6);
   slab(matte(0x7a5236, 0.6), 0.55, 0.1, 0.55, MX, 0.58, MZ + 1.6);
+
+  // The pachinko machine, along the wall past the slots: an upright board
+  // behind real brass pins, leaning back the way the parlour kind do. The
+  // ball is a real ball — its physics run in board space (x across,
+  // y up the face) and the mesh just follows.
+  const PKX = -4.3;
+  slab(matte(0x1f5a78, 0.4), 1.3, 2.3, 0.7, PKX, 1.15, MZ);
+  slab(gold, 1.4, 0.12, 0.8, PKX, 2.32, MZ);
+  slab(gold, 1.4, 0.12, 0.8, PKX, 0.06, MZ);
+  const pachinkoGroup = new THREE.Group();
+  pachinkoGroup.position.set(PKX, 1.42, MZ + 0.34);
+  pachinkoGroup.rotation.x = -0.07;
+  scene.add(pachinkoGroup);
+  const boardCanvas = document.createElement("canvas");
+  boardCanvas.width = 256;
+  boardCanvas.height = 384;
+  const boardPaint = boardCanvas.getContext("2d")!;
+  boardPaint.fillStyle = "#1a1030";
+  boardPaint.fillRect(0, 0, 256, 384);
+  // A rising sun of arcs behind the pins, parlour-loud.
+  for (let ring = 6; ring >= 1; ring--) {
+    boardPaint.beginPath();
+    boardPaint.arc(128, 150, ring * 26, 0, Math.PI * 2);
+    boardPaint.fillStyle = ring % 2 === 0 ? "#3a1e56" : "#552138";
+    boardPaint.fill();
+  }
+  boardPaint.fillStyle = "#e8b24c";
+  boardPaint.beginPath();
+  boardPaint.arc(128, 150, 20, 0, Math.PI * 2);
+  boardPaint.fill();
+  // The pockets, marked where the fins will stand.
+  boardPaint.font = "bold 26px 'Hiragino Sans', sans-serif";
+  boardPaint.textAlign = "center";
+  boardPaint.fillStyle = "#ffd97a";
+  boardPaint.fillText("×8", 128, 356);
+  boardPaint.fillStyle = "#b8a8d8";
+  boardPaint.fillText("×2", 100, 356);
+  boardPaint.fillText("×2", 156, 356);
+  const board = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.96, 1.44),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(boardCanvas) }),
+  );
+  pachinkoGroup.add(board);
+  const pegMat = matte(0xd8c060, 0.3);
+  const pegGeo = new THREE.CylinderGeometry(0.012, 0.012, 0.06, 8);
+  const pegSpots: { x: number; y: number }[] = [];
+  for (let row = 0; row < 8; row++) {
+    const y = 0.42 - row * 0.1;
+    const offset = row % 2 === 0 ? 0 : 0.06;
+    for (let x = -0.36 + offset; x <= 0.37; x += 0.12) {
+      pegSpots.push({ x, y });
+      const peg = new THREE.Mesh(pegGeo, pegMat);
+      peg.rotation.x = Math.PI / 2;
+      peg.position.set(x, y, 0.03);
+      pachinkoGroup.add(peg);
+    }
+  }
+  // Fins divide the bottom into pockets; the middle one is the money.
+  for (const x of [-0.3, -0.15, -0.035, 0.035, 0.15, 0.3]) {
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.12, 0.055), gold);
+    fin.position.set(x, -0.56, 0.03);
+    pachinkoGroup.add(fin);
+  }
+  const pachinkoBall = new THREE.Mesh(
+    new THREE.SphereGeometry(0.024, 10, 8),
+    new THREE.MeshStandardMaterial({ color: 0xdde4ec, roughness: 0.15, metalness: 0.8 }),
+  );
+  pachinkoBall.position.z = 0.04;
+  pachinkoBall.visible = false;
+  pachinkoGroup.add(pachinkoBall);
+  const pkGlow = new THREE.PointLight(0x9be8ff, 5, 5, 1.8);
+  pkGlow.position.set(PKX, 2.5, MZ + 1.0);
+  scene.add(pkGlow);
 
   // The dealer's table: bright felt under its own lamp, dice at the ready.
   const felt = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.05, 0.1, 24), matte(0x2a7a4c, 0.85));
@@ -624,7 +707,26 @@ function buildRoom(THREE: any, scene: any): Room {
     coins.push(coin);
   }
 
-  return { drawSlots, cups, cupFish, racers, raceTrack, cans, doorGlow, doorLight, bulbs, neon, pink, winLight, mine, theirs, card, paintCard, coins };
+  return {
+    drawSlots,
+    pachinko: { group: pachinkoGroup, ball: pachinkoBall, pegs: pegSpots },
+    cups,
+    cupFish,
+    racers,
+    raceTrack,
+    cans,
+    doorGlow,
+    doorLight,
+    bulbs,
+    neon,
+    pink,
+    winLight,
+    mine,
+    theirs,
+    card,
+    paintCard,
+    coins,
+  };
 }
 
 // ---------------- the render ----------------
@@ -642,6 +744,7 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
       </div>
       <div class="segmented cas-tabs">
         <button data-g="slots" class="${game === "slots" ? "on" : ""}">🎰 Slots</button>
+        <button data-g="pachinko" class="${game === "pachinko" ? "on" : ""}">🎯 Pachinko</button>
         <button data-g="dice" class="${game === "dice" ? "on" : ""}">🎲 Dice</button>
         <button data-g="highlow" class="${game === "highlow" ? "on" : ""}">🃏 High-Low</button>
         <button data-g="cups" class="${game === "cups" ? "on" : ""}">🥤 Cups</button>
@@ -713,6 +816,8 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
     // A three-quarter view from the right: the whole machine, the reels at
     // an angle, and Yuuri on her stool in profile.
     slots: { pos: [1.6, 1.9, 0.35], look: [MX + 0.15, 1.2, MZ + 0.2] },
+    // Square-on to the pachinko board, close enough to follow the ball.
+    pachinko: { pos: [-3.9, 1.7, -0.85], look: [-4.3, 1.42, MZ + 0.3] },
     dice: { pos: [TX, 2.35, -0.2], look: [TX, 0.9, TZ] },
     // The card table from a lower, angled seat: same felt, different chair.
     highlow: { pos: [TX - 1.1, 1.85, -0.8], look: [TX + 0.1, 0.95, TZ + 0.3] },
@@ -1092,19 +1197,19 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
       <details class="cas-paytable">
         <summary>Paytable</summary>
         <div class="cas-pay-grid">
-          <span lang="ja">７ ７ ７</span><b>×60</b>
-          <span lang="ja">ゆ ゆ ゆ</span><b>×30</b>
-          <span>🐱 🐱 🐱</span><b>×25</b>
-          <span>🐟 🐟 🐟</span><b>×20</b>
-          <span>🍐 🍐 🍐</span><b>×18</b>
-          <span>🥫 🥫 🥫</span><b>×15</b>
-          <span lang="ja">月月月 / ☆☆☆</span><b>×8</b>
-          <span lang="ja">ゆ ＋ 🐟 <i>it thinks it's a fish</i></span><b>×3</b>
-          <span>🐱 ＋ 🐟 <i>the cat gets it</i></span><b>×3</b>
+          <span>🍐 🍐 🍐 <i>YAY PEARS — the rarest line there is</i></span><b>×120</b>
+          <span lang="ja">７ ７ ７</span><b>×40</b>
+          <span lang="ja">ゆ ゆ ゆ</span><b>×25</b>
+          <span>🐱 🐱 🐱</span><b>×20</b>
+          <span>🐟 🐟 🐟</span><b>×16</b>
+          <span>🥫 🥫 🥫</span><b>×12</b>
+          <span lang="ja">月月月 / ☆☆☆</span><b>×6</b>
+          <span lang="ja">ゆ ＋ 🐟 <i>it thinks it's a fish</i></span><b>×2</b>
+          <span>🐱 ＋ 🐟 <i>the cat gets it</i></span><b>×2</b>
           <span lang="ja">月・☆ only <i>clear night sky</i></span><b>×2</b>
-          <span lang="ja">７ ７ pair</span><b>×4</b>
-          <span>🥫 🥫 pair</span><b>×3</b>
-          <span lang="ja">ゆ ゆ pair</span><b>×2</b>
+          <span lang="ja">７ ７ pair</span><b>×2</b>
+          <span>🥫 🥫 pair</span><b>×1.5</b>
+          <span lang="ja">ゆ ゆ pair</span><b>×1.5</b>
         </div>
       </details>
     `;
@@ -1164,6 +1269,153 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
         sfx.growl();
         react(0, "hurt", 1.8);
         result.textContent = `${line}.`;
+      }
+      busy = false;
+    });
+  };
+
+  // ---- pachinko ----
+
+  /**
+   * Where the ball ends up pays: the centre pocket, its neighbours, or
+   * nothing. Simulated at every dial setting: the best returns 0.97,
+   * an average hand more like 0.8.
+   */
+  const pocketMult = (x: number): number => (Math.abs(x) < 0.035 ? 8 : Math.abs(x) < 0.15 ? 2 : 0);
+
+  const drawPachinko = (): void => {
+    hideDice();
+    gameBox.innerHTML = `
+      ${betRow()}
+      <div class="cas-dial-row">
+        <span class="glosses">soft</span>
+        <input type="range" id="cas-dial" min="0" max="100" value="55">
+        <span class="glosses">hard</span>
+      </div>
+      <div class="row-actions" style="justify-content:center">
+        <button id="cas-launch" class="cas-big">LAUNCH — <span id="cas-cost">${bet}</span> ¥</button>
+      </div>
+      <div class="cas-result" id="cas-result">One ball a launch. The dial is the plunger: harder comes in further left. Centre pocket ×8, neighbours ×2.</div>
+    `;
+    wireBets(() => {
+      const cost = gameBox.querySelector("#cas-cost");
+      if (cost) cost.textContent = String(bet);
+    });
+    const result = gameBox.querySelector<HTMLDivElement>("#cas-result")!;
+    const dial = gameBox.querySelector<HTMLInputElement>("#cas-dial")!;
+    gameBox.querySelector<HTMLButtonElement>("#cas-launch")!.addEventListener("click", async () => {
+      if (!room || !(await take(bet))) return;
+      busy = true;
+      const stake = bet;
+      result.textContent = "…";
+      const { ball, pegs } = room.pachinko;
+      const strength = Number(dial.value) / 100;
+      // Up the right rail, over the top, and in — the dial decides how far
+      // across the board the ball comes down, give or take a wobble.
+      const entryX = Math.max(-0.38, Math.min(0.3, -0.36 + (1 - strength) * 0.62 + (Math.random() - 0.5) * 0.08));
+      ball.visible = true;
+      sfx.whoosh();
+      await new Promise<void>((resolve) => {
+        const start = performance.now();
+        const RAIL = 620;
+        const tick = (): void => {
+          if (mySeq !== seq) return resolve();
+          const p = Math.min(1, (performance.now() - start) / RAIL);
+          if (p < 0.45) {
+            const q = p / 0.45;
+            ball.position.set(0.45, -0.5 + q * 1.12, 0.04);
+          } else {
+            const q = (p - 0.45) / 0.55;
+            ball.position.set(0.45 + (entryX - 0.45) * q, 0.62 + Math.sin(q * Math.PI) * 0.06, 0.04);
+          }
+          if (p >= 1) resolve();
+          else requestAnimationFrame(tick);
+        };
+        tick();
+      });
+      // Board physics, the honest kind: gravity, brass pins, side walls.
+      // Every collision is a real reflection with a little randomness, so
+      // the same dial setting never falls the same way twice.
+      let x = entryX;
+      let y = 0.64;
+      let vx = -0.05 - strength * 0.15;
+      let vy = 0;
+      let lastPing = 0;
+      await new Promise<void>((resolve) => {
+        let previous = performance.now();
+        const step = (): void => {
+          if (mySeq !== seq) return resolve();
+          const now = performance.now();
+          const dt = Math.min(0.024, (now - previous) / 1000);
+          previous = now;
+          vy -= 1.9 * dt;
+          x += vx * dt;
+          y += vy * dt;
+          for (const peg of pegs) {
+            const dx = x - peg.x;
+            const dy = y - peg.y;
+            const d2 = dx * dx + dy * dy;
+            const R = 0.038;
+            if (d2 < R * R && d2 > 1e-8) {
+              const d = Math.sqrt(d2);
+              const nx = dx / d;
+              const ny = dy / d;
+              x = peg.x + nx * R;
+              y = peg.y + ny * R;
+              const dot = vx * nx + vy * ny;
+              if (dot < 0) {
+                vx -= 1.45 * dot * nx;
+                vy -= 1.45 * dot * ny;
+                vx += (Math.random() - 0.5) * 0.3;
+                if (now - lastPing > 70) {
+                  lastPing = now;
+                  sfx.step();
+                }
+              }
+            }
+          }
+          if (x < -0.43) {
+            x = -0.43;
+            vx = Math.abs(vx) * 0.5;
+          }
+          if (x > 0.45) {
+            x = 0.45;
+            vx = -Math.abs(vx) * 0.5;
+          }
+          ball.position.set(x, y, 0.04);
+          if (y <= -0.5) return resolve();
+          requestAnimationFrame(step);
+        };
+        step();
+      });
+      const mult = pocketMult(x);
+      // The ball drops into whichever pocket it earned.
+      await new Promise<void>((resolve) => {
+        const start = performance.now();
+        const fromY = y;
+        const tick = (): void => {
+          if (mySeq !== seq) return resolve();
+          const p = Math.min(1, (performance.now() - start) / 240);
+          ball.position.y = fromY - p * 0.1;
+          if (p >= 1) resolve();
+          else requestAnimationFrame(tick);
+        };
+        tick();
+      });
+      ball.visible = false;
+      sfx.clatter();
+      const won = Math.floor(stake * mult);
+      await payout(won);
+      if (mult >= 10) {
+        celebrate(true, [-4.3, 2.2, MZ + 0.6]);
+        react(0, "cheer");
+        result.textContent = `The centre pocket! +${formatYennies(won)}`;
+      } else if (mult > 0) {
+        celebrate(false, [-4.3, 2.2, MZ + 0.6]);
+        result.textContent = `A side pocket. +${formatYennies(won)}`;
+      } else {
+        sfx.growl();
+        result.textContent = "Through the pins and out the bottom. The house keeps the ball.";
       }
       busy = false;
     });
@@ -1632,6 +1884,7 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
 
   const drawGame = (): void => {
     if (game === "slots") drawSlots();
+    else if (game === "pachinko") drawPachinko();
     else if (game === "dice") drawDice();
     else if (game === "cups") drawCups();
     else if (game === "race") drawRace();

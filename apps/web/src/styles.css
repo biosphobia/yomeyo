@@ -5235,3 +5235,22 @@ button.gram-swap-line:hover {
   font-size: 0.78rem;
   margin-left: 6px;
 }
+
+/* The stack cap beside an item's count: quiet, but always there. */
+.inv-cap {
+  opacity: 0.65;
+  font-weight: 400;
+}
+
+/* The pachinko plunger dial. */
+.cas-dial-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+  margin: 6px 0 2px;
+}
+.cas-dial-row input[type="range"] {
+  flex: 0 1 260px;
+  accent-color: var(--accent);
+}
