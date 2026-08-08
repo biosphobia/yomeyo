@@ -48,6 +48,17 @@ export async function addItem(id: string): Promise<number | null> {
   return counts[id];
 }
 
+/** Hand over up to `n` of an item. Returns how many actually left the bag. */
+export async function takeItems(id: string, n: number): Promise<number> {
+  const counts = await itemCounts();
+  const gave = Math.min(counts[id] ?? 0, n);
+  if (gave <= 0) return 0;
+  counts[id] -= gave;
+  if (counts[id] <= 0) delete counts[id];
+  await setMeta(ITEMS_KEY, counts);
+  return gave;
+}
+
 export async function owned(): Promise<Set<string>> {
   ownedCache ??= new Set((await getMeta<string[]>(OWNED_KEY)) ?? []);
   return ownedCache;

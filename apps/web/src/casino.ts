@@ -1,6 +1,8 @@
 import { earnYennies, formatYennies, spendYennies, yennies } from "./yennies.js";
 import { createSfx } from "./gacha-audio.js";
 import { warmUpCutscene } from "./gacha-scene.js";
+import { itemCounts, takeItems } from "./gacha-collection.js";
+import { getMeta, setMeta } from "./db.js";
 
 /**
  * The casino: a place two survivors definitely should not be spending
@@ -916,8 +918,12 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
   };
   const DICE_ZOOM = { pos: [TX, 1.95, -1.25], look: [TX, 0.9, TZ] };
   const DOOR_ZOOM = { pos: [4.45, 1.5, -3.95], look: [4.6, 1.3, -6.1] };
-  /** Yuuri's trip from her stool to bar the door, timed from its start. */
-  let guard: { start: number } | null = null;
+  /**
+   * Yuuri's trip from her stool to bar the door. She rises, then holds
+   * her post until `leave` is set — pointing, or cheering when `joy` is
+   * on (a bento does that) — and only then sinks back down.
+   */
+  let guard: { start: number; leave: number | null; joy: boolean } | null = null;
   let doorFlareUntil = 0;
   /** When the door hums next; zero means the moment the tab is opened. */
   let nextHum = 0;
@@ -1041,25 +1047,27 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
         // that her face fits the frame, not just the crown of her hat.
         const POP = { x: 4.58, z: -5.9 };
         const g = guard ? t - guard.start : -1;
-        if (guard && g >= 3.1) guard = null;
+        const leaving = guard && guard.leave !== null ? t - guard.leave : -1;
+        if (guard && leaving >= 0.45) guard = null;
         if (guard && g >= 0) {
-          if (g < 0.3) {
+          if (leaving >= 0) {
+            // Gone the way she came, straight down.
+            const p = leaving / 0.45;
+            yuuri.root.position.set(POP.x, -1.6 * smooth(p), POP.z);
+            pose(yuuri.bones, "clear", 1);
+          } else if (g < 0.3) {
             // UP, from below the frame, with a bounce at the top.
             const p = g / 0.3;
             const springy = 1 - Math.pow(2, -9 * p) * Math.cos(p * 13);
             yuuri.root.position.set(POP.x, -1.6 * (1 - springy), POP.z);
             yuuri.root.rotation.y = 0; // square in your face
             pose(yuuri.bones, "clear", 1);
-          } else if (g < 2.7) {
-            // The finger, held until it has definitely been understood.
+          } else {
+            // Holding her post: the finger, or — paid in bento — both
+            // arms up, still exactly in the way.
             yuuri.root.position.set(POP.x, 0, POP.z);
             yuuri.root.rotation.y = 0;
-            pose(yuuri.bones, "point", 1, t);
-          } else {
-            // Gone the way she came, straight down.
-            const p = (g - 2.7) / 0.4;
-            yuuri.root.position.set(POP.x, -1.6 * smooth(p), POP.z);
-            pose(yuuri.bones, "clear", 1);
+            pose(yuuri.bones, guard.joy ? "cheer" : "point", 1, t);
           }
         } else {
           yuuri.root.position.set(STOOL.x, SIT_Y, STOOL.z);
@@ -2002,46 +2010,129 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
   };
 
   // ---- the mystery door ----
+
+  /** The one currency Yuuri respects. */
+  const BENTO_ID = "item-bag-of-food";
+  const BRIBE_GOAL = 5;
+  const BRIBE_KEY = "yuuriDoorBribes";
+
   const drawDoor = (): void => {
     hideDice();
     gameBox.innerHTML = `
-      <div class="row-actions" style="justify-content:center">
+      <div class="row-actions" style="justify-content:center" id="cas-door-actions">
         <button id="cas-door" class="cas-big">TRY THE DOOR</button>
       </div>
       <div class="cas-result" id="cas-result">Chained shut. Warm to stand near. Humming, slightly.</div>
     `;
+    const actions = gameBox.querySelector<HTMLDivElement>("#cas-door-actions")!;
     const result = gameBox.querySelector<HTMLDivElement>("#cas-result")!;
-    gameBox.querySelector<HTMLButtonElement>("#cas-door")!.addEventListener("click", () => {
+
+    const armTry = (): void => {
+      actions.innerHTML = `<button id="cas-door" class="cas-big">TRY THE DOOR</button>`;
+      actions.querySelector<HTMLButtonElement>("#cas-door")!.addEventListener("click", () => void tryDoor());
+    };
+
+    /** She stands down and the camera lets go of the door. */
+    const dismiss = (): void => {
+      if (guard) guard.leave = performance.now() / 1000;
+      zoomUntil = performance.now() / 1000 + 1.2;
+      sfx.whoosh();
+    };
+
+    const wireBack = (): void => {
+      actions.querySelector<HTMLButtonElement>("#cas-back")?.addEventListener("click", () => {
+        dismiss();
+        armTry();
+        result.textContent = "Chained shut. Warm to stand near. Humming, slightly.";
+        busy = false;
+      });
+    };
+
+    /** The choice, once she is up: retreat, or open the lunch negotiations. */
+    const offerChoices = async (): Promise<void> => {
+      const held = (await itemCounts())[BENTO_ID] ?? 0;
+      const paid = (await getMeta<number>(BRIBE_KEY)) ?? 0;
+      result.textContent =
+        held > 0
+          ? `She points you back to the games. She has also noticed your ${held > 1 ? "bento boxes" : "bento box"}.`
+          : "She points you back to the games, and won't say what's behind it.";
+      actions.innerHTML =
+        `<button id="cas-back" class="secondary">Go back</button>` +
+        (held > 0 ? `<button id="cas-bribe" class="cas-big">🍱 Bribe Yuuri (×${held})</button>` : "");
+      wireBack();
+      actions.querySelector<HTMLButtonElement>("#cas-bribe")?.addEventListener("click", () => {
+        void (async () => {
+          const gave = await takeItems(BENTO_ID, BRIBE_GOAL * 2);
+          if (gave <= 0) return;
+          const total = Math.min(BRIBE_GOAL, paid + gave);
+          await setMeta(BRIBE_KEY, total);
+          actions.innerHTML = "";
+          if (guard) guard.joy = true;
+          sfx.open();
+          sfx.bell();
+          setTimeout(() => sfx.boing(), 260);
+          result.textContent =
+            gave > 1 ? `Yuuri accepts ${gave} bento boxes. All of them. At once.` : "Yuuri accepts the bento box with both hands.";
+          setTimeout(() => {
+            if (total >= BRIBE_GOAL) {
+              result.textContent = "That makes five. She gathers her lunches and stands aside. The door is all yours.";
+              dismiss();
+              armTry();
+              busy = false;
+            } else {
+              if (guard) guard.joy = false;
+              result.textContent = `${total} of ${BRIBE_GOAL} bento boxes so far. She is delighted. She is also still in the way.`;
+              actions.innerHTML = `<button id="cas-back" class="secondary">Go back</button>`;
+              wireBack();
+            }
+          }, 2600);
+        })();
+      });
+    };
+
+    const tryDoor = async (): Promise<void> => {
       if (busy) return;
       busy = true;
+      const paid = (await getMeta<number>(BRIBE_KEY)) ?? 0;
       const now = performance.now() / 1000;
       zoomTarget = DOOR_ZOOM;
-      zoomUntil = now + 4.6;
+      // The camera stays on the door for as long as she stays in the way.
+      zoomUntil = now + (paid >= BRIBE_GOAL ? 4.6 : 120);
       result.textContent = "…";
       // Your steps, then the chain in your hand.
       sfx.step();
       setTimeout(() => sfx.step(), 320);
       setTimeout(() => sfx.step(), 640);
       setTimeout(() => sfx.creak(), 950);
+      if (paid >= BRIBE_GOAL) {
+        // Paid in full: nobody comes. The door, however, is still a door.
+        setTimeout(() => {
+          doorFlareUntil = performance.now() / 1000 + 2.2;
+          sfx.hum(3);
+        }, 1050);
+        setTimeout(() => {
+          result.textContent = "No one comes to stop you. The chains still will not give.";
+        }, 1700);
+        setTimeout(() => {
+          busy = false;
+        }, 3400);
+        return;
+      }
       // The door notices — and she is suddenly VERY much in the way.
       setTimeout(() => {
         doorFlareUntil = performance.now() / 1000 + 2.2;
         sfx.menace(1.6);
-        guard = { start: performance.now() / 1000 };
+        guard = { start: performance.now() / 1000, leave: null, joy: false };
         sfx.boing();
       }, 1050);
       setTimeout(() => {
         result.textContent = "Yuuri: だめ。";
         sfx.thud();
       }, 1500);
-      setTimeout(() => {
-        result.textContent = "She points you back to the games, and won't say what's behind it.";
-      }, 3100);
-      setTimeout(() => sfx.whoosh(), 3750);
-      setTimeout(() => {
-        busy = false;
-      }, 4400);
-    });
+      setTimeout(() => void offerChoices(), 3100);
+    };
+
+    armTry();
   };
 
   const drawGame = (): void => {
