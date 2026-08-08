@@ -299,12 +299,18 @@ function buildRoom(THREE: any, scene: any): Room {
   winLight.position.set(0, 2.6, -2.4);
   scene.add(winLight);
 
-  // The slot machine: cabinet, gold trim, three lit reels, a crown of bulbs.
+  // The slot machine: cabinet, gold trim, three reels in an OPEN window, a
+  // crown of bulbs. The window is four strips around a hole, not a plate:
+  // a plate in front of the reels is how the reels ended up invisible.
   const gold = matte(0xe0a850, 0.35);
   slab(matte(0xa32548, 0.4), 1.5, 2.2, 0.9, MX, 1.1, MZ);
   slab(gold, 1.6, 0.12, 1.0, MX, 2.26, MZ);
   slab(gold, 1.6, 0.12, 1.0, MX, 0.06, MZ);
-  slab(matte(0x35142a, 0.3), 1.34, 0.72, 0.1, MX, 1.35, MZ + 0.44);
+  const frame = matte(0x35142a, 0.3);
+  slab(frame, 1.4, 0.1, 0.14, MX, 1.78, MZ + 0.48); // above the window
+  slab(frame, 1.4, 0.1, 0.14, MX, 0.92, MZ + 0.48); // below it
+  slab(frame, 0.1, 0.96, 0.14, MX - 0.65, 1.35, MZ + 0.48);
+  slab(frame, 0.1, 0.96, 0.14, MX + 0.65, 1.35, MZ + 0.48);
   const reelStrip = reelTexture(THREE);
   const reels: any[] = [];
   for (let i = 0; i < 3; i++) {
@@ -318,9 +324,9 @@ function buildRoom(THREE: any, scene: any): Room {
     scene.add(reel);
     reels.push(reel);
   }
-  // A lamp aimed straight at the reels, so the game is never in the dark.
-  const reelLight = new THREE.PointLight(0xfff6e0, 7, 4, 1.6);
-  reelLight.position.set(MX, 1.5, MZ + 1.1);
+  // A soft lamp on the reels: enough to read them, not enough to blow out.
+  const reelLight = new THREE.PointLight(0xfff6e0, 2.2, 2.6, 1.6);
+  reelLight.position.set(MX, 1.6, MZ + 1.3);
   scene.add(reelLight);
   const bulbs: any[] = [];
   for (let i = 0; i < 5; i++) {
@@ -332,9 +338,9 @@ function buildRoom(THREE: any, scene: any): Room {
     scene.add(bulb);
     bulbs.push(bulb);
   }
-  // The stool sits beside the machine, so nobody's head blocks the reels.
-  slab(matte(0x51392a), 0.16, 0.55, 0.16, MX - 1.15, 0.28, MZ + 0.75);
-  slab(matte(0x7a5236, 0.6), 0.55, 0.1, 0.55, MX - 1.15, 0.58, MZ + 0.75);
+  // Her stool, square in front of the machine.
+  slab(matte(0x51392a), 0.16, 0.55, 0.16, MX, 0.28, MZ + 1.1);
+  slab(matte(0x7a5236, 0.6), 0.55, 0.1, 0.55, MX, 0.58, MZ + 1.1);
 
   // The dealer's table: bright felt under its own lamp, dice at the ready.
   const felt = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.05, 0.1, 24), matte(0x2a7a4c, 0.85));
@@ -347,8 +353,8 @@ function buildRoom(THREE: any, scene: any): Room {
   warm.position.set(TX, 2.7, TZ + 0.6);
   warm.castShadow = true;
   scene.add(warm);
-  const warm2 = new THREE.PointLight(0xffb1d5, 12, 8, 1.8);
-  warm2.position.set(MX, 2.8, MZ + 1.2);
+  const warm2 = new THREE.PointLight(0xffb1d5, 7, 7, 1.8);
+  warm2.position.set(MX, 2.8, MZ + 1.6);
   scene.add(warm2);
 
   const mine = [0, 1, 2].map(() => makeDie(THREE, false));
@@ -416,7 +422,9 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
   /** Where the camera wants to be, per game; the dice zoom overrides it. */
   let zoomUntil = 0;
   const CAMS: Record<GameId, { pos: number[]; look: number[] }> = {
-    slots: { pos: [-0.2, 1.6, -1.35], look: [MX, 1.3, MZ] },
+    // A three-quarter view from the right: the whole machine, the reels at
+    // an angle, and Yuuri on her stool in profile.
+    slots: { pos: [1.0, 1.8, -0.7], look: [MX + 0.2, 1.2, MZ + 0.3] },
     dice: { pos: [TX, 2.05, -0.9], look: [TX, 0.95, TZ] },
     highlow: { pos: [TX, 2.05, -0.9], look: [TX, 0.95, TZ] },
   };
@@ -469,8 +477,9 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
     });
     const [yuuri, chito] = cast;
     if (yuuri) {
-      yuuri.root.position.set(MX - 1.15, 0.3, MZ + 0.75);
-      yuuri.root.rotation.y = Math.PI + 0.7; // angled at the machine, profile to the camera
+      // ON the stool, not floating near it: seat height, facing the reels.
+      yuuri.root.position.set(MX, 0.52, MZ + 1.1);
+      yuuri.root.rotation.y = Math.PI;
     }
     if (chito) {
       chito.root.position.set(TX, 0, TZ - 1.35);
