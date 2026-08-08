@@ -2,15 +2,7 @@ import { getAllCards, getMeta, setMeta } from "./db.js";
 import { speak } from "./audio.js";
 import { assetUrl } from "./store.js";
 import { generationAvailable } from "./grammar-ai.js";
-import {
-  PIECES,
-  guessKind,
-  isKana,
-  kanaToRomaji,
-  startState,
-  toHiragana,
-  type WordKind,
-} from "./grammar-conjugate.js";
+import { PIECES, guessKind, isKana, startState, toHiragana, type WordKind } from "./grammar-conjugate.js";
 
 /**
  * The sentence recipes: the course's patterns, live.
@@ -152,11 +144,7 @@ interface Recipe {
   forms: FormChoice[];
   /** The full sentence, spaced for the eye. */
   jp: (s: RecipeState) => string;
-  /** The rough English, shown at once; Claude's version replaces it. */
-  en: (s: RecipeState) => string;
 }
-
-const BE_EN = ["is", "was", "isn't", "wasn't"];
 
 const RECIPES: Recipe[] = [
   {
@@ -165,17 +153,6 @@ const RECIPES: Recipe[] = [
     pattern: "X is Y",
     forms: BE_FORMS,
     jp: (s) => `${s.x.kana}は ${s.y.kana}${BE_FORMS[s.form].make(s)}${s.ender}`,
-    // The honest reading, not a guess at the natural one: は sets a topic,
-    // so あなたはテストです is "as for you, it is a test", which may really
-    // mean "you have a test". Claude supplies the natural meaning; this
-    // frame never lies in the meantime.
-    en: (s) => {
-      const base = `as for ${s.x.gloss}, it ${BE_EN[s.form]} ${s.y.gloss}`;
-      if (s.ender === "か") return `${base}?`;
-      if (s.ender === "ね") return `${base}, right?`;
-      if (s.ender === "よ") return `${base}, I'm telling you`;
-      return base;
-    },
   },
   {
     id: "do",
@@ -183,25 +160,8 @@ const RECIPES: Recipe[] = [
     pattern: "X does something to Y",
     forms: DO_FORMS,
     jp: (s) => `${s.x.kana}は ${s.y.kana}を ${DO_FORMS[s.form].make(s)}${s.ender}`,
-    en: (s) => {
-      const v = s.verb!.gloss;
-      const forms = [v, v, `doesn't ${v}`, `${pastOf(v)}`, `wants to ${v}`];
-      const base = `as for ${s.x.gloss}, ${forms[s.form]} ${s.y.gloss}`;
-      if (s.ender === "か") return `${base}?`;
-      if (s.ender === "ね") return `${base}, right?`;
-      if (s.ender === "よ") return `${base}, I'm telling you`;
-      return base;
-    },
   },
 ];
-
-/** Enough English past tense for a template that Claude will overwrite. */
-function pastOf(verb: string): string {
-  const first = verb.split(" ")[0];
-  const rest = verb.slice(first.length);
-  const irregular: Record<string, string> = { drink: "drank", eat: "ate", read: "read", buy: "bought", make: "made", sing: "sang" };
-  return (irregular[first] ?? (first.endsWith("e") ? `${first}d` : `${first}ed`)) + rest;
-}
 
 // ---------------- state ----------------
 
@@ -238,9 +198,10 @@ function drawTranslation(box: HTMLElement, t: Translation): void {
 }
 
 /**
- * The real meaning, from Claude. The literal frame on screen is honest but
- * wooden; only a translator that knows は marks a topic can say that
- * あなたはテストです is probably about an exam, not an identity crisis.
+ * The meaning, from Claude alone. Nothing but "…" shows until the answer
+ * lands: only a translator that knows は marks a topic can say that
+ * あなたはテストです is probably about an exam, not an identity crisis, and
+ * a templated guess in the meantime reads as broken English.
  */
 async function refineTranslation(host: HTMLElement, recipe: Recipe, s: RecipeState): Promise<void> {
   const jp = recipe.jp(s).replace(/\s+/g, "");
@@ -251,7 +212,10 @@ async function refineTranslation(host: HTMLElement, recipe: Recipe, s: RecipeSta
     drawTranslation(box, cached);
     return;
   }
-  if (!(await generationAvailable())) return;
+  if (!(await generationAvailable())) {
+    box.textContent = "";
+    return;
+  }
   const seq = ++translateSeq;
   await new Promise((r) => setTimeout(r, 400));
   if (seq !== translateSeq || !box.isConnected) return;
@@ -273,16 +237,20 @@ async function refineTranslation(host: HTMLElement, recipe: Recipe, s: RecipeSta
     'Give "en": that most natural English meaning, short, as real speech.',
     'Give "note": the literal topic reading, in the shape "literally: as for you, it is a test".',
   ].join("\n");
+  // On any failure the dots come off: stuck "…" reads as broken.
+  const settle = (): void => {
+    if (seq === translateSeq && box.isConnected) box.textContent = "";
+  };
   try {
     const res = await fetch(assetUrl("grammar.php"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ mode: "translate", prompt }),
     });
-    if (!res.ok) return;
+    if (!res.ok) return settle();
     const { raw } = (await res.json()) as { raw?: string };
     const parsed = JSON.parse(raw ?? "{}") as { en?: string; note?: string };
-    if (typeof parsed.en !== "string" || !parsed.en.trim()) return;
+    if (typeof parsed.en !== "string" || !parsed.en.trim()) return settle();
     const value: Translation = {
       en: parsed.en.trim(),
       ...(typeof parsed.note === "string" && parsed.note.trim() ? { note: parsed.note.trim() } : {}),
@@ -290,7 +258,7 @@ async function refineTranslation(host: HTMLElement, recipe: Recipe, s: RecipeSta
     translations.set(jp, value);
     if (seq === translateSeq && box.isConnected) drawTranslation(box, value);
   } catch {
-    // The literal frame already on screen is the answer then.
+    settle();
   }
 }
 
@@ -469,8 +437,7 @@ function cardHtml(recipe: Recipe, s: RecipeState): string {
         <button class="speaker rc-say" data-recipe="${recipe.id}" title="Say it" aria-label="Say it">🔊</button>
         <span class="rc-jp" lang="ja">${escapeHtml(jp)}</span>
       </div>
-      <div class="rc-romaji">${escapeHtml(romajiOf(jp))}</div>
-      <div class="rc-en" id="rc-en-${recipe.id}">“${escapeHtml(recipe.en(s))}”</div>
+      <div class="rc-en" id="rc-en-${recipe.id}">…</div>
     </div>`;
 }
 
@@ -563,22 +530,6 @@ function wire(host: HTMLDivElement, recipe: Recipe, options: RecipeOptions): voi
   card.querySelector<HTMLButtonElement>(".rc-say")!.addEventListener("click", () => {
     void speak(recipe.jp(s).replace(/\s+/g, ""), { rate: 0.85 }).catch(() => undefined);
   });
-}
-
-/**
- * Romaji for a recipe sentence, with the particles read the way they're
- * said: the は and を hanging off a word come out "wa" and "o", set apart
- * with a space — exactly what chapter 1 teaches.
- */
-function romajiOf(jp: string): string {
-  return jp
-    .split(/\s+/)
-    .map((part) => {
-      const particle = part.endsWith("は") ? "wa" : part.endsWith("を") ? "o" : null;
-      if (particle && part.length > 1) return `${kanaToRomaji(toHiragana(part.slice(0, -1)))} ${particle}`;
-      return kanaToRomaji(toHiragana(part));
-    })
-    .join(" ");
 }
 
 function escapeHtml(text: string): string {
