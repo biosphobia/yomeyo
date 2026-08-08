@@ -23,27 +23,44 @@ let game: GameId = "slots";
 
 // ---------------- the reels ----------------
 
-/** Eight cells around each reel; 月 and ☆ appear twice, so they hit often. */
-const REEL: string[] = ["７", "ゆ", "魚", "月", "☆", "缶", "月", "☆"];
+/** Ten cells per column; 月 and ☆ appear twice, so they hit often. */
+const REEL: string[] = ["７", "ゆ", "🐟", "月", "🍐", "🥫", "☆", "🐱", "月", "☆"];
 const SYMBOL_COLOUR: Record<string, string> = {
   "７": "#e8862c",
   ゆ: "#d4508a",
-  魚: "#1f9e8e",
   月: "#5a6478",
   "☆": "#c9a227",
-  缶: "#6a7280",
 };
 
 /** Multiplier for three of a kind. */
-const TRIPLE_PAY: Record<string, number> = { "７": 60, ゆ: 30, 魚: 20, 缶: 14, 月: 9, "☆": 9 };
+const TRIPLE_PAY: Record<string, number> = {
+  "７": 60,
+  ゆ: 30,
+  "🐱": 25,
+  "🐟": 20,
+  "🍐": 18,
+  "🥫": 15,
+  月: 8,
+  "☆": 8,
+};
 /** Multiplier for exactly two of a kind, for the two worth pairing. */
-const PAIR_PAY: Record<string, number> = { "７": 4, ゆ: 2 };
+const PAIR_PAY: Record<string, number> = { "７": 4, ゆ: 2, "🥫": 3 };
 
+/**
+ * The payline, read the casino's way: triples first, then the house
+ * specials — ゆ mistaken for a fish, the cat catching one, a night sky —
+ * then the pairs worth anything.
+ */
 function slotResult(cells: number[]): { mult: number; line: string } {
   const [a, b, c] = cells.map((cell) => REEL[cell]);
+  const line = [a, b, c];
+  const has = (symbol: string): boolean => line.includes(symbol);
   if (a === b && b === c) return { mult: TRIPLE_PAY[a] ?? 8, line: `${a} ${a} ${a} — three of a kind!` };
+  if (has("ゆ") && has("🐟")) return { mult: 3, line: "ゆ is not a fish. The machine disagrees" };
+  if (has("🐱") && has("🐟")) return { mult: 3, line: "the cat gets the fish" };
+  if (line.every((s) => s === "月" || s === "☆")) return { mult: 2, line: "a clear night sky" };
   for (const symbol of Object.keys(PAIR_PAY)) {
-    if ([a, b, c].filter((s) => s === symbol).length === 2) {
+    if (line.filter((s) => s === symbol).length === 2) {
       return { mult: PAIR_PAY[symbol], line: `a pair of ${symbol}` };
     }
   }
@@ -317,7 +334,7 @@ function buildRoom(THREE: any, scene: any): Room {
         const y = (row - frac) * CELL;
         slotPaint.fillStyle = (base + row) % 2 === 0 ? "#faf6ec" : "#ece4d4";
         slotPaint.fillRect(col * CELL + 4, y + 4, CELL - 8, CELL - 8);
-        slotPaint.fillStyle = SYMBOL_COLOUR[symbol] ?? "#333";
+        slotPaint.fillStyle = SYMBOL_COLOUR[symbol] ?? "#44404a";
         slotPaint.fillText(symbol, col * CELL + CELL / 2, y + CELL / 2 + 4);
       }
     }
@@ -558,19 +575,22 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
   const CAMS: Record<GameId, { pos: number[]; look: number[] }> = {
     // A three-quarter view from the right: the whole machine, the reels at
     // an angle, and Yuuri on her stool in profile.
-    slots: { pos: [1.0, 1.8, -0.7], look: [MX + 0.2, 1.2, MZ + 0.3] },
-    dice: { pos: [TX, 2.05, -0.9], look: [TX, 0.95, TZ] },
+    slots: { pos: [1.6, 1.9, 0.35], look: [MX + 0.15, 1.2, MZ + 0.2] },
+    dice: { pos: [TX, 2.35, -0.2], look: [TX, 0.9, TZ] },
     // The card table from a lower, angled seat: same felt, different chair.
-    highlow: { pos: [TX - 0.85, 1.6, -1.5], look: [TX + 0.1, 0.95, TZ + 0.3] },
+    highlow: { pos: [TX - 1.1, 1.85, -0.8], look: [TX + 0.1, 0.95, TZ + 0.3] },
     // Standing off from the mystery door, at a respectful distance.
-    door: { pos: [4.3, 1.55, -3.1], look: [4.6, 1.5, -6.1] },
+    door: { pos: [4.3, 1.55, -2.9], look: [4.6, 1.5, -6.1] },
   };
-  const DICE_ZOOM = { pos: [TX, 1.6, -2.05], look: [TX, 0.95, TZ + 0.1] };
+  const DICE_ZOOM = { pos: [TX, 1.95, -1.25], look: [TX, 0.9, TZ] };
   const DOOR_ZOOM = { pos: [4.5, 1.45, -4.55], look: [4.6, 1.3, -6.1] };
   /** Yuuri's trip from her stool to bar the door, timed from its start. */
   let guard: { start: number } | null = null;
   let doorFlareUntil = 0;
   const smooth = (x: number): number => x * x * (3 - 2 * x);
+  // Seated, the hips ride about 0.7 above the root, so parking her ON the
+  // 0.63 stool means the root sits just below the floor line.
+  const SIT_Y = -0.06;
 
   // The picture leans with the pointer, a few centimetres of parallax.
   const pointer = { x: 0, y: 0, tx: 0, ty: 0 };
@@ -635,7 +655,7 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
       // Sitting ON the stool: the sit pose parks the seat ~0.28 below the
       // root, so a 0.63 seat wants the root at 0.91 — same sum the campfire
       // scene uses for the ground.
-      yuuri.root.position.set(MX, 0.91, MZ + 1.6);
+      yuuri.root.position.set(MX, SIT_Y, MZ + 1.6);
       yuuri.root.rotation.y = Math.PI;
     }
     if (chito) {
@@ -666,7 +686,7 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
         if (guard && g >= 0) {
           if (g < 0.4) {
             // Off the stool.
-            yuuri.root.position.set(STOOL.x, 0.91 * (1 - g / 0.4), STOOL.z);
+            yuuri.root.position.set(STOOL.x, SIT_Y * (1 - g / 0.4), STOOL.z);
             yuuri.root.rotation.y = Math.PI;
             pose(yuuri.bones, "clear", 1);
           } else if (g < 1.6) {
@@ -697,12 +717,12 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
           } else {
             // Settling back onto the stool.
             const p = (g - 5.0) / 0.4;
-            yuuri.root.position.set(STOOL.x, 0.91 * p, STOOL.z);
+            yuuri.root.position.set(STOOL.x, SIT_Y * p, STOOL.z);
             yuuri.root.rotation.y = Math.PI;
             pose(yuuri.bones, "sit", p);
           }
         } else {
-          yuuri.root.position.set(STOOL.x, 0.91, STOOL.z);
+          yuuri.root.position.set(STOOL.x, SIT_Y, STOOL.z);
           yuuri.root.rotation.y = Math.PI;
           pose(yuuri.bones, "sit", 1);
           pose(yuuri.bones, "lean", 1, t);
@@ -927,7 +947,7 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
       <div class="row-actions" style="justify-content:center">
         <button id="cas-spin" class="cas-big">SPIN — <span id="cas-cost">${bet}</span> ¥</button>
       </div>
-      <div class="cas-result" id="cas-result">Three ７ pays ×60 · three ゆ ×30 · pairs of ７ and ゆ pay too</div>
+      <div class="cas-result" id="cas-result">Three ７ ×60 · ゆ＋🐟 ×3 · 🐱＋🐟 ×3 · all 月☆ ×2 · pairs of ７・ゆ・🥫 pay too</div>
     `;
     wireBets(() => {
       const cost = gameBox.querySelector("#cas-cost");
