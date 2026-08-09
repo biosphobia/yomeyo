@@ -269,6 +269,16 @@ export async function deleteMetaByPrefix(prefix: string): Promise<number> {
   return keys.length;
 }
 
+/** Every meta entry whose key starts with `prefix`, as [key, value] pairs. */
+export async function getMetaByPrefix(prefix: string): Promise<[string, unknown][]> {
+  const db = await openNamed(metaDbName(prefix));
+  const range = IDBKeyRange.bound(prefix, `${prefix}￿`);
+  const tx = db.transaction("meta", "readonly").objectStore("meta");
+  const keys = await reqResult(tx.getAllKeys(range) as IDBRequest<IDBValidKey[]>);
+  const values = await reqResult(tx.getAll(range) as IDBRequest<unknown[]>);
+  return keys.map((key, i) => [String(key), values[i]]);
+}
+
 export async function deleteMeta(key: string): Promise<void> {
   const db = await openNamed(metaDbName(key));
   const tx = db.transaction("meta", "readwrite");

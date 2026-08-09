@@ -29,6 +29,31 @@ export interface OcrWord {
 
 const CACHE_PREFIX = "bookOcr:";
 
+/** Where a shared book's OCR lives, when the book is shared at all. */
+export interface SharedOcrRef {
+  id: string;
+  page: number;
+}
+
+/**
+ * A page already read — locally, or by anyone who read this shared book
+ * before. A remote hit is cached locally, so it is fetched once.
+ */
+export async function cachedOcr(cacheKey: string, shared?: SharedOcrRef): Promise<OcrWord[] | null> {
+  const held = await getMeta<OcrWord[]>(CACHE_PREFIX + cacheKey);
+  if (held && held.length > 0) return held;
+  if (!shared) return null;
+  const { fetchSharedOcr } = await import("./books.js");
+  const remote = await fetchSharedOcr(shared.id, shared.page);
+  if (!Array.isArray(remote)) return null;
+  const words = (remote as OcrWord[]).filter(
+    (w) => w && typeof w.text === "string" && w.text.trim() !== "" && Number.isFinite(w.x) && Number.isFinite(w.y),
+  );
+  if (words.length === 0) return null;
+  await setMeta(CACHE_PREFIX + cacheKey, words);
+  return words;
+}
+
 let workerPromise: Promise<any> | null = null;
 
 async function worker(): Promise<any> {
@@ -113,9 +138,20 @@ export async function ocrPage(
   cacheKey: string,
   size: { width: number; height: number },
   onStatus?: (line: string) => void,
+  shared?: SharedOcrRef,
 ): Promise<OcrWord[]> {
-  const held = await getMeta<OcrWord[]>(CACHE_PREFIX + cacheKey);
+  // Read before running anything: this device's cache, then whatever any
+  // earlier reader of the shared book already contributed.
+  const held = await cachedOcr(cacheKey, shared);
   if (held) return held;
+
+  /** A fresh result also joins the shared book, for everyone after. */
+  const contribute = (words: OcrWord[]): void => {
+    if (!shared || words.length === 0) return;
+    void import("./books.js")
+      .then((m) => m.publishOcr(shared.id, shared.page, words))
+      .catch(() => undefined);
+  };
 
   // Claude first: better print reading by far. Tesseract when the host
   // has no key, the network is down, or Claude found nothing.
@@ -123,6 +159,7 @@ export async function ocrPage(
     const viaClaude = await claudeOcr(image, onStatus).catch(() => null);
     if (viaClaude && viaClaude.length > 0) {
       await setMeta(CACHE_PREFIX + cacheKey, viaClaude);
+      contribute(viaClaude);
       return viaClaude;
     }
   }
@@ -145,5 +182,6 @@ export async function ocrPage(
     });
   }
   await setMeta(CACHE_PREFIX + cacheKey, words);
+  contribute(words);
   return words;
 }

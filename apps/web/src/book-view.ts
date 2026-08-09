@@ -3,7 +3,7 @@ import { activeDictionary } from "./store.js";
 import { closePopup, showLookupPopup } from "./popup.js";
 import { getBookFile, type BookInfo } from "./books.js";
 import { getMeta, setMeta } from "./db.js";
-import { ocrPage, type OcrWord } from "./ocr.js";
+import { cachedOcr, ocrPage, type OcrWord, type SharedOcrRef } from "./ocr.js";
 
 /**
  * Reading one book, whatever it is made of.
@@ -312,10 +312,14 @@ async function openPdf(blob: Blob, ui: Ui): Promise<Closeable> {
     // A page with nothing readable on it is a picture: manga, a scan. OCR
     // is offered rather than forced, because it takes a moment.
     if (japaneseChars < 4) {
-      offerOcr(ui, ocrLayer, `${ui.book.id}:${page}`, () => canvas, {
-        width: canvas.width,
-        height: canvas.height,
-      });
+      offerOcr(
+        ui,
+        ocrLayer,
+        `${ui.book.id}:${page}`,
+        () => canvas,
+        { width: canvas.width, height: canvas.height },
+        ui.book.sharedId ? { id: ui.book.sharedId, page } : undefined,
+      );
     } else {
       const old = ui.controls.querySelector("#bk-ocr-btn");
       old?.remove();
@@ -388,10 +392,14 @@ async function openPictures(blob: Blob, ui: Ui): Promise<Closeable> {
     img.style.width = `${width}px`;
     pageBox.style.width = `${width}px`;
     pageBox.style.height = "auto";
-    offerOcr(ui, ocrLayer, `${ui.book.id}:${page}`, () => img, {
-      width: img.naturalWidth || 1,
-      height: img.naturalHeight || 1,
-    });
+    offerOcr(
+      ui,
+      ocrLayer,
+      `${ui.book.id}:${page}`,
+      () => img,
+      { width: img.naturalWidth || 1, height: img.naturalHeight || 1 },
+      ui.book.sharedId ? { id: ui.book.sharedId, page } : undefined,
+    );
   };
 
   if (pages.length > 1) {
@@ -424,6 +432,7 @@ function offerOcr(
   cacheKey: string,
   source: () => HTMLCanvasElement | HTMLImageElement,
   size: { width: number; height: number },
+  shared?: SharedOcrRef,
 ): void {
   ui.controls.querySelector("#bk-ocr-btn")?.remove();
   const button = document.createElement("button");
@@ -466,8 +475,9 @@ function offerOcr(
     ui.status.textContent = words.length === 0 ? "OCR found no Japanese on this page." : "";
   };
 
-  // A page OCR'd before draws its words immediately, no button needed.
-  void getMeta<OcrWord[]>(`bookOcr:${cacheKey}`).then((held) => {
+  // A page read before — on this device, or by anyone who read this
+  // shared book — draws its words immediately, no button needed.
+  void cachedOcr(cacheKey, shared).then((held) => {
     if (held) {
       overlay(held);
       button.remove();
@@ -490,9 +500,15 @@ function offerOcr(
               canvas.getContext("2d")!.drawImage(el, 0, 0, size.width, size.height);
               return canvas;
             })();
-      const words = await ocrPage(image, cacheKey, { width: image.width, height: image.height }, (line) => {
-        ui.status.textContent = line;
-      });
+      const words = await ocrPage(
+        image,
+        cacheKey,
+        { width: image.width, height: image.height },
+        (line) => {
+          ui.status.textContent = line;
+        },
+        shared,
+      );
       overlay(words);
       button.remove();
     } catch (err) {
