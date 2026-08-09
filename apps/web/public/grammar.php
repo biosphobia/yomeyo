@@ -14,6 +14,7 @@
  *   POST grammar.php {prompt, mode:deck}      vocabulary cards for a deck
  *   POST grammar.php {prompt, mode:translate} one built word, translated
  *   POST grammar.php {prompt, mode:explain}   why a quiz answer was right/wrong
+ *   POST grammar.php {mode:ocr, image, media} a page image read into text blocks
  *
  * On a host without the key file the app notices and simply uses the
  * sentences that ship with it, so nothing here is ever load-bearing.
@@ -36,15 +37,26 @@ if (($_SERVER["REQUEST_METHOD"] ?? "GET") !== "POST") {
 }
 
 $raw = file_get_contents("php://input");
-if ($raw === false || strlen($raw) > 20000) {
+// OCR carries a page image; everything else is a few kilobytes of prompt.
+if ($raw === false || strlen($raw) > 9000000) {
   http_response_code(400);
   exit;
 }
 $req = json_decode($raw, true);
-if (!is_array($req) || !isset($req["prompt"]) || !is_string($req["prompt"])) {
+if (!is_array($req)) {
   http_response_code(400);
   exit;
 }
+$isOcrRequest = (($req["mode"] ?? "") === "ocr");
+if (!$isOcrRequest && strlen($raw) > 20000) {
+  http_response_code(400);
+  exit;
+}
+if (!$isOcrRequest && (!isset($req["prompt"]) || !is_string($req["prompt"]))) {
+  http_response_code(400);
+  exit;
+}
+$req["prompt"] = is_string($req["prompt"] ?? null) ? $req["prompt"] : "";
 // The prompt is assembled by the app from its own unit definitions; this
 // endpoint only ever asks for practice sentences, whatever it is sent.
 $prompt = substr($req["prompt"], 0, 12000);
@@ -76,6 +88,21 @@ $parse = ($mode === "parse");
 $deck = ($mode === "deck");
 $translate = ($mode === "translate");
 $explain = ($mode === "explain");
+$ocr = ($mode === "ocr");
+
+// The OCR image rides the request as base64; only real image types, and
+// small enough for the API's own limits.
+$ocrImage = "";
+$ocrMedia = "";
+if ($ocr) {
+  $ocrImage = is_string($req["image"] ?? null) ? $req["image"] : "";
+  $ocrMedia = is_string($req["media"] ?? null) ? $req["media"] : "";
+  if ($ocrImage === "" || strlen($ocrImage) > 7000000
+      || !in_array($ocrMedia, ["image/jpeg", "image/png", "image/webp"], true)) {
+    http_response_code(400);
+    exit;
+  }
+}
 
 // Taking a real sentence apart adds kanji, a reading per piece, and the
 // whole-sentence translations; writing practice sentences does not.
@@ -120,7 +147,34 @@ $explainSchema = [
   "additionalProperties" => false,
 ];
 
-$schema = $explain
+// A page read into text blocks: the text exactly as printed, and a tight
+// box per block in thousandths of the image, so the overlay lands true.
+$ocrSchema = [
+  "type" => "object",
+  "properties" => [
+    "blocks" => [
+      "type" => "array",
+      "items" => [
+        "type" => "object",
+        "properties" => [
+          "text" => ["type" => "string"],
+          "x" => ["type" => "integer"],
+          "y" => ["type" => "integer"],
+          "w" => ["type" => "integer"],
+          "h" => ["type" => "integer"],
+        ],
+        "required" => ["text", "x", "y", "w", "h"],
+        "additionalProperties" => false,
+      ],
+    ],
+  ],
+  "required" => ["blocks"],
+  "additionalProperties" => false,
+];
+
+$schema = $ocr
+  ? $ocrSchema
+  : ($explain
   ? $explainSchema
   : ($translate
   ? $translateSchema
@@ -162,20 +216,31 @@ $schema = $explain
       ],
       "required" => ["sentences"],
       "additionalProperties" => false,
-    ])));
+    ]))));
 
 $body = [
   // Feedback has to land while the answer still stings, so it rides the
   // fastest model; everything else keeps the careful one.
   "model" => $explain ? "claude-haiku-4-5-20251001" : "claude-sonnet-5",
-  "max_tokens" => $explain ? 300 : 16000,
+  "max_tokens" => $explain ? 300 : ($ocr ? 8000 : 16000),
   "output_config" => $explain
     ? ["format" => ["type" => "json_schema", "schema" => $schema]]
     : [
-        "effort" => $parse ? "high" : ($translate ? "low" : "medium"),
+        "effort" => $parse ? "high" : ($translate || $ocr ? "low" : "medium"),
         "format" => ["type" => "json_schema", "schema" => $schema],
       ],
-  "system" => $explain
+  "system" => $ocr
+    ? "You read Japanese text off a page image, usually manga or a scan. " .
+      "Return every distinct block of printed Japanese (a speech bubble, a " .
+      "caption, a sign) as its own entry, in natural reading order (manga: " .
+      "right to left, top to bottom). Transcribe the text EXACTLY as " .
+      "printed, including っ and small kana; never translate, never invent " .
+      "text, and skip blocks you cannot read confidently. Each block's box " .
+      "must be TIGHT around the text itself, not its bubble: x and y are " .
+      "the top-left corner and w and h the size, all in thousandths of the " .
+      "image's width and height (0 to 1000). Positioning accuracy matters " .
+      "as much as the text: a box that drifts off its bubble is a failure."
+    : ($explain
     ? "You give feedback on one answered quiz question in a beginner " .
       "Japanese course. One or two short sentences, plain everyday words, " .
       "no grammar jargon, no em dashes, no scolding. If they were right, " .
@@ -202,8 +267,16 @@ $body = [
       "Follow the model and the wording rules in the request exactly."
     : "You write practice sentences for a beginner Japanese course. " .
       "Follow the rules in the request exactly; every sentence is shown to a " .
-      "learner as fact, so a wrong label teaches something wrong."))),
-  "messages" => [["role" => "user", "content" => $prompt]],
+      "learner as fact, so a wrong label teaches something wrong.")))),
+  "messages" => [[
+    "role" => "user",
+    "content" => $ocr
+      ? [
+          ["type" => "image", "source" => ["type" => "base64", "media_type" => $ocrMedia, "data" => $ocrImage]],
+          ["type" => "text", "text" => "Read this page into text blocks with tight boxes."],
+        ]
+      : $prompt,
+  ]],
 ];
 
 $ch = curl_init("https://api.anthropic.com/v1/messages");

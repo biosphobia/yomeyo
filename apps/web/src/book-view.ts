@@ -448,10 +448,18 @@ function offerOcr(
       el.title = word.text;
       el.addEventListener("click", (ev) => {
         ev.stopPropagation();
-        void lookUpAt(pageText, start, ui.status).then((match) => {
-          layer.querySelectorAll(".hl").forEach((e) => e.classList.remove("hl"));
-          if (match) el.classList.add("hl");
-        });
+        layer.querySelectorAll(".hl").forEach((e) => e.classList.remove("hl"));
+        // A short block is one word: look it up straight away. A whole
+        // bubble opens as tappable text beside its box, so the finger
+        // picks the exact word rather than the popup guessing one.
+        if ([...word.text].length <= 4) {
+          void lookUpAt(pageText, start, ui.status).then((match) => {
+            if (match) el.classList.add("hl");
+          });
+        } else {
+          el.classList.add("hl");
+          openOcrStrip(layer, word, ui.status);
+        }
       });
       layer.appendChild(el);
     }
@@ -493,6 +501,36 @@ function offerOcr(
       ui.status.textContent = err instanceof Error ? err.message : "OCR failed.";
     }
   });
+}
+
+/**
+ * A recognised bubble, opened as tappable text beside its box: every
+ * character a span, exactly like the text reader, so the lookup starts
+ * from the word actually touched.
+ */
+function openOcrStrip(layer: HTMLDivElement, word: OcrWord, status: HTMLElement | null): void {
+  layer.querySelector(".bk-ocr-strip")?.remove();
+  const strip = document.createElement("div");
+  strip.className = "bk-ocr-strip";
+  // Beside the box when there is room, under it when there is not.
+  const below = word.y + word.h < 0.85;
+  strip.style.left = `${Math.min(78, word.x * 100).toFixed(2)}%`;
+  strip.style.top = below ? `${((word.y + word.h) * 100).toFixed(2)}%` : "auto";
+  if (!below) strip.style.bottom = `${((1 - word.y) * 100).toFixed(2)}%`;
+  const close = document.createElement("button");
+  close.className = "bk-strip-close";
+  close.textContent = "✕";
+  close.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    strip.remove();
+  });
+  const text = document.createElement("div");
+  text.className = "bk-strip-text";
+  text.lang = "ja";
+  renderTappableText(text, word.text, status);
+  strip.append(close, text);
+  strip.addEventListener("click", (ev) => ev.stopPropagation());
+  layer.appendChild(strip);
 }
 
 // ---------------- shared controls ----------------
