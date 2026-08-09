@@ -139,15 +139,14 @@ service cloud.firestore {
       }
 
       // OCR results, one document per page. Any signed-in reader may
-      // contribute a page they read — OCR is shared work, and a page read
-      // once should never be read again. The publisher or admin can clear
-      // a bad one, and a fresh write replaces it.
+      // contribute a page they read, replace a bad one, or clear it —
+      // OCR is shared work, and so is the janitoring.
       match /ocr/{page} {
         allow read: if true;
         allow create, update: if request.auth != null
           && request.resource.data.keys().hasOnly(['words'])
           && request.resource.data.words is list;
-        allow delete: if publishedByCaller(bookId) || isAdmin();
+        allow delete: if request.auth != null;
       }
     }
   }

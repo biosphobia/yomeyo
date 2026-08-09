@@ -3,7 +3,7 @@ import { activeDictionary } from "./store.js";
 import { closePopup, showLookupPopup } from "./popup.js";
 import { getBookFile, type BookInfo } from "./books.js";
 import { getMeta, setMeta } from "./db.js";
-import { cachedOcr, ocrPage, type OcrWord, type SharedOcrRef } from "./ocr.js";
+import { cachedOcr, clearOcr, ocrPage, type OcrWord, type SharedOcrRef } from "./ocr.js";
 
 /**
  * Reading one book, whatever it is made of.
@@ -334,6 +334,34 @@ async function openPdf(blob: Blob, ui: Ui): Promise<Closeable> {
     zoom = next;
     void draw();
   });
+  if (doc.numPages > 1) {
+    offerBatchOcr(ui, {
+      total: doc.numPages,
+      keyOf: (i) => `${ui.book.id}:${i + 1}`,
+      sharedOf: (i) => (ui.book.sharedId ? { id: ui.book.sharedId, page: i + 1 } : undefined),
+      // A page that already carries real text needs no OCR.
+      needed: async (i) => {
+        const pdfPage = await doc.getPage(i + 1);
+        const content = await pdfPage.getTextContent();
+        let japanese = 0;
+        for (const item of content.items as { str: string }[]) {
+          for (const ch of item.str ?? "") if (isJapaneseChar(ch)) japanese++;
+        }
+        return japanese < 4;
+      },
+      render: async (i) => {
+        const pdfPage = await doc.getPage(i + 1);
+        const base = pdfPage.getViewport({ scale: 1 });
+        const viewport = pdfPage.getViewport({ scale: 1300 / base.width });
+        const off = document.createElement("canvas");
+        off.width = Math.round(viewport.width);
+        off.height = Math.round(viewport.height);
+        await pdfPage.render({ canvasContext: off.getContext("2d")!, viewport } as never).promise;
+        return off;
+      },
+      refresh: () => void draw(),
+    });
+  }
   await draw();
   return {
     close: () => {
@@ -412,6 +440,33 @@ async function openPictures(blob: Blob, ui: Ui): Promise<Closeable> {
     zoom = next;
     void draw();
   });
+  if (pages.length > 1) {
+    offerBatchOcr(ui, {
+      total: pages.length,
+      keyOf: (i) => `${ui.book.id}:${i}`,
+      sharedOf: (i) => (ui.book.sharedId ? { id: ui.book.sharedId, page: i } : undefined),
+      render: async (i) => {
+        const bytes = await pages[i].bytes();
+        const pageUrl = URL.createObjectURL(new Blob([bytes as unknown as BlobPart]));
+        try {
+          const picture = new Image();
+          await new Promise<void>((resolve, reject) => {
+            picture.onload = () => resolve();
+            picture.onerror = () => reject(new Error("unreadable image"));
+            picture.src = pageUrl;
+          });
+          const off = document.createElement("canvas");
+          off.width = picture.naturalWidth || 1;
+          off.height = picture.naturalHeight || 1;
+          off.getContext("2d")!.drawImage(picture, 0, 0);
+          return off;
+        } finally {
+          URL.revokeObjectURL(pageUrl);
+        }
+      },
+      refresh: () => void draw(),
+    });
+  }
   await draw();
   return {
     close: () => {
@@ -435,13 +490,39 @@ function offerOcr(
   shared?: SharedOcrRef,
 ): void {
   ui.controls.querySelector("#bk-ocr-btn")?.remove();
+  ui.controls.querySelector("#bk-ocr-manage")?.remove();
   const button = document.createElement("button");
   button.id = "bk-ocr-btn";
   button.className = "secondary";
   button.textContent = "🔍 Read this page (OCR)";
   ui.controls.appendChild(button);
 
-  const overlay = (words: OcrWord[]): void => {
+  // Once a page has boxes, its OCR can be redone (a bad read replaced,
+  // everywhere) or cleared outright.
+  const showManage = (): void => {
+    ui.controls.querySelector("#bk-ocr-manage")?.remove();
+    const manage = document.createElement("div");
+    manage.id = "bk-ocr-manage";
+    manage.className = "row-actions bk-ocr-manage";
+    manage.innerHTML = `
+      <button class="secondary" id="bk-ocr-redo">↻ Re-OCR page</button>
+      <button class="secondary" id="bk-ocr-clear">✕ Clear OCR</button>
+    `;
+    manage.querySelector("#bk-ocr-redo")!.addEventListener("click", () => void run(true));
+    manage.querySelector("#bk-ocr-clear")!.addEventListener("click", () => {
+      void clearOcr(cacheKey, shared).then(() => {
+        layer.innerHTML = "";
+        manage.remove();
+        ui.controls.appendChild(button);
+        button.disabled = false;
+        button.textContent = "🔍 Read this page (OCR)";
+        ui.status.textContent = "OCR cleared for this page.";
+      });
+    });
+    ui.controls.appendChild(manage);
+  };
+
+  const overlay = (words: OcrWord[], quiet = false): void => {
     layer.innerHTML = "";
     const pageText = words.map((w) => w.text).join("");
     let offset = 0;
@@ -472,21 +553,15 @@ function offerOcr(
       });
       layer.appendChild(el);
     }
-    ui.status.textContent = words.length === 0 ? "OCR found no Japanese on this page." : "";
+    if (!quiet) ui.status.textContent = words.length === 0 ? "OCR found no Japanese on this page." : "";
   };
 
-  // A page read before — on this device, or by anyone who read this
-  // shared book — draws its words immediately, no button needed.
-  void cachedOcr(cacheKey, shared).then((held) => {
-    if (held) {
-      overlay(held);
-      button.remove();
-    }
-  });
-
-  button.addEventListener("click", async () => {
+  // One reader for both the button and the redo: a forced run ignores
+  // every cache and replaces the page's result for everyone.
+  const run = async (force: boolean): Promise<void> => {
     button.disabled = true;
     button.textContent = "Reading…";
+    ui.status.textContent = force ? "Reading the page again…" : "Reading…";
     try {
       const el = source();
       const image =
@@ -508,14 +583,96 @@ function offerOcr(
           ui.status.textContent = line;
         },
         shared,
+        { force },
       );
       overlay(words);
       button.remove();
+      showManage();
     } catch (err) {
       button.disabled = false;
       button.textContent = "🔍 Read this page (OCR)";
       ui.status.textContent = err instanceof Error ? err.message : "OCR failed.";
     }
+  };
+  button.addEventListener("click", () => void run(false));
+
+  // A page read before — on this device, or by anyone who read this
+  // shared book — draws its words immediately, no button needed.
+  void cachedOcr(cacheKey, shared).then((held) => {
+    if (held) {
+      overlay(held, true);
+      button.remove();
+      showManage();
+    }
+  });
+}
+
+/** What a whole-book OCR run needs to know about its pages. */
+interface BatchOcrSpec {
+  /** How many pages, iterated 0..total-1. */
+  total: number;
+  keyOf: (page: number) => string;
+  sharedOf: (page: number) => SharedOcrRef | undefined;
+  /** Does this page even need OCR? Text PDF pages do not. */
+  needed?: (page: number) => Promise<boolean>;
+  /** The page's pixels, rendered offscreen at reading size. */
+  render: (page: number) => Promise<HTMLCanvasElement>;
+  /** Redraw the page on screen, so a fresh overlay appears at once. */
+  refresh: () => void;
+}
+
+/**
+ * One button that reads the whole book: every page not already read goes
+ * through OCR in order, and the button becomes a stop while it runs.
+ * Already-read pages cost nothing, so the run resumes wherever it left off.
+ */
+function offerBatchOcr(ui: Ui, spec: BatchOcrSpec): void {
+  ui.controls.querySelector("#bk-ocr-all")?.remove();
+  const button = document.createElement("button");
+  button.id = "bk-ocr-all";
+  button.className = "secondary";
+  button.textContent = "📚 OCR all pages";
+  ui.controls.appendChild(button);
+
+  let running = false;
+  button.addEventListener("click", () => {
+    if (running) {
+      running = false;
+      button.textContent = "Stopping…";
+      return;
+    }
+    running = true;
+    void (async () => {
+      let read = 0;
+      let failed = 0;
+      for (let page = 0; page < spec.total; page++) {
+        if (!running) break;
+        button.textContent = `⏹ Stop (${page + 1} / ${spec.total})`;
+        const key = spec.keyOf(page);
+        const shared = spec.sharedOf(page);
+        try {
+          if (await cachedOcr(key, shared)) continue;
+          if (spec.needed && !(await spec.needed(page))) continue;
+          ui.status.textContent = `Reading page ${page + 1} of ${spec.total}…`;
+          const canvas = await spec.render(page);
+          await ocrPage(canvas, key, { width: canvas.width, height: canvas.height }, undefined, shared);
+          read++;
+        } catch {
+          failed++;
+        }
+      }
+      const stopped = !running;
+      running = false;
+      button.textContent = "📚 OCR all pages";
+      ui.status.textContent = stopped
+        ? `Stopped. ${read} page${read === 1 ? "" : "s"} read this run.`
+        : failed > 0
+          ? `Done: ${read} read, ${failed} failed. Run again to retry the failed ones.`
+          : read > 0
+            ? `Done: every page is read. (${read} new)`
+            : "Every page was already read.";
+      spec.refresh();
+    })();
   });
 }
 

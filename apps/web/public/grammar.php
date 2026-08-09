@@ -273,7 +273,11 @@ $body = [
     "content" => $ocr
       ? [
           ["type" => "image", "source" => ["type" => "base64", "media_type" => $ocrMedia, "data" => $ocrImage]],
-          ["type" => "text", "text" => "Read this page into text blocks with tight boxes."],
+          ["type" => "text", "text" =>
+            "This image is " . max(1, (int) ($req["width"] ?? 0)) . " by " . max(1, (int) ($req["height"] ?? 0)) .
+            " pixels. Read it into text blocks with tight boxes. x runs rightward from the LEFT edge, " .
+            "y downward from the TOP edge, and x, y, w, h are all thousandths (0-1000) of the image's " .
+            "width and height. Take a moment per block to check its box really sits on the text."],
         ]
       : $prompt,
   ]],

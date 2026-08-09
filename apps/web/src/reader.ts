@@ -75,7 +75,7 @@ async function openShelfBook(main: HTMLElement, body: HTMLElement, id: string): 
 // ---------------- my books ----------------
 
 async function renderShelf(main: HTMLElement, body: HTMLElement): Promise<void> {
-  const { listBooks, addBookFromFiles, forgetBook, publishBook, unpublishBook, shelfAccount, SHARE_LIMIT_BYTES } =
+  const { listBooks, addBookFromFiles, forgetBook, publishBook, unpublishBook, renameBook, shelfAccount, SHARE_LIMIT_BYTES } =
     await import("./books.js");
   const books = await listBooks();
   const account = await shelfAccount();
@@ -124,6 +124,7 @@ async function renderShelf(main: HTMLElement, body: HTMLElement): Promise<void> 
         <div class="glosses">${KIND_ICON[book.kind] ?? "📄"} ${book.kind} · ${formatSize(book.size)}</div>
         <div class="row-actions" style="margin-top:6px">
           <button class="bk-open">Read</button>
+          <button class="secondary bk-rename">✎ Rename</button>
           ${
             account && !book.sharedId && book.size <= SHARE_LIMIT_BYTES
               ? `<button class="secondary bk-share">Share with everyone</button>`
@@ -135,6 +136,12 @@ async function renderShelf(main: HTMLElement, body: HTMLElement): Promise<void> 
     `;
     row.querySelector(".bk-open")!.addEventListener("click", () => {
       openBookId = book.id;
+      renderReader(main);
+    });
+    row.querySelector(".bk-rename")!.addEventListener("click", async () => {
+      const name = prompt("New name for this book:", book.name)?.trim();
+      if (!name || name === book.name) return;
+      await renameBook(book.id, name.slice(0, 160));
       renderReader(main);
     });
     row.querySelector(".bk-share")?.addEventListener("click", async (ev) => {

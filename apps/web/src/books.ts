@@ -173,7 +173,20 @@ export async function forgetBook(id: string): Promise<void> {
 }
 
 export async function renameBook(id: string, name: string): Promise<void> {
-  await saveShelf((await listBooks()).map((book) => (book.id === id ? { ...book, name } : book)));
+  const books = await listBooks();
+  const book = books.find((b) => b.id === id);
+  await saveShelf(books.map((b) => (b.id === id ? { ...b, name } : b)));
+  // A shared book this account published carries the new name to the
+  // library too, so the two shelves never disagree about what it is called.
+  const account = await currentAccount().catch(() => null);
+  if (book?.sharedId && account && book.sharedId.startsWith(account.uid)) {
+    try {
+      const { db, storeApi } = await firestoreApi();
+      await storeApi.updateDoc(storeApi.doc(db, "books", book.sharedId), { name });
+    } catch {
+      /* offline is fine; the local rename already happened */
+    }
+  }
 }
 
 // ---------------- a zip of our own ----------------
@@ -394,6 +407,16 @@ export async function fetchSharedOcr(sharedId: string, page: number): Promise<un
     return Array.isArray(data?.words) ? data.words : null;
   } catch {
     return null;
+  }
+}
+
+/** Take one page's OCR back out of the share. Quiet about failures. */
+export async function deleteSharedOcr(sharedId: string, page: number): Promise<void> {
+  try {
+    const { db, storeApi } = await firestoreApi();
+    await storeApi.deleteDoc(storeApi.doc(db, "books", sharedId, "ocr", String(page)));
+  } catch {
+    /* somebody else's book and not the admin: the local clear stands */
   }
 }
 
