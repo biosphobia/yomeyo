@@ -364,14 +364,30 @@ function detectTextLines(frame: AnyCanvas): DetectedLine[] {
     else if (luma[i] > mean[i] + MARGIN) light[i] = 1;
   }
 
-  // Black on white first. Then white on black — but only where it is not
-  // standing inside something already read: the white enclosed by a 口 or
-  // a 日 is a hole in a character, and rows of holes line up convincingly
-  // into lines that are not there. Lettering in a black title pill has no
-  // such parent, because the pill itself is far too big to be a character.
-  const inked = linesOfText(dark, w, h);
-  const reversed = linesOfText(light, w, h).filter((line) => !insideAny(line, inked));
-  const kept = dropDuplicates([...inked, ...reversed]);
+  // Speech balloons first, because manga hands us the answer.
+  //
+  // Guessing which marks are characters is a losing game on a drawn page:
+  // hatching, screentone and panel furniture all look enough like print
+  // from close up, and no threshold separates them everywhere. But a
+  // balloon is not a guess. It is a closed island of white paper with a
+  // line drawn round it, unmistakable at a glance, and whatever ink sits
+  // inside one IS text — there is nothing else it could be. So the ink in
+  // a balloon is grouped into lines with the shape tests relaxed (they
+  // exist to keep drawings out, and there are no drawings in here), which
+  // is what finds the odd single kana and the loose lettering that strict
+  // rules were throwing away.
+  const rooms = balloons(luma, w, h);
+  const inRooms: DetectedLine[] = [];
+  for (const room of rooms) inRooms.push(...linesOfText(dark, w, h, room));
+
+  // Everything else — sound effects, captions, signs, text laid straight
+  // on the drawing — still has to be guessed at, and keeps the strict
+  // rules. Anything inside a balloon has already been read properly.
+  const outside = linesOfText(dark, w, h).filter((line) => !inAnyRoom(line, rooms));
+  const reversed = linesOfText(light, w, h).filter(
+    (line) => !insideAny(line, inRooms) && !insideAny(line, outside),
+  );
+  const kept = dropDuplicates([...inRooms, ...outside, ...reversed]);
   ordered(kept);
 
   const inv = 1 / s;
@@ -383,6 +399,98 @@ function detectTextLines(frame: AnyCanvas): DetectedLine[] {
     vertical: line.vertical,
     ink: line.ink,
   }));
+}
+
+/** A region of the page, in detection pixels. */
+interface Room {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * The speech balloons on this page.
+ *
+ * A balloon is an island of paper: bright, closed, and completely
+ * surrounded by the drawing. That last part is what makes it findable
+ * without any cleverness — the page's own white background is bright too,
+ * but it runs off the edges, so anything bright that touches the border is
+ * the page rather than a balloon. What remains is filtered to the size and
+ * plumpness a balloon has: big enough to hold words, small enough not to
+ * be a whole panel, and filling most of its own box (balloons are round;
+ * the gaps between drawings are not).
+ */
+function balloons(luma: Uint8Array, w: number, h: number): Room[] {
+  const paper = new Uint8Array(w * h);
+  for (let i = 0; i < luma.length; i++) paper[i] = luma[i] > 186 ? 1 : 0;
+
+  const seen = new Uint8Array(w * h);
+  const queue = new Int32Array(w * h);
+  const rooms: Room[] = [];
+  const pageArea = w * h;
+  for (let start = 0; start < w * h; start++) {
+    if (!paper[start] || seen[start]) continue;
+    let head = 0;
+    let tail = 0;
+    queue[tail++] = start;
+    seen[start] = 1;
+    let x0 = w;
+    let x1 = 0;
+    let y0 = h;
+    let y1 = 0;
+    let area = 0;
+    let touchesEdge = false;
+    while (head < tail) {
+      const p = queue[head++];
+      const px = p % w;
+      const py = (p / w) | 0;
+      area++;
+      if (px === 0 || py === 0 || px === w - 1 || py === h - 1) touchesEdge = true;
+      if (px < x0) x0 = px;
+      if (px > x1) x1 = px;
+      if (py < y0) y0 = py;
+      if (py > y1) y1 = py;
+      if (px > 0 && paper[p - 1] && !seen[p - 1]) {
+        seen[p - 1] = 1;
+        queue[tail++] = p - 1;
+      }
+      if (px < w - 1 && paper[p + 1] && !seen[p + 1]) {
+        seen[p + 1] = 1;
+        queue[tail++] = p + 1;
+      }
+      if (py > 0 && paper[p - w] && !seen[p - w]) {
+        seen[p - w] = 1;
+        queue[tail++] = p - w;
+      }
+      if (py < h - 1 && paper[p + w] && !seen[p + w]) {
+        seen[p + w] = 1;
+        queue[tail++] = p + w;
+      }
+    }
+    // The page itself, and the white gutters between panels, run off the
+    // edge. A balloon never does.
+    if (touchesEdge) continue;
+    const box = { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+    if (area < pageArea * 0.0012 || area > pageArea * 0.12) continue;
+    if (Math.min(box.w, box.h) < Math.max(w, h) * 0.03) continue;
+    // A panel is also a closed island of paper, and letting one count as a
+    // balloon would stand the strict rules down over half the page. A
+    // balloon is a good deal smaller than the frame it sits in.
+    if (box.w > w * 0.6 || box.h > h * 0.6) continue;
+    // Round and solid, the way a balloon is: a jagged sliver of leftover
+    // white between two drawings fills its own box far less completely.
+    if (area < box.w * box.h * 0.55) continue;
+    rooms.push(box);
+  }
+  return rooms;
+}
+
+/** Is this line standing inside one of the balloons? */
+function inAnyRoom(line: DetectedLine, rooms: Room[]): boolean {
+  const cx = line.x + line.w / 2;
+  const cy = line.y + line.h / 2;
+  return rooms.some((room) => cx >= room.x && cx <= room.x + room.w && cy >= room.y && cy <= room.y + room.h);
 }
 
 /** Box average of `src`, radius `r`, via a summed-area table. */
@@ -424,9 +532,9 @@ function localMean(src: Uint8Array, w: number, h: number, r: number): Uint8Array
  * strokes (い, り, 川): their parts sit side by side within the width of
  * one character, so a column swallows them all without a second thought.
  */
-function linesOfText(mask: Uint8Array, w: number, h: number): DetectedLine[] {
+function linesOfText(mask: Uint8Array, w: number, h: number, room?: Room): DetectedLine[] {
   const maxSide = Math.max(w, h);
-  const minChar = Math.max(5, maxSide * 0.011);
+  const minChar = room ? Math.max(3, maxSide * 0.007) : Math.max(5, maxSide * 0.011);
   // Printed characters are small. Body text runs three to five percent of
   // a page and even a shouted sound effect rarely passes nine, so this was
   // far too generous at seventeen: it let window frames, hair and panel
@@ -439,6 +547,16 @@ function linesOfText(mask: Uint8Array, w: number, h: number): DetectedLine[] {
     const thin = Math.max(1, Math.min(c.w, c.h));
     const fill = c.ink / (c.w * c.h);
     if (size < minChar || size > maxChar) continue;
+    // Inside a balloon, only the balloon's own ink counts — and it is all
+    // text, so the shape tests below stand down. Outside, they are the
+    // only thing between a box and a lock of hair.
+    if (room) {
+      const cx = c.x + c.w / 2;
+      const cy = c.y + c.h / 2;
+      if (cx < room.x || cx > room.x + room.w || cy < room.y || cy > room.y + room.h) continue;
+      marks.push({ x: c.x, y: c.y, w: c.w, h: c.h, ink: c.ink, size });
+      continue;
+    }
     // Small marks are allowed to be strokes: the bar of 一 and the stems
     // of 川 are long, thin and nearly solid, and throwing them away costs
     // whole characters — and the column they stood in, since a line ends
@@ -452,7 +570,8 @@ function linesOfText(mask: Uint8Array, w: number, h: number): DetectedLine[] {
   }
   if (marks.length === 0) return [];
 
-  const candidates = [...runsAlong(marks, true, w, maxChar), ...runsAlong(marks, false, w, maxChar)];
+  const whole = fuseParts(marks, maxChar);
+  const candidates = [...runsAlong(whole, true, w, maxChar), ...runsAlong(whole, false, w, maxChar)];
   // Longest first, so the real line wins the marks it shares with a
   // chance alignment crossing it.
   candidates.sort((a, b) => b.members.length - a.members.length || b.ink - a.ink);
@@ -462,12 +581,86 @@ function linesOfText(mask: Uint8Array, w: number, h: number): DetectedLine[] {
   for (const run of candidates) {
     const free = run.members.filter((i) => !taken.has(i));
     if (free.length < run.members.length * 0.6) continue;
-    const line = measure(free.map((i) => marks[i]), run.vertical, maxSide);
+    const line = measure(free.map((i) => whole[i]), run.vertical, maxSide, !!room);
     if (!line) continue;
     for (const i of free) taken.add(i);
     lines.push(line);
   }
   return lines;
+}
+
+/**
+ * Put the pieces of a character back together.
+ *
+ * Plenty of characters are drawn as separate strokes — い, り, 川 — and a
+ * character crossed by a hatched drawing behind it can come apart into a
+ * couple of slivers as well. Left as pieces, a column of them reads as a
+ * hairline (which is refused, rightly) or as a row of one-character lines
+ * running the wrong way. Marks that touch, and that together are still no
+ * bigger than one character, are therefore treated as one before any line
+ * is drawn.
+ *
+ * The whole test is the size of the union, which is also why no separate
+ * check on the gap between them is wanted: two pieces whose union is no
+ * bigger than one character were near each other by definition, while two
+ * characters side by side make a union twice the size of either and are
+ * left alone.
+ */
+function fuseParts(marks: Mark[], maxChar: number): Mark[] {
+  // Groups, merged a pair at a time — and the test is always applied to
+  // what the merge WOULD produce, never to the two pieces alone. Checking
+  // only the pair lets a chain form (this piece touches that one, which
+  // touches the next) until a whole column has been swallowed into a
+  // single "character", which is exactly as wrong as it sounds.
+  interface Part {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    ink: number;
+    /** The biggest single mark inside, which is what "one character" means. */
+    largest: number;
+    alive: boolean;
+  }
+  const parts: Part[] = marks.map((m) => ({
+    x: m.x,
+    y: m.y,
+    w: m.w,
+    h: m.h,
+    ink: m.ink,
+    largest: m.size,
+    alive: true,
+  }));
+
+  for (let pass = 0; pass < 4; pass++) {
+    let merged = false;
+    for (let i = 0; i < parts.length; i++) {
+      if (!parts[i].alive) continue;
+      for (let j = i + 1; j < parts.length; j++) {
+        if (!parts[j].alive) continue;
+        const a = parts[i];
+        const b = parts[j];
+        const x = Math.min(a.x, b.x);
+        const y = Math.min(a.y, b.y);
+        const w = Math.max(a.x + a.w, b.x + b.w) - x;
+        const h = Math.max(a.y + a.h, b.y + b.h) - y;
+        const side = Math.max(w, h);
+        const largest = Math.max(a.largest, b.largest);
+        // One character's worth, and not appreciably more than the bigger
+        // piece already was. Two characters side by side make a union
+        // twice the size of either, and are left where they are.
+        if (side > maxChar || side > largest * 1.35) continue;
+        parts[i] = { x, y, w, h, ink: a.ink + b.ink, largest, alive: true };
+        parts[j].alive = false;
+        merged = true;
+      }
+    }
+    if (!merged) break;
+  }
+
+  return parts
+    .filter((p) => p.alive)
+    .map((p) => ({ x: p.x, y: p.y, w: p.w, h: p.h, ink: p.ink, size: Math.max(p.w, p.h) }));
 }
 
 /** Every maximal run of marks joined along one axis. */
@@ -553,7 +746,7 @@ function inLine(a: Mark, b: Mark, vertical: boolean): boolean {
  * happens to trend downwards through a drawing sprawls, and is refused
  * here — which is what stops a box swallowing half a panel.
  */
-function measure(members: Mark[], vertical: boolean, maxSide: number): DetectedLine | null {
+function measure(members: Mark[], vertical: boolean, maxSide: number, inRoom = false): DetectedLine | null {
   let x0 = Infinity;
   let y0 = Infinity;
   let x1 = 0;
@@ -575,14 +768,25 @@ function measure(members: Mark[], vertical: boolean, maxSide: number): DetectedL
   const along = vertical ? box.h : box.w;
 
   // A line is barely wider than its characters. Anything sprawling is a
-  // trail through a drawing, not print.
-  if (across > em * 1.7) return null;
+  // trail through a drawing, not print. (In a balloon it is a little more
+  // generous: the whole thing is text, and a line of mixed sizes there is
+  // still a line.)
+  if (across > em * (inRoom ? 2.4 : 1.7)) return null;
   // And a line of several characters is longer than it is thick.
   if (members.length >= 3 && along < across * 1.2) return null;
+  // A column is about as thick as the characters standing in it. A line
+  // far thinner than that is a stroke, or a run of strokes belonging to
+  // characters that merged with the drawing behind them — a sliver, not a
+  // column, and a box on it is worse than no box.
+  if (!inRoom && across < em * 0.45) return null;
   // Print covers a knowable share of its own box: much less is a couple of
   // specks that happen to line up, much more is a solid shape.
   const density = ink / Math.max(1, box.w * box.h);
-  if (density < 0.12 || density > 0.72) return null;
+  if (!inRoom && (density < 0.12 || density > 0.72)) return null;
+
+  // Everything below is about keeping drawings out, which is not a
+  // question that arises inside a balloon.
+  if (inRoom) return { ...box, vertical, ink };
 
   // The short runs are where false lines come from, so they have to earn
   // it. Two marks must be the same size as each other and of ordinary
