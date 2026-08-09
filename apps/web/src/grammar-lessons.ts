@@ -101,10 +101,26 @@ export const LESSONS: Lesson[] = [
         body: "Each one gets its own chapter later. For now, just meet them. Tap any of them to hear it.",
       },
       {
+        heading: "だ and です: saying \"is\"",
+        visual: { kind: "morph", steps: [["ねこ", "cat"], ["ねこだ", "is a cat"], ["ねこです", "is a cat, polite"]], caption: "だ and です say the same thing" },
+        body:
+          "To say something IS something, put the thing first and だ after it: ねこだ, \"(it) is a cat\". " +
+          "だ is an ending, so it comes last, like every ending, and it covers am, is and are all at " +
+          "once. A thing plus だ is already a whole sentence.\n\n" +
+          "です does exactly what だ does, politely. With strangers, at a shop, to a teacher: です. With " +
+          "friends, in your head, in casual writing: だ. ねこだ and ねこです both mean \"it's a cat\"; the " +
+          "only difference is the tone of voice.",
+        examples: [
+          { jp: "ねこだ", r: "neko da", en: "(It) is a cat." },
+          { jp: "がくせいだ", r: "gakusei da", en: "(I) am a student." },
+          { jp: "わたしは がくせいです", r: "watashi wa gakusei desu", en: "I am a student., polite" },
+        ],
+      },
+      {
         heading: "The first sentence pattern",
         recipes: true,
         body:
-          "{x}は {y}です means \"{x} is {y}\".\n\n" +
+          "{x}は {y}です means \"{x} is {y}\". Casually, だ takes its place: {x}は {y}だ.\n\n" +
           "The \"is\" lives in です, not in は. は only sets the topic: {x}は literally means \"as for " +
           "{x}\", and you can drop it entirely when it's obvious.\n\n" +
           "Introducing yourself: {x:わたし}は {y:ピエトロ}です, \"as for me, it is Pietro\". But everyone " +
@@ -156,17 +172,6 @@ export const LESSONS: Lesson[] = [
         why: "The ending (the action, the describing word, or です) always comes last, and it's the point of the sentence.",
       },
       {
-        q: "What is a particle?",
-        choices: [
-          "A decoration",
-          "A sticker on the back of a word, saying that word's job",
-          "A way to make the sentence polite",
-          "The word for “the”",
-        ],
-        answer: 1,
-        why: "が, を, に and friends each stick to the word before them and announce its job.",
-      },
-      {
         q: "Which word does を belong to here?",
         jp: "さくらが みずを のむ",
         choices: ["さくら", "みず", "のむ", "None, it stands alone"],
@@ -188,6 +193,25 @@ export const LESSONS: Lesson[] = [
         why: "が is still stuck to Sakura, so she's still the doer. Moving words doesn't move the jobs.",
       },
       {
+        q: "How do you say “(it) is a dog” plainly?",
+        choices: ["いぬです", "いぬだ", "だいぬ", "いぬが"],
+        answer: 1,
+        why: "Thing + だ. です would also be right, but politely.",
+      },
+      {
+        q: "When would you reach for です instead of だ?",
+        choices: ["Talking to a close friend", "Talking to a stranger or teacher", "Only in questions", "Never, they differ in meaning"],
+        answer: 1,
+        why: "です is だ in polite dress; the meaning is identical.",
+      },
+      {
+        q: "At a restaurant, what does わたしは ライスです mean?",
+        jp: "わたしは ライスです",
+        choices: ["I am rice", "I'll have the rice", "The rice is mine", "I don't like rice"],
+        answer: 1,
+        why: "です names what the order is, not what you are. わたしは says “about me”, and context does the rest.",
+      },
+      {
         q: "How do you turn これは ねこです into a question?",
         choices: [
           "Swap the words around",
@@ -207,80 +231,6 @@ export const LESSONS: Lesson[] = [
     ],
   },
   // ---------------------------------------------------------------- 2
-  {
-    title: "だ and です: saying “is”",
-    tagline: "A thing plus だ is a whole sentence. です is the same word in a suit.",
-    sections: [
-      {
-        heading: "Thing + だ",
-        visual: { kind: "morph", steps: [["ねこ", "cat"], ["ねこだ", "is a cat"], ["ねこです", "is a cat, polite"]], caption: "だ and です say the same thing" },
-        body:
-          "To say something IS something, Japanese puts the thing first and だ after it: ねこだ, “(it) is a " +
-          "cat”. だ is the ending here, so it comes last, like every ending. There is no separate word for " +
-          "“am / is / are” to memorise, だ covers them all.",
-        examples: [
-          { jp: "ねこだ", r: "neko da", en: "(It) is a cat." },
-          { jp: "がくせいだ", r: "gakusei da", en: "(I) am a student." },
-          { jp: "あしたは やすみだ", r: "ashita wa yasumi da", en: "Tomorrow is a day off." },
-        ],
-      },
-      {
-        heading: "です, the polite twin",
-        body:
-          "です does exactly what だ does, politely. With strangers, at a shop, to a teacher, です. With " +
-          "friends, in your head, in casual writing, だ. Nothing else changes: ねこだ and ねこです both mean " +
-          "“it's a cat”.",
-        examples: [
-          { jp: "ねこです", r: "neko desu", en: "(It) is a cat., polite" },
-          { jp: "わたしは がくせいです", r: "watashi wa gakusei desu", en: "I am a student., polite" },
-        ],
-      },
-      {
-        heading: "だ only points one way",
-        body:
-          "A だ sentence names what the thing before it IS, it is not an equals sign. わたしは うなぎだ, said " +
-          "at a restaurant, doesn't claim you are an eel; it means “as for me, (the order) is eel. I'll have " +
-          "the eel.” Japanese leans on context this way constantly.",
-        examples: [
-          { jp: "わたしは うなぎだ", r: "watashi wa unagi da", en: "I'll have the eel. (as for me, it is eel)" },
-        ],
-      },
-    ],
-    quiz: [
-      {
-        q: "How do you say “(it) is a dog” plainly?",
-        choices: ["いぬです", "いぬだ", "だいぬ", "いぬが"],
-        answer: 1,
-        why: "Thing + だ. です would also be right, but politely.",
-      },
-      {
-        q: "When would you reach for です instead of だ?",
-        choices: ["Talking to a close friend", "Talking to a stranger or teacher", "Only in questions", "Never, they differ in meaning"],
-        answer: 1,
-        why: "です is だ in polite dress; the meaning is identical.",
-      },
-      {
-        q: "At a restaurant, what does わたしは うなぎだ mean?",
-        jp: "わたしは うなぎだ",
-        choices: ["I am an eel", "I'll have the eel", "The eel is mine", "I don't like eel"],
-        answer: 1,
-        why: "だ names what the order is, not what you are. Context does the rest.",
-      },
-      {
-        q: "Where does だ sit in its sentence?",
-        choices: ["Before the thing", "After the thing, at the end", "Anywhere", "After the particle は"],
-        answer: 1,
-        why: "だ is the ending, and endings come last.",
-      },
-      {
-        q: "Which of these is a complete sentence?",
-        choices: ["やすみだ", "だ やすみ", "やすみを", "は やすみ"],
-        answer: 0,
-        why: "やすみだ, “(it) is a day off.” A thing plus だ is already whole.",
-      },
-    ],
-  },
-  // ---------------------------------------------------------------- 3
   {
     title: "が: the one doing it",
     tagline: "Every sentence has a doer, and が points straight at it.",
@@ -357,7 +307,7 @@ export const LESSONS: Lesson[] = [
       },
     ],
   },
-  // ---------------------------------------------------------------- 4
+  // ---------------------------------------------------------------- 3
   {
     title: "は: the topic",
     tagline: "“As for…”: は sets the stage; が points the finger.",
@@ -460,7 +410,7 @@ export const LESSONS: Lesson[] = [
       },
     ],
   },
-  // ---------------------------------------------------------------- 5
+  // ---------------------------------------------------------------- 4
   {
     title: "を: what the action lands on",
     tagline: "Eat WHAT? Read WHAT? を tags the answer.",
@@ -537,7 +487,7 @@ export const LESSONS: Lesson[] = [
       },
     ],
   },
-  // ---------------------------------------------------------------- 6
+  // ---------------------------------------------------------------- 5
   {
     title: "に and へ: where it's headed",
     tagline: "に pins an exact point, place, time, or person. へ just points the way.",
@@ -616,7 +566,7 @@ export const LESSONS: Lesson[] = [
       },
     ],
   },
-  // ---------------------------------------------------------------- 7
+  // ---------------------------------------------------------------- 6
   {
     title: "で: where it happens, and how",
     tagline: "The stage the action plays on, or the tool it's done with.",
@@ -695,7 +645,7 @@ export const LESSONS: Lesson[] = [
       },
     ],
   },
-  // ---------------------------------------------------------------- 8
+  // ---------------------------------------------------------------- 7
   {
     title: "と・や・も: and, with, too",
     tagline: "Listing things, doing things together, and saying “me too”.",
@@ -774,7 +724,7 @@ export const LESSONS: Lesson[] = [
       },
     ],
   },
-  // ---------------------------------------------------------------- 9
+  // ---------------------------------------------------------------- 8
   {
     title: "の: belonging and describing",
     tagline: "One tiny word does everything English does with “'s” and “of”.",
@@ -848,7 +798,7 @@ export const LESSONS: Lesson[] = [
       },
     ],
   },
-  // ---------------------------------------------------------------- 10
+  // ---------------------------------------------------------------- 9
   {
     title: "か・ね・よ: asking and nudging",
     tagline: "The particles that sit at the very end and set the sentence's tone.",
@@ -926,7 +876,7 @@ export const LESSONS: Lesson[] = [
       },
     ],
   },
-  // ---------------------------------------------------------------- 11
+  // ---------------------------------------------------------------- 10
   {
     title: "から・まで: from, until, because",
     tagline: "Where things start, where they stop, and why they happen.",
@@ -1001,7 +951,7 @@ export const LESSONS: Lesson[] = [
       },
     ],
   },
-  // ---------------------------------------------------------------- 12
+  // ---------------------------------------------------------------- 11
   {
     title: "Verbs and their groups",
     tagline: "Two families plus two rebels, and the polite ます form.",
@@ -1086,7 +1036,7 @@ export const LESSONS: Lesson[] = [
       },
     ],
   },
-  // ---------------------------------------------------------------- 13
+  // ---------------------------------------------------------------- 12
   {
     title: "Saying no, and saying yesterday",
     tagline: "ない and た, the two bends every ending takes.",
@@ -1160,7 +1110,7 @@ export const LESSONS: Lesson[] = [
       },
     ],
   },
-  // ---------------------------------------------------------------- 14
+  // ---------------------------------------------------------------- 13
   {
     title: "The て form: the connector",
     tagline: "One shape, three superpowers: joining, asking, and right-now.",
@@ -1247,7 +1197,7 @@ export const LESSONS: Lesson[] = [
       },
     ],
   },
-  // ---------------------------------------------------------------- 15
+  // ---------------------------------------------------------------- 14
   {
     title: "Describing words: い and な",
     tagline: "One kind has “is” built in; the other borrows だ.",
@@ -1329,7 +1279,7 @@ export const LESSONS: Lesson[] = [
       },
     ],
   },
-  // ---------------------------------------------------------------- 16
+  // ---------------------------------------------------------------- 15
   {
     title: "The rest of the particle family",
     tagline: "だけ, しか, ぐらい, ごろ, とか, けど, し: small words you'll meet every day.",
@@ -1419,7 +1369,7 @@ export const LESSONS: Lesson[] = [
       },
     ],
   },
-  // ---------------------------------------------------------------- 17
+  // ---------------------------------------------------------------- 16
   {
     title: "Reading between the lines",
     tagline: "The unsaid doer, sentences describing things, and everything joined up.",

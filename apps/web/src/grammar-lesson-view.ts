@@ -43,17 +43,40 @@ const PASS = 80;
  * waits for で's chapter, the joining unit for the て form.
  */
 const UNIT_FOR: Record<number, number> = {
-  2: 0, // が — the smallest sentences
-  3: 1, // は — when nobody says who
-  4: 2, // を — doing something to something
-  6: 3, // で (after に/へ) — where and how
-  10: 4, // から・まで — from and until
-  13: 7, // て form — joining two sentences
-  14: 5, // adjectives — describing words
-  16: 6, // reading between the lines — describing with a whole sentence
+  1: 0, // が — the smallest sentences
+  2: 1, // は — when nobody says who
+  3: 2, // を — doing something to something
+  5: 3, // で (after に/へ) — where and how
+  9: 4, // から・まで — from and until
+  12: 7, // て form — joining two sentences
+  13: 5, // adjectives — describing words
+  15: 6, // reading between the lines — describing with a whole sentence
 };
 
 let openLesson: number | null = null;
+
+/**
+ * The old chapters 1 and 2 (how a sentence works; だ and です) became one
+ * chapter. Saved scores follow: the merged chapter keeps the better of
+ * the two, everything after slides down a place. Once, per device — this
+ * progress never syncs, so there is nothing to double-shift.
+ */
+const MERGED_FLAG = "grammarLessons1and2Merged";
+
+async function lessonProgress(): Promise<Progress> {
+  const progress = (await getMeta<Progress>(DONE_KEY)) ?? {};
+  if (await getMeta<boolean>(MERGED_FLAG)) return progress;
+  const shifted: Progress = {};
+  for (const [key, score] of Object.entries(progress)) {
+    const index = Number(key);
+    if (!Number.isFinite(index) || typeof score !== "number") continue;
+    if (index <= 1) shifted[0] = Math.max(shifted[0] ?? 0, score);
+    else shifted[index - 1] = score;
+  }
+  await setMeta(DONE_KEY, shifted);
+  await setMeta(MERGED_FLAG, true);
+  return shifted;
+}
 
 async function unitsDone(): Promise<Set<number>> {
   const stored = await getMeta<number[]>(UNITS_DONE_KEY);
@@ -68,7 +91,7 @@ async function unitsDone(): Promise<Set<number>> {
 }
 
 export async function renderLessons(body: HTMLDivElement, isCurrent: () => boolean = () => true): Promise<void> {
-  const progress = (await getMeta<Progress>(DONE_KEY)) ?? {};
+  const progress = await lessonProgress();
   const drilled = await unitsDone();
   if (!isCurrent() || !body.isConnected) return;
   if (openLesson !== null && LESSONS[openLesson]) {
