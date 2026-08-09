@@ -261,24 +261,39 @@ async function drawInventory(main: HTMLElement, table: PrizeTable, have: Set<str
     box.innerHTML = `<div class="glosses">Nothing yet. Open a crate.</div>`;
     return;
   }
-  box.innerHTML = held
-    .map((prize) => {
-      const rarity = table.rarities[prize.rarity];
-      const count = prize.type === "item" ? (counts[prize.id] ?? 0) : 1;
-      const note = prize.type === "item" || prize.type === "gif" ? prize.text : "a look for the whole app";
-      // Items always show their count against the cap, even at one, so
-      // the limit is visible the moment the first one arrives.
-      const stack =
-        prize.type === "item" ? ` <b class="inv-count">×${count}<span class="inv-cap"> / ${ITEM_LIMIT}</span></b>` : "";
-      return `<div class="inv-row" style="--rarity:${escapeAttr(rarity?.color ?? "#94a3b8")}">
-        <span class="inv-face">${prizeFace(prize)}</span>
-        <span class="inv-body">
-          <span class="inv-name">${escapeHtml(prize.name)}${stack}</span>
-          <span class="glosses">${escapeHtml(note)}</span>
-        </span>
-        <span class="inv-rarity">${escapeHtml(rarity?.label ?? "")}</span>
-      </div>`;
-    })
+
+  const row = (prize: Prize): string => {
+    const rarity = table.rarities[prize.rarity];
+    const count = prize.type === "item" ? (counts[prize.id] ?? 0) : 1;
+    const note = prize.type === "item" || prize.type === "gif" ? prize.text : "a look for the whole app";
+    // Items always show their count against the cap, even at one, so
+    // the limit is visible the moment the first one arrives.
+    const stack =
+      prize.type === "item" ? ` <b class="inv-count">×${count}<span class="inv-cap"> / ${ITEM_LIMIT}</span></b>` : "";
+    return `<div class="inv-row" style="--rarity:${escapeAttr(rarity?.color ?? "#94a3b8")}">
+      <span class="inv-face">${prizeFace(prize)}</span>
+      <span class="inv-body">
+        <span class="inv-name">${escapeHtml(prize.name)}${stack}</span>
+        <span class="glosses">${escapeHtml(note)}</span>
+      </span>
+      <span class="inv-rarity">${escapeHtml(rarity?.label ?? "")}</span>
+    </div>`;
+  };
+
+  // By kind, each section only there when something of that kind is held.
+  const sections: [string, string, Prize[]][] = [
+    ["🎞", "Reactions", held.filter((prize) => prize.type === "gif")],
+    ["🎨", "Skins", held.filter((prize) => prize.type === "skin")],
+    ["🗝", "Key items", held.filter((prize) => prize.type === "item")],
+  ];
+  box.innerHTML = sections
+    .filter(([, , prizes]) => prizes.length > 0)
+    .map(
+      ([icon, title, prizes]) => `<div class="inv-section">
+        <div class="inv-section-head">${icon} <b>${title}</b> <span class="glosses">${prizes.length}</span></div>
+        ${prizes.map(row).join("")}
+      </div>`,
+    )
     .join("");
 }
 

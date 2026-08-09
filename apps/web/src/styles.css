@@ -5415,3 +5415,15 @@ button.gram-swap-line:hover {
 }
 .won-multi-cell .won-face { font-size: 1.6rem; }
 .won-multi-cell .won-name { font-size: 0.9rem; font-weight: 600; }
+
+/* Inventory sections, one per kind of thing held. */
+.inv-section { margin-top: 10px; }
+.inv-section:first-child { margin-top: 0; }
+.inv-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 0 6px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
