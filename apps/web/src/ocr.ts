@@ -1065,6 +1065,59 @@ export async function clearBookOcr(bookId: string, sharedId?: string): Promise<n
   return held.length;
 }
 
+/**
+ * Write a page's boxes back, here and in the share.
+ *
+ * Detection gets a page nearly right and occasionally not, and the reader
+ * looking at it can see exactly what is wrong — so they are allowed to
+ * move a box, resize it, throw it away or draw a new one, and what they
+ * settle on is what everybody downstream gets.
+ */
+export async function saveOcr(cacheKey: string, words: OcrWord[], shared?: SharedOcrRef): Promise<void> {
+  await setMeta(CACHE_PREFIX + cacheKey, words);
+  if (!shared) return;
+  const books = await bookCloud();
+  await books?.publishOcr(shared.id, shared.page, words).catch(() => false);
+}
+
+/**
+ * Read one region of a page, given as fractions of it: what a hand-drawn
+ * box asks for. Comes back as the line's text, or empty if there is
+ * nothing printed in there.
+ */
+export async function readRegion(
+  canvas: AnyCanvas,
+  box: { x: number; y: number; w: number; h: number },
+): Promise<string> {
+  if (!(await claudeAvailable())) throw new Error("Reading needs the server, which is not set up here.");
+  const pad = 4;
+  const x = Math.max(0, Math.round(box.x * canvas.width) - pad);
+  const y = Math.max(0, Math.round(box.y * canvas.height) - pad);
+  const w = Math.min(canvas.width - x, Math.round(box.w * canvas.width) + pad * 2);
+  const h = Math.min(canvas.height - y, Math.round(box.h * canvas.height) + pad * 2);
+  if (w < 4 || h < 4) return "";
+  const up = Math.max(w, h) < 120 ? 2 : 1;
+  const crop = newCanvas(Math.max(1, w * up), Math.max(1, h * up));
+  context2d(crop).drawImage(canvas as CanvasImageSource, x, y, w, h, 0, 0, crop.width, crop.height);
+  const image = await jpegBase64(crop, 0.85);
+
+  const res = await fetch(assetUrl("grammar.php"), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ mode: "ocr", images: [image], media: "image/jpeg", vertical: [h >= w] }),
+  });
+  if (!res.ok) throw new OcrBusyError("The reading service is busy.");
+  const { raw } = (await res.json()) as { raw?: string };
+  if (!raw) return "";
+  try {
+    const parsed = JSON.parse(raw) as { blocks?: { text?: unknown }[] };
+    const text = typeof parsed.blocks?.[0]?.text === "string" ? parsed.blocks[0].text.trim() : "";
+    return hasJapanese(text) ? text : "";
+  } catch {
+    return "";
+  }
+}
+
 /** Forget a page's OCR, here and (permissions willing) in the share. */
 export async function clearOcr(cacheKey: string, shared?: SharedOcrRef): Promise<void> {
   const { deleteMeta } = await import("./db.js");

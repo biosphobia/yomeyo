@@ -3,7 +3,7 @@ import { activeDictionary } from "./store.js";
 import { closePopup, showLookupPopup } from "./popup.js";
 import { getBookFile, type BookInfo } from "./books.js";
 import { getMeta, setMeta } from "./db.js";
-import { cachedOcr, clearOcr, ocrPage, type OcrWord, type SharedOcrRef } from "./ocr.js";
+import { cachedOcr, clearOcr, ocrPage, readRegion, saveOcr, type OcrWord, type SharedOcrRef } from "./ocr.js";
 import { jobFor, onOcrJobs, pauseJob, restartJob, runJobs, startJob } from "./ocr-jobs.js";
 
 /**
@@ -523,9 +523,17 @@ function offerOcr(
     manage.className = "row-actions bk-ocr-manage";
     manage.innerHTML = `
       <button class="secondary" id="bk-ocr-boxes"></button>
+      <button class="secondary" id="bk-ocr-edit" title="Move, resize, remove or add boxes by hand">✎ Edit boxes</button>
       <button class="secondary" id="bk-ocr-redo" title="Read this page again, replacing its OCR">↻ Redo</button>
       <button class="secondary" id="bk-ocr-clear" title="Forget this page's OCR">✕ Clear</button>
     `;
+    const editButton = manage.querySelector<HTMLButtonElement>("#bk-ocr-edit")!;
+    editButton.addEventListener("click", () => {
+      const on = !layer.classList.contains("editing");
+      setEditing(on);
+      editButton.textContent = on ? "✓ Done editing" : "✎ Edit boxes";
+      editButton.classList.toggle("on", on);
+    });
     const boxesButton = manage.querySelector<HTMLButtonElement>("#bk-ocr-boxes")!;
     boxesButton.title = "Show or hide the recognised boxes";
     const labelBoxes = (): void => {
@@ -552,42 +560,185 @@ function offerOcr(
     ui.controls.appendChild(manage);
   };
 
-  const overlay = (words: OcrWord[], quiet = false): void => {
+  /** The page's lines as they stand, which editing changes in place. */
+  let lines: OcrWord[] = [];
+  let editing = false;
+
+  const place = (el: HTMLElement, line: OcrWord): void => {
+    el.style.left = `${(line.x * 100).toFixed(2)}%`;
+    el.style.top = `${(line.y * 100).toFixed(2)}%`;
+    el.style.width = `${(line.w * 100).toFixed(2)}%`;
+    el.style.height = `${(line.h * 100).toFixed(2)}%`;
+  };
+
+  const persist = (): void => {
+    void saveOcr(cacheKey, lines, shared).catch(() => undefined);
+  };
+
+  /**
+   * Dragging a box, or its corner.
+   *
+   * Everything is in fractions of the page, so a box dragged at one zoom
+   * is in the same place at every other — and on the phone, where this is
+   * most needed, a finger moves it exactly as far as it looks.
+   */
+  const grab = (ev: PointerEvent, line: OcrWord, el: HTMLElement, mode: "move" | "size"): void => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    const rect = layer.getBoundingClientRect();
+    const fromX = ev.clientX;
+    const fromY = ev.clientY;
+    const was = { ...line };
+    const onMove = (m: PointerEvent): void => {
+      const dx = (m.clientX - fromX) / Math.max(1, rect.width);
+      const dy = (m.clientY - fromY) / Math.max(1, rect.height);
+      if (mode === "move") {
+        line.x = Math.min(1 - line.w, Math.max(0, was.x + dx));
+        line.y = Math.min(1 - line.h, Math.max(0, was.y + dy));
+      } else {
+        line.w = Math.min(1 - line.x, Math.max(0.008, was.w + dx));
+        line.h = Math.min(1 - line.y, Math.max(0.008, was.h + dy));
+      }
+      place(el, line);
+    };
+    const onUp = (): void => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      persist();
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
+  const overlay = (next: OcrWord[], quiet = false): void => {
+    lines = next;
     layer.innerHTML = "";
+    layer.classList.toggle("editing", editing);
     // The page as one run of text, with a break between lines, so a tap
     // gets a sentence for its card rather than the whole page glued up.
-    const pageText = words.map((w) => w.text).join("\n");
+    const pageText = lines.map((w) => w.text).join("\n");
     let offset = 0;
-    for (const line of words) {
+    for (const line of lines) {
       const start = offset;
       offset += [...line.text].length + 1; // the newline counts
       const el = document.createElement("span");
       el.className = "bk-ocr-word";
-      el.style.left = `${(line.x * 100).toFixed(2)}%`;
-      el.style.top = `${(line.y * 100).toFixed(2)}%`;
-      el.style.width = `${(line.w * 100).toFixed(2)}%`;
-      el.style.height = `${(line.h * 100).toFixed(2)}%`;
+      place(el, line);
       el.title = line.text;
-      el.addEventListener("click", (ev) => {
-        ev.stopPropagation();
-        layer.querySelectorAll(".hl").forEach((e) => e.classList.remove("hl"));
-        // A line of one or two characters is a word already; anything
-        // longer opens beside its box as tappable text, so the finger
-        // picks the exact word instead of the box guessing at one. The
-        // characters there are the line's own, in order, which is the
-        // only way to be sure a tap means what it looks like.
-        if ([...line.text].length <= 2) {
-          void lookUpAt(pageText, start, ui.status).then((match) => {
-            if (match) el.classList.add("hl");
-          });
-        } else {
-          el.classList.add("hl");
-          openOcrStrip(layer, line, ui.status);
-        }
-      });
+
+      if (editing) {
+        // Drag the box to move it, its corner to resize it, its cross to
+        // be rid of it. Nothing looks anything up while editing.
+        const handle = document.createElement("b");
+        handle.className = "bk-ocr-handle";
+        handle.addEventListener("pointerdown", (ev) => grab(ev, line, el, "size"));
+        const drop = document.createElement("button");
+        drop.className = "bk-ocr-drop";
+        drop.textContent = "✕";
+        drop.title = "Remove this box";
+        drop.addEventListener("pointerdown", (ev) => ev.stopPropagation());
+        drop.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          overlay(lines.filter((held) => held !== line), true);
+          persist();
+        });
+        el.addEventListener("pointerdown", (ev) => grab(ev, line, el, "move"));
+        el.append(handle, drop);
+      } else {
+        el.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          layer.querySelectorAll(".hl").forEach((e) => e.classList.remove("hl"));
+          // A line of one or two characters is a word already; anything
+          // longer opens beside its box as tappable text, so the finger
+          // picks the exact word instead of the box guessing at one. The
+          // characters there are the line's own, in order, which is the
+          // only way to be sure a tap means what it looks like.
+          if ([...line.text].length <= 2) {
+            void lookUpAt(pageText, start, ui.status).then((match) => {
+              if (match) el.classList.add("hl");
+            });
+          } else {
+            el.classList.add("hl");
+            openOcrStrip(layer, line, ui.status);
+          }
+        });
+      }
       layer.appendChild(el);
     }
-    if (!quiet) ui.status.textContent = words.length === 0 ? "OCR found no Japanese on this page." : "";
+    if (!quiet) ui.status.textContent = lines.length === 0 ? "OCR found no Japanese on this page." : "";
+  };
+
+  /** The page's own pixels, for reading a hand-drawn box. */
+  const sourceCanvas = (): HTMLCanvasElement => {
+    const el = source();
+    if (el instanceof HTMLCanvasElement) return el;
+    const canvas = document.createElement("canvas");
+    canvas.width = size.width;
+    canvas.height = size.height;
+    canvas.getContext("2d")!.drawImage(el, 0, 0, size.width, size.height);
+    return canvas;
+  };
+
+  /**
+   * Drawing a box by hand, for a line the detector never found. What is
+   * inside it is read on release, and if there is nothing printed in
+   * there the box is dropped rather than left empty on the page.
+   */
+  const drawNewBox = (ev: PointerEvent): void => {
+    if (!editing || (ev.target as HTMLElement) !== layer) return;
+    ev.preventDefault();
+    const rect = layer.getBoundingClientRect();
+    const fromX = (ev.clientX - rect.left) / Math.max(1, rect.width);
+    const fromY = (ev.clientY - rect.top) / Math.max(1, rect.height);
+    const box: OcrWord = { text: "", x: fromX, y: fromY, w: 0, h: 0 };
+    const el = document.createElement("span");
+    el.className = "bk-ocr-word drawing";
+    layer.appendChild(el);
+    const onMove = (m: PointerEvent): void => {
+      const toX = (m.clientX - rect.left) / Math.max(1, rect.width);
+      const toY = (m.clientY - rect.top) / Math.max(1, rect.height);
+      box.x = Math.min(fromX, toX);
+      box.y = Math.min(fromY, toY);
+      box.w = Math.abs(toX - fromX);
+      box.h = Math.abs(toY - fromY);
+      place(el, box);
+    };
+    const onUp = (): void => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      el.remove();
+      if (box.w < 0.01 || box.h < 0.01) return;
+      box.vertical = box.h >= box.w;
+      ui.status.textContent = "Reading that box…";
+      void readRegion(sourceCanvas(), box)
+        .then((text) => {
+          if (!text) {
+            ui.status.textContent = "Nothing readable in that box.";
+            return;
+          }
+          box.text = text;
+          overlay([...lines, box], true);
+          persist();
+          ui.status.textContent = `Added: ${text}`;
+        })
+        .catch((err) => {
+          ui.status.textContent = err instanceof Error ? err.message : "That box could not be read.";
+        });
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+  layer.addEventListener("pointerdown", drawNewBox);
+
+  /** Turn editing on or off, and say what it is for. */
+  const setEditing = (on: boolean): void => {
+    editing = on;
+    // Boxes have to be visible to be moved.
+    if (on) layer.classList.add("show-boxes");
+    overlay(lines, true);
+    ui.status.textContent = on
+      ? "Drag a box to move it, its corner to resize, ✕ to remove. Drag on empty space to add one."
+      : "";
   };
 
   // One reader for both the button and the redo: a forced run ignores

@@ -5673,3 +5673,62 @@ button.gram-swap-line:hover {
 }
 .bk-strip-text .jp-char { cursor: pointer; }
 .bk-strip-text .hl { background: color-mix(in srgb, var(--accent) 35%, transparent); border-radius: 3px; }
+
+/* ---------------- adjusting the boxes by hand ----------------
+   Detection gets a page nearly right and occasionally not, and whoever is
+   looking at it can see exactly what is wrong. In this mode a box is a
+   thing to drag rather than a thing to tap. */
+
+.bk-ocr.editing {
+  /* The finger is moving boxes, not panning the page. */
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.bk-ocr.editing .bk-ocr-word {
+  cursor: move;
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.bk-ocr-word.drawing {
+  border-style: dashed;
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+/* The corner to pull, and the cross to be rid of it. Both are sized for a
+   fingertip, and sit outside the box so neither hides its text. */
+.bk-ocr-handle {
+  position: absolute;
+  right: -9px;
+  bottom: -9px;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: var(--accent);
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+.bk-ocr-drop {
+  position: absolute;
+  left: -10px;
+  top: -10px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--bad, #d05);
+  color: white;
+  font-size: 0.7rem;
+  line-height: 20px;
+  text-align: center;
+  cursor: pointer;
+  touch-action: none;
+}
+
+#bk-ocr-edit.on {
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--text);
+}
