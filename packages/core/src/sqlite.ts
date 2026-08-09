@@ -254,8 +254,13 @@ export class SqliteFile {
  * Only the shape SQLite itself stores is handled — the original text of the
  * statement Anki issued — which is a plain parenthesised list. Bracketed and
  * quoted identifiers appear in Anki's schema, so those are unwrapped.
+ *
+ * Older Anki collections annotate every column with a comment — `id integer
+ * primary key, /* 0 *​/` — and a comment read as a column name shifts every
+ * value into the wrong field, so comments go first.
  */
-export function columnsOf(sql: string): string[] {
+export function columnsOf(rawSql: string): string[] {
+  const sql = rawSql.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--[^\n]*/g, " ");
   const open = sql.indexOf("(");
   if (open < 0) return [];
   let depth = 0;

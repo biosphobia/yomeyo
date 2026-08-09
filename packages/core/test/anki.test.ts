@@ -677,6 +677,19 @@ describe("the SQLite reader's own corners", () => {
     ]);
   });
 
+  it("ignores the comments old Anki schemas hang on every column", () => {
+    // The classic 2013-era collection.anki2 schema, verbatim shape: a
+    // /* n */ after each column. Read as names, these shifted every value
+    // into the wrong field and imports produced empty notes.
+    const sql = `CREATE TABLE notes (
+      id              integer primary key,   /* 0 */
+      guid            text not null,         /* 1 */
+      mid             integer not null,      /* 2 */
+      flds            text not null          -- trailing note
+    )`;
+    expect(columnsOf(sql)).toEqual(["id", "guid", "mid", "flds"]);
+  });
+
   it("lists the tables it can see", () => {
     const db = new SqliteFile(buildCollection({ notes: [{ id: 1, fields: ["a", "b", "c", "d"] }] }));
     expect(db.tables().sort()).toEqual(["cards", "col", "notes"]);
