@@ -373,6 +373,11 @@ function runQuiz(
     if (passed) {
       const { unlockAchievement } = await import("./achievements.js");
       void unlockAchievement("first-chapter");
+      // Passing the final chapter hands over one of the mystery door's
+      // keys, and says nothing about it beyond an unexplained toast.
+      if (index === LESSONS.length - 1) {
+        void import("./door-keys.js").then((m) => m.grantDoorKey("grammar")).catch(() => undefined);
+      }
     }
     const earned = right * PER_CORRECT;
     const balance = earned > 0 ? await earnYennies(earned) : await yennies();

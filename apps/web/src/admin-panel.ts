@@ -28,6 +28,8 @@ import { formatYennies } from "./yennies.js";
 interface UserRow {
   uid: string;
   name: string;
+  level: number;
+  xp: number;
 }
 
 type Progress = Record<string, unknown>;
@@ -85,19 +87,45 @@ async function writeProgress(uid: string, patch: Progress): Promise<void> {
   await storeApi.setDoc(storeApi.doc(db, "users", uid), { progress: patch }, { merge: true });
 }
 
+/**
+ * Every account the cloud has ever heard of: the union of user documents
+ * (anyone who synced) and public profiles (anyone who so much as signed
+ * in), highest level first. Accounts that never signed in exist only on
+ * their own devices — there is nothing server-side to list for them.
+ */
 async function listUsers(): Promise<UserRow[]> {
   const { db, storeApi } = await firestoreApi();
-  const snapshot = await storeApi.getDocs(storeApi.collection(db, "users"));
-  const uids: string[] = [];
-  snapshot.forEach((doc: any) => uids.push(doc.id));
-  const rows = await Promise.all(
-    uids.map(async (uid) => {
-      const profile = await storeApi.getDoc(storeApi.doc(db, "profiles", uid)).catch(() => null);
-      const name = profile?.exists?.() ? String(profile.data?.()?.name ?? "") : "";
-      return { uid, name: name || "(no username)" };
-    }),
-  );
-  rows.sort((a, b) => a.name.localeCompare(b.name));
+  const uids = new Set<string>();
+  const names = new Map<string, string>();
+  const progressByUid = new Map<string, Progress>();
+
+  const users = await storeApi.getDocs(storeApi.collection(db, "users"));
+  users.forEach((doc: any) => {
+    uids.add(doc.id);
+    const data = doc.data?.() ?? {};
+    if (isMap(data.progress)) progressByUid.set(doc.id, data.progress as Progress);
+  });
+  await storeApi
+    .getDocs(storeApi.collection(db, "profiles"))
+    .then((profiles: any) => {
+      profiles.forEach((doc: any) => {
+        uids.add(doc.id);
+        const name = String(doc.data?.()?.name ?? "");
+        if (name) names.set(doc.id, name);
+      });
+    })
+    .catch(() => undefined);
+
+  const rows = [...uids].map((uid) => {
+    const xp = num(progressByUid.get(uid)?.xpTotal);
+    return {
+      uid,
+      name: names.get(uid) || "(no username)",
+      level: levelFromXp(xp).level,
+      xp,
+    };
+  });
+  rows.sort((a, b) => b.xp - a.xp || a.name.localeCompare(b.name));
   return rows;
 }
 
@@ -133,7 +161,9 @@ export async function mountAdminPanel(host: HTMLElement): Promise<void> {
   host.innerHTML = `
     <div class="card-panel">
       <b>👑 Admin</b>
-      <div class="msg">Open an account, repair its calendar, curate its gacha. Only this account can see this.</div>
+      <div class="msg">Open an account, repair its calendar, curate its gacha. Only this account can see this.
+        Every account the cloud knows is listed, highest level first; accounts that never signed in
+        live only on their own devices and cannot appear here.</div>
       <div class="row-actions">
         <input type="search" id="adm-search" placeholder="Search users…" style="flex:1" />
         <button id="adm-load" class="secondary">Load users</button>
@@ -160,6 +190,7 @@ export async function mountAdminPanel(host: HTMLElement): Promise<void> {
             .map(
               (row) => `<button class="adm-user-row" data-uid="${escapeAttr(row.uid)}">
                 <b>@${escapeHtml(row.name)}</b>
+                <span class="level-chip">Lv ${row.level}</span>
                 <span class="glosses">${escapeHtml(row.uid.slice(0, 10))}…</span>
               </button>`,
             )

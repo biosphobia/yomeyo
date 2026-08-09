@@ -311,6 +311,14 @@ export async function recordQuestEvents(events: string[], amount = 1): Promise<v
   const day = (all[today] ??= {});
   for (const event of events) day[event] = (day[event] ?? 0) + amount;
   await setMeta(LOG_KEY, all);
+  // The milestone exams each carry one of the mystery door's keys. Nothing
+  // here says so; the toast the grant shows is deliberately unexplained.
+  if (events.includes("hiragana-exam")) {
+    void import("./door-keys.js").then((m) => m.grantDoorKey("hiragana")).catch(() => undefined);
+  }
+  if (events.includes("katakana-exam")) {
+    void import("./door-keys.js").then((m) => m.grantDoorKey("katakana")).catch(() => undefined);
+  }
   await grantQuestXp(today).catch(() => {
     /* a missed award is re-attempted on the next event */
   });

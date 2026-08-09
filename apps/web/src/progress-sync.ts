@@ -183,6 +183,8 @@ const KEYS: { key: string; merge: Merge }[] = [
   { key: "gachaOwned", merge: unionStrings },
   { key: "gachaItems", merge: perKeyMax },
   { key: "yuuriDoorBribes", merge: larger },
+  { key: "doorKeys", merge: unionStrings },
+  { key: "doorKeysInserted", merge: unionStrings },
   { key: "questStart", merge: earliestDay },
   { key: "questXpAwarded", merge: paidUnion },
   { key: "casinoGateSeen", merge: seenMerge },

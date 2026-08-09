@@ -3,6 +3,7 @@ import { createSfx } from "./gacha-audio.js";
 import { warmUpCutscene } from "./gacha-scene.js";
 import { itemCounts, takeItems } from "./gacha-collection.js";
 import { getMeta, setMeta } from "./db.js";
+import { DOOR_KEY_IDS, heldDoorKeys, insertDoorKey, insertedDoorKeys } from "./door-keys.js";
 
 /**
  * The casino: a place two survivors definitely should not be spending
@@ -278,6 +279,12 @@ interface Room {
   doorGlow: any;
   /** The lamp over the door, wired badly on purpose: it flickers. */
   doorLight: any;
+  /**
+   * The door's moving parts: its two leaves, the chains that come off,
+   * three keyholes each holding an (initially invisible) key, and the
+   * light waiting behind it all.
+   */
+  door: { left: any; right: any; chains: any[]; keyholes: { key: any }[]; blaze: any; beam: any };
   bulbs: any[];
   neon: any;
   pink: any;
@@ -566,11 +573,49 @@ function buildRoom(THREE: any, scene: any): Room {
   // out underneath. It does nothing. For now.
   const steel = matte(0x2a2230, 0.5);
   slab(matte(0x1c1420, 0.6), 1.5, 2.7, 0.18, 4.6, 1.35, -6.24); // frame
-  slab(steel, 0.62, 2.5, 0.12, 4.28, 1.25, -6.16); // left leaf
-  slab(steel, 0.62, 2.5, 0.12, 4.92, 1.25, -6.16); // right leaf
+  const leftLeaf = slab(steel, 0.62, 2.5, 0.12, 4.28, 1.25, -6.16);
+  const rightLeaf = slab(steel, 0.62, 2.5, 0.12, 4.92, 1.25, -6.16);
   const chain = matte(0x8a7440, 0.35);
-  slab(chain, 1.7, 0.09, 0.05, 4.6, 1.6, -6.08).rotation.z = 0.45;
-  slab(chain, 1.7, 0.09, 0.05, 4.6, 1.2, -6.08).rotation.z = -0.45;
+  const chainA = slab(chain, 1.7, 0.09, 0.05, 4.6, 1.6, -6.08);
+  chainA.rotation.z = 0.45;
+  const chainB = slab(chain, 1.7, 0.09, 0.05, 4.6, 1.2, -6.08);
+  chainB.rotation.z = -0.45;
+  // Three keyholes down the left leaf, and a key waiting invisible in each.
+  // What fits them, and where those things come from, the door does not say.
+  const keyholes: { key: any }[] = [];
+  const brass = matte(0xf2cf6a, 0.25);
+  for (let i = 0; i < 3; i++) {
+    const y = 1.66 - i * 0.34;
+    const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.02, 12), gold);
+    plate.rotation.x = Math.PI / 2;
+    plate.position.set(4.45, y, -6.095);
+    scene.add(plate);
+    const slot = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.05, 0.03), matte(0x14101a, 0.4));
+    slot.position.set(4.45, y, -6.085);
+    scene.add(slot);
+    const key = new THREE.Group();
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.15, 8), brass);
+    shaft.rotation.x = Math.PI / 2;
+    shaft.position.z = 0.05;
+    key.add(shaft);
+    const bow = new THREE.Mesh(new THREE.TorusGeometry(0.032, 0.011, 8, 14), brass);
+    bow.position.z = 0.14;
+    key.add(bow);
+    key.position.set(4.45, y, -6.07);
+    key.visible = false;
+    scene.add(key);
+    keyholes.push({ key });
+  }
+  // What waits behind: a light with a pulse in it, dark until the door parts.
+  const blaze = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.34, 2.5),
+    new THREE.MeshBasicMaterial({ color: 0xfff2c8, transparent: true, opacity: 0 }),
+  );
+  blaze.position.set(4.6, 1.3, -6.22);
+  scene.add(blaze);
+  const beam = new THREE.PointLight(0xffe9b0, 0, 11, 1.6);
+  beam.position.set(4.6, 1.4, -5.5);
+  scene.add(beam);
   const signCanvas = document.createElement("canvas");
   signCanvas.width = 128;
   signCanvas.height = 128;
@@ -804,6 +849,7 @@ function buildRoom(THREE: any, scene: any): Room {
     cans,
     doorGlow,
     doorLight,
+    door: { left: leftLeaf, right: rightLeaf, chains: [chainA, chainB], keyholes, blaze, beam },
     bulbs,
     neon,
     pink,
@@ -929,6 +975,9 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
   let doorFlareUntil = 0;
   /** When the door hums next; zero means the moment the tab is opened. */
   let nextHum = 0;
+  /** The door's slide, 0 shut to 1 open; the loop eases towards the target. */
+  let doorOpenP = 0;
+  let doorOpenTarget = 0;
   const smooth = (x: number): number => x * x * (3 - 2 * x);
   // Seated, the hips ride about 0.7 above the root, so parking her ON the
   // 0.63 stool means the root sits just below the floor line.
@@ -1139,6 +1188,13 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
         nextHum = t + 5 + Math.random() * 4;
         sfx.hum(4.5);
       }
+      // Three keys turned, and the leaves slide; the light behind takes over.
+      doorOpenP += (doorOpenTarget - doorOpenP) * Math.min(1, dt * 1.1);
+      room!.door.left.position.x = 4.28 - doorOpenP * 0.72;
+      room!.door.right.position.x = 4.92 + doorOpenP * 0.72;
+      for (const link of room!.door.chains) link.visible = doorOpenP < 0.02;
+      room!.door.blaze.material.opacity = doorOpenP * (0.75 + Math.sin(t * 2.1) * 0.12);
+      room!.door.beam.intensity = doorOpenP * (22 + Math.sin(t * 2.6) * 6) * flicker;
 
       const target = t < zoomUntil && zoomTarget ? zoomTarget : CAMS[game];
       camPos.lerp(new THREE.Vector3(...target.pos), 0.045);
@@ -2029,11 +2085,26 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
 
   const drawDoor = (): void => {
     hideDice();
+    // The door remembers: keys already turned stay turned, and a fully
+    // keyed door stands open before anyone presses anything.
+    void (async () => {
+      const inserted = await insertedDoorKeys();
+      if (!room) return;
+      for (const id of inserted) {
+        const hole = room.door.keyholes[DOOR_KEY_IDS.indexOf(id)];
+        if (hole) {
+          hole.key.visible = true;
+          hole.key.position.z = -6.07;
+          hole.key.rotation.z = 0;
+        }
+      }
+      if (inserted.length >= DOOR_KEY_IDS.length) doorOpenTarget = 1;
+    })();
     gameBox.innerHTML = `
       <div class="row-actions" style="justify-content:center" id="cas-door-actions">
         <button id="cas-door" class="cas-big">TRY THE DOOR</button>
       </div>
-      <div class="cas-result" id="cas-result">Chained shut. Warm to stand near. Humming, slightly.</div>
+      <div class="cas-result" id="cas-result">Chained shut. Three dark keyholes. Warm to stand near. Humming, slightly.</div>
     `;
     const actions = gameBox.querySelector<HTMLDivElement>("#cas-door-actions")!;
     const result = gameBox.querySelector<HTMLDivElement>("#cas-result")!;
@@ -2054,7 +2125,7 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
       actions.querySelector<HTMLButtonElement>("#cas-back")?.addEventListener("click", () => {
         dismiss();
         armTry();
-        result.textContent = "Chained shut. Warm to stand near. Humming, slightly.";
+        result.textContent = "Chained shut. Three dark keyholes. Warm to stand near. Humming, slightly.";
         busy = false;
       });
     };
@@ -2108,7 +2179,7 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
       const now = performance.now() / 1000;
       zoomTarget = DOOR_ZOOM;
       // The camera stays on the door for as long as she stays in the way.
-      zoomUntil = now + (paid >= BRIBE_GOAL ? 4.6 : 120);
+      zoomUntil = now + (paid >= BRIBE_GOAL ? 9 : 120);
       result.textContent = "…";
       // Your steps, then the chain in your hand.
       sfx.step();
@@ -2116,17 +2187,89 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
       setTimeout(() => sfx.step(), 640);
       setTimeout(() => sfx.creak(), 950);
       if (paid >= BRIBE_GOAL) {
-        // Paid in full: nobody comes. The door, however, is still a door.
+        // Paid in full: nobody comes. Now it is between you, three
+        // keyholes, and whatever in your travels happens to fit them.
+        const held = await heldDoorKeys();
+        const inserted = await insertedDoorKeys();
+
+        if (inserted.length >= DOOR_KEY_IDS.length) {
+          // Already open; the visit is its own reward.
+          doorOpenTarget = 1;
+          setTimeout(() => sfx.hum(4), 1000);
+          setTimeout(() => {
+            result.textContent = "It stands open. The light inside has a pulse. Nothing in there wants to be hurried.";
+            busy = false;
+          }, 2200);
+          return;
+        }
+
+        const nextKey = held.find((id) => !inserted.includes(id));
+        if (!nextKey) {
+          setTimeout(() => {
+            doorFlareUntil = performance.now() / 1000 + 2.2;
+            sfx.hum(3);
+          }, 1050);
+          setTimeout(() => {
+            result.textContent =
+              inserted.length > 0
+                ? `Three keyholes. ${inserted.length} already turned. Nothing else you carry fits.`
+                : "No one comes to stop you. Three dark keyholes. Nothing you carry fits them. Yet.";
+          }, 1700);
+          setTimeout(() => {
+            busy = false;
+          }, 3400);
+          return;
+        }
+
+        // Something in your pocket is suddenly warm. It knows which hole.
+        const slot = DOOR_KEY_IDS.indexOf(nextKey);
+        await insertDoorKey(nextKey);
+        const turned = inserted.length + 1;
         setTimeout(() => {
-          doorFlareUntil = performance.now() / 1000 + 2.2;
-          sfx.hum(3);
-        }, 1050);
-        setTimeout(() => {
-          result.textContent = "No one comes to stop you. The chains still will not give.";
-        }, 1700);
-        setTimeout(() => {
-          busy = false;
-        }, 3400);
+          const hole = room?.door.keyholes[slot];
+          if (!hole) return;
+          const key = hole.key;
+          key.visible = true;
+          sfx.whoosh();
+          const start = performance.now();
+          const tick = (): void => {
+            if (mySeq !== seq) return;
+            const p = Math.min(1, (performance.now() - start) / 900);
+            key.position.z = -5.5 - p * 0.57;
+            key.rotation.z = (1 - p) * 2.6;
+            if (p >= 1) {
+              key.rotation.z = 0;
+              sfx.creak();
+              sfx.bell();
+            } else requestAnimationFrame(tick);
+          };
+          tick();
+        }, 1200);
+        if (turned >= DOOR_KEY_IDS.length) {
+          setTimeout(() => {
+            result.textContent = "The third key turns.";
+            sfx.thud();
+          }, 2400);
+          setTimeout(() => {
+            doorOpenTarget = 1;
+            doorFlareUntil = performance.now() / 1000 + 3.5;
+            sfx.menace(2.6);
+            sfx.open();
+            setTimeout(() => sfx.bell(), 700);
+            result.textContent =
+              "The chains let go. The doors part on a light with a pulse in it. What waits inside arrives soon.";
+          }, 3400);
+          setTimeout(() => {
+            busy = false;
+          }, 7000);
+        } else {
+          setTimeout(() => {
+            result.textContent = `Something turns, deep in the door. ${turned} of ${DOOR_KEY_IDS.length}.`;
+          }, 2500);
+          setTimeout(() => {
+            busy = false;
+          }, 3600);
+        }
         return;
       }
       // The door notices — and she is suddenly VERY much in the way.
