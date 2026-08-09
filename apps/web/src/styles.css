@@ -4508,20 +4508,48 @@ button.gram-swap-line:hover {
   }
 }
 
+/* On a desktop screen the fixed float lands way below the quiz card,
+   nowhere near where the eyes are. There is room to spare there, so the
+   reaction goes back into the flow, right under the question. */
+@media (min-width: 760px) {
+  .cheer {
+    position: static;
+    transform: none;
+    margin: 14px auto 0;
+    width: auto;
+    max-width: none;
+    pointer-events: none;
+  }
+  .cheer.show {
+    animation-name: cheer-pop-flow;
+  }
+  .cheer img {
+    width: min(230px, 30vw);
+    height: min(150px, 20vw);
+    box-shadow: none;
+  }
+  .cheer-text { text-shadow: none; }
+  @keyframes cheer-pop-flow {
+    from {
+      opacity: 0;
+      transform: scale(0.7) translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
 /* ---------------- desktop proportions ----------------
-   The compact pass was tuned on a phone; a laptop has room. And with the
-   sidebar on, the viewport's centre is not the content's — the reaction
-   shifts by half the sidebar to sit under the quiz it belongs to. */
+   The compact pass was tuned on a phone; a laptop has room. (The reaction
+   itself is back in the page flow on wide screens, right under the quiz.) */
 
 .kmap-inner {
   margin-inline: auto;
 }
 
 @media (min-width: 860px) {
-  .cheer {
-    left: calc(50% + 108px);
-  }
-
   .cheer img {
     width: 230px;
     height: 145px;
@@ -5437,7 +5465,23 @@ button.gram-swap-line:hover {
   min-width: 0;
 }
 .bk-head .bk-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bk-controls { margin-top: 8px; align-items: center; }
+/* One slim toolbar. The page is the point of this screen, so every
+   control is a small quiet chip and every group flows on the same
+   wrapping row instead of stacking into a wall of buttons. */
+.bk-controls { margin-top: 6px; align-items: center; gap: 6px; }
+.bk-controls > * { margin-top: 0; }
+.bk-controls .row-actions { margin-top: 0; gap: 6px; }
+.bk-controls button,
+.bk-controls button.secondary {
+  padding: 5px 10px;
+  font-size: 0.82rem;
+  min-height: 32px;
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--muted);
+}
+.bk-controls .glosses { font-size: 0.8rem; }
+#bk-status:empty { display: none; padding: 0; }
 .bk-pager, .bk-zoom { display: flex; align-items: center; gap: 6px; }
 .bk-textview { max-height: 70vh; overflow-y: auto; }
 

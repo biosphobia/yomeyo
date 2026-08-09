@@ -494,7 +494,7 @@ function offerOcr(
   const button = document.createElement("button");
   button.id = "bk-ocr-btn";
   button.className = "secondary";
-  button.textContent = "🔍 Read this page (OCR)";
+  button.textContent = "🔍 OCR page";
   ui.controls.appendChild(button);
 
   // The boxes are invisible by default so the page looks untouched; a
@@ -513,12 +513,13 @@ function offerOcr(
     manage.className = "row-actions bk-ocr-manage";
     manage.innerHTML = `
       <button class="secondary" id="bk-ocr-boxes"></button>
-      <button class="secondary" id="bk-ocr-redo">↻ Re-OCR page</button>
-      <button class="secondary" id="bk-ocr-clear">✕ Clear OCR</button>
+      <button class="secondary" id="bk-ocr-redo" title="Read this page again, replacing its OCR">↻ Redo</button>
+      <button class="secondary" id="bk-ocr-clear" title="Forget this page's OCR">✕ Clear</button>
     `;
     const boxesButton = manage.querySelector<HTMLButtonElement>("#bk-ocr-boxes")!;
+    boxesButton.title = "Show or hide the recognised boxes";
     const labelBoxes = (): void => {
-      boxesButton.textContent = layer.classList.contains("show-boxes") ? "◼ Hide boxes" : "◻ Show boxes";
+      boxesButton.textContent = layer.classList.contains("show-boxes") ? "◼ Boxes" : "◻ Boxes";
     };
     labelBoxes();
     boxesButton.addEventListener("click", () => {
@@ -534,7 +535,7 @@ function offerOcr(
         manage.remove();
         ui.controls.appendChild(button);
         button.disabled = false;
-        button.textContent = "🔍 Read this page (OCR)";
+        button.textContent = "🔍 OCR page";
         ui.status.textContent = "OCR cleared for this page.";
       });
     });
@@ -609,7 +610,7 @@ function offerOcr(
       showManage();
     } catch (err) {
       button.disabled = false;
-      button.textContent = "🔍 Read this page (OCR)";
+      button.textContent = "🔍 OCR page";
       ui.status.textContent = err instanceof Error ? err.message : "OCR failed.";
     }
   };
@@ -650,7 +651,7 @@ function offerBatchOcr(ui: Ui, spec: BatchOcrSpec): void {
   const button = document.createElement("button");
   button.id = "bk-ocr-all";
   button.className = "secondary";
-  button.textContent = "📚 OCR all pages";
+  button.textContent = "📚 OCR all";
   ui.controls.appendChild(button);
 
   let running = false;
@@ -666,7 +667,7 @@ function offerBatchOcr(ui: Ui, spec: BatchOcrSpec): void {
       let failed = 0;
       for (let page = 0; page < spec.total; page++) {
         if (!running) break;
-        button.textContent = `⏹ Stop (${page + 1} / ${spec.total})`;
+        button.textContent = `⏹ ${page + 1} / ${spec.total}`;
         const key = spec.keyOf(page);
         const shared = spec.sharedOf(page);
         try {
@@ -682,7 +683,7 @@ function offerBatchOcr(ui: Ui, spec: BatchOcrSpec): void {
       }
       const stopped = !running;
       running = false;
-      button.textContent = "📚 OCR all pages";
+      button.textContent = "📚 OCR all";
       ui.status.textContent = stopped
         ? `Stopped. ${read} page${read === 1 ? "" : "s"} read this run.`
         : failed > 0
@@ -732,8 +733,8 @@ function pager(controls: HTMLElement, current: () => number, total: number, go: 
   const wrap = document.createElement("div");
   wrap.className = "row-actions bk-pager";
   wrap.innerHTML = `
-    <button class="secondary" data-step="-1">‹ prev</button>
-    <button class="secondary" data-step="1">next ›</button>
+    <button class="secondary" data-step="-1" title="Previous page" aria-label="Previous page">‹</button>
+    <button class="secondary" data-step="1" title="Next page" aria-label="Next page">›</button>
   `;
   for (const button of wrap.querySelectorAll<HTMLButtonElement>("[data-step]")) {
     button.addEventListener("click", () => {
