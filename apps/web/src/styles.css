@@ -5574,3 +5574,62 @@ button.gram-swap-line:hover {
   margin: 0 0 0 6px;
   vertical-align: middle;
 }
+
+/* ---------------- the quick review ----------------
+   A round set up in a handful of taps: every choice is a row of chips,
+   because a page of dropdowns would cost more time than the round saves. */
+
+.qk-panel .qk-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.qk-note {
+  margin: 2px 0 10px;
+  font-size: 0.82rem;
+}
+
+.qk-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+
+.qk-label {
+  color: var(--muted);
+  font-size: 0.85rem;
+  min-width: 96px;
+}
+
+.qk-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.qk-chip {
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid transparent;
+}
+
+.qk-chip.on {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  border-color: var(--accent);
+}
+
+.qk-twists { align-items: flex-start; }
+
+/* Listening: the sound is the question, so there is nothing to show yet. */
+.kana-listen {
+  opacity: 0.75;
+}

@@ -37,6 +37,62 @@ import { KANA_GROUPS, allKanaChars, isCorrect, isSmallTsu, type KanaEntry, type 
  */
 
 const GAME_KEY = "kanaGame";
+/** The quick review's settings, remembered between sittings. */
+const QUICK_KEY = "kanaQuick";
+
+/**
+ * A quick review: the same quiz engine, with every knob in the reader's
+ * hands and nothing to climb.
+ *
+ * The ladder is a course — seven levels, in order, unlocking each other.
+ * That is the wrong shape for "I have five minutes and I want the kana I
+ * keep forgetting". So this runs one round to your own specification, off
+ * the ladder entirely: it never unlocks anything, never spends or restores
+ * the ladder's hearts, and never touches where you had got to. What it
+ * does do is count — every answer goes into the same permanent per-kana
+ * record, so a quick round makes the ladder's questions smarter too.
+ */
+export interface QuickConfig {
+  /** How many questions. */
+  count: number;
+  /** Tap one of three, type the romaji, or a mix of both. */
+  style: "choice" | "type" | "mixed";
+  /** Mix real dictionary words in among the lone kana. */
+  words: boolean;
+  /** Seconds a question, or 0 for no clock. */
+  timerSec: number;
+  /** Hearts, or 0 to play without them. */
+  lives: number;
+  /** Twists borrowed from the game centre, mixed in at random. */
+  twists: QuickTwist[];
+}
+
+/**
+ * The game-centre mechanics that fit inside an ordinary question, so they
+ * can be shuffled in among plain ones without changing the shape of a
+ * round. Each is the same mechanic the arcade plays under its own name.
+ */
+export type QuickTwist = "flash" | "listen" | "mirror" | "speed";
+
+export const QUICK_TWISTS: { id: QuickTwist; name: string; detail: string }[] = [
+  { id: "flash", name: "⚡ Flash", detail: "The kana shows for a blink, then hides." },
+  { id: "listen", name: "👂 Listen", detail: "You hear it instead of seeing it." },
+  { id: "mirror", name: "🪞 Mirror", detail: "The kana comes through the glass, flipped." },
+  { id: "speed", name: "⏱ Speed", detail: "The clock tightens with every right answer." },
+];
+
+const QUICK_DEFAULT: QuickConfig = {
+  count: 20,
+  style: "mixed",
+  words: false,
+  timerSec: 0,
+  lives: 0,
+  twists: [],
+};
+
+/** Where the speed twist stops tightening. */
+const QUICK_SPEED_FLOOR = 2;
+const QUICK_SPEED_STEP = 0.3;
 
 interface GameState {
   groups: string[];
@@ -296,6 +352,7 @@ function renderSelection(
     </label>
     <div class="kana-start-row">
       <button id="kana-start" disabled>Start</button>
+      <button id="kana-quick" class="secondary" disabled>⚡ Quick review</button>
       <span class="glosses" id="kana-start-note"></span>
     </div>
     ${
@@ -323,14 +380,30 @@ function renderSelection(
     });
   }
 
+  body.querySelector("#kana-quick")!.addEventListener("click", () => {
+    if (chosen.size === 0) return;
+    // The chosen kana come along even if the ladder was never started, so a
+    // quick round needs no save of its own.
+    // A different set of kana means a different ladder, exactly as pressing
+    // Start would: a quick round must never leave the climb claiming
+    // progress on kana that were never studied.
+    const next: GameState =
+      game && sameGroups(game.groups, chosen)
+        ? { ...game, skipLearn }
+        : { groups: [...chosen].sort(), unlocked: 0, health: MAX_HEALTH, skipLearn };
+    void saveGame(next).then(() => renderQuick(body, next, main, isCurrent));
+  });
+
   body.querySelector<HTMLInputElement>("#kana-skip")!.addEventListener("change", (ev) => {
     skipLearn = (ev.target as HTMLInputElement).checked;
     refresh();
   });
 
   const startButton = body.querySelector<HTMLButtonElement>("#kana-start")!;
+  const quickButton = body.querySelector<HTMLButtonElement>("#kana-quick")!;
   const note = body.querySelector<HTMLSpanElement>("#kana-start-note")!;
   const refresh = (): void => {
+    quickButton.disabled = chosen.size === 0;
     const count = [...chosen].reduce(
       (sum, id) => sum + (KANA_GROUPS.find((group) => group.id === id)?.entries.length ?? 0),
       0,
@@ -471,12 +544,147 @@ function itemAnswer(item: Item): string {
   return item.entry ? item.entry.romaji[0] : primaryRomaji(item.kana);
 }
 
+// ---------------- quick review ----------------
+
+/**
+ * The quick review's own screen: pick the kana above, set the round here.
+ *
+ * Everything is a row of chips rather than a form. On a phone, five taps
+ * from opening the tab to answering a question is the whole point of the
+ * feature; a page of dropdowns would defeat it.
+ */
+async function renderQuick(
+  body: HTMLDivElement,
+  game: GameState | null,
+  main: HTMLElement,
+  isCurrent: () => boolean,
+): Promise<void> {
+  const held = (await getMeta<QuickConfig>(QUICK_KEY)) ?? QUICK_DEFAULT;
+  const cfg: QuickConfig = { ...QUICK_DEFAULT, ...held, twists: [...(held.twists ?? [])] };
+  if (!isCurrent() || !body.isConnected) return;
+
+  const chips = (
+    name: keyof QuickConfig,
+    options: { value: number | string; label: string }[],
+    current: number | string,
+  ): string =>
+    options
+      .map(
+        (option) =>
+          `<button class="qk-chip${option.value === current ? " on" : ""}" data-set="${String(name)}"
+             data-value="${String(option.value)}">${option.label}</button>`,
+      )
+      .join("");
+
+  const draw = (): void => {
+    const pool = game ? poolOf(game).filter((entry) => !isSmallTsu(entry.kana)).length : 0;
+    body.innerHTML = `
+      <div class="card-panel qk-panel">
+        <div class="qk-head">
+          <b>⚡ Quick review</b>
+          <span class="glosses">${pool} kana selected</span>
+        </div>
+        <div class="glosses qk-note">A single round, off the ladder. Nothing to unlock, and every
+          answer still counts towards your record.</div>
+
+        <div class="qk-row"><span class="qk-label">Questions</span>
+          <div class="qk-chips">${chips("count", [
+            { value: 10, label: "10" },
+            { value: 20, label: "20" },
+            { value: 30, label: "30" },
+            { value: 50, label: "50" },
+          ], cfg.count)}</div></div>
+
+        <div class="qk-row"><span class="qk-label">Answering</span>
+          <div class="qk-chips">${chips("style", [
+            { value: "choice", label: "Tap one of three" },
+            { value: "type", label: "Type it" },
+            { value: "mixed", label: "Both" },
+          ], cfg.style)}</div></div>
+
+        <div class="qk-row"><span class="qk-label">Clock</span>
+          <div class="qk-chips">${chips("timerSec", [
+            { value: 0, label: "None" },
+            { value: 10, label: "10s" },
+            { value: 6, label: "6s" },
+            { value: 4, label: "4s" },
+          ], cfg.timerSec)}</div></div>
+
+        <div class="qk-row"><span class="qk-label">Hearts</span>
+          <div class="qk-chips">${chips("lives", [
+            { value: 0, label: "Off" },
+            { value: 5, label: "5" },
+            { value: 3, label: "3" },
+            { value: 1, label: "1" },
+          ], cfg.lives)}</div></div>
+
+        <label class="kana-skip-row">
+          <input type="checkbox" id="qk-words" ${cfg.words ? "checked" : ""} />
+          Mix in real words made from these kana
+        </label>
+
+        <div class="qk-row qk-twists"><span class="qk-label">Game centre twists</span>
+          <div class="qk-chips">${QUICK_TWISTS.map(
+            (twist) =>
+              `<button class="qk-chip${cfg.twists.includes(twist.id) ? " on" : ""}" data-twist="${twist.id}"
+                 title="${escapeHtml(twist.detail)}">${twist.name}</button>`,
+          ).join("")}</div></div>
+        <div class="glosses qk-note">${
+          cfg.twists.length === 0
+            ? "Plain questions. Turn any of these on and they get shuffled in among them."
+            : QUICK_TWISTS.filter((twist) => cfg.twists.includes(twist.id))
+                .map((twist) => escapeHtml(twist.detail))
+                .join(" ")
+        }</div>
+
+        <div class="row-actions" style="justify-content:center;margin-top:14px">
+          <button id="qk-start" ${pool === 0 ? "disabled" : ""}>Start</button>
+          <button id="qk-back" class="secondary">Pick kana</button>
+        </div>
+        ${pool === 0 ? `<div class="glosses" style="text-align:center">Choose some kana first.</div>` : ""}
+      </div>`;
+
+    for (const chip of body.querySelectorAll<HTMLButtonElement>("[data-set]")) {
+      chip.addEventListener("click", () => {
+        const key = chip.dataset.set as "count" | "style" | "timerSec" | "lives";
+        const raw = chip.dataset.value!;
+        (cfg[key] as number | string) = key === "style" ? raw : Number(raw);
+        void setMeta(QUICK_KEY, cfg);
+        draw();
+      });
+    }
+    for (const chip of body.querySelectorAll<HTMLButtonElement>("[data-twist]")) {
+      chip.addEventListener("click", () => {
+        const id = chip.dataset.twist as QuickTwist;
+        cfg.twists = cfg.twists.includes(id) ? cfg.twists.filter((t) => t !== id) : [...cfg.twists, id];
+        void setMeta(QUICK_KEY, cfg);
+        draw();
+      });
+    }
+    body.querySelector<HTMLInputElement>("#qk-words")!.addEventListener("change", (ev) => {
+      cfg.words = (ev.target as HTMLInputElement).checked;
+      void setMeta(QUICK_KEY, cfg);
+      draw();
+    });
+    body.querySelector("#qk-back")!.addEventListener("click", () => renderSelection(body, game, main, isCurrent));
+    body.querySelector<HTMLButtonElement>("#qk-start")!.addEventListener("click", () => {
+      if (!game) return;
+      void setMeta(QUICK_KEY, cfg);
+      // Level 2 is the plain quiz: its shape is the one a quick round bends,
+      // and it is what the per-kana record files these answers under.
+      void runLevel(body, game, 2, main, isCurrent, cfg);
+    });
+  };
+  draw();
+}
+
 async function runLevel(
   body: HTMLDivElement,
   game: GameState,
   level: number,
   main: HTMLElement,
   isCurrent: () => boolean,
+  quick?: QuickConfig,
 ): Promise<void> {
   const pool = poolOf(game);
   // The small っ has no sound to quiz alone, so it never becomes a lone
@@ -493,13 +701,46 @@ async function runLevel(
   }
   void preloadReactions();
 
-  const useLives = level >= 3;
-  const timerSec = level === 4 ? 6 : level === 6 ? 10 : 0;
-  const useChoices = level === 1 && !tsuFocus;
-  const learning = level === 0;
+  // A quick review answers all of these itself; the ladder reads them off
+  // the level it is on.
+  const useLives = quick ? quick.lives > 0 : level >= 3;
+  const startTimer = quick
+    ? quick.twists.includes("speed") && quick.timerSec === 0
+      ? 5.5 // the speed twist needs a clock to tighten
+      : quick.timerSec
+    : level === 4
+      ? 6
+      : level === 6
+        ? 10
+        : 0;
+  // The speed twist shortens this as the round goes on; everything else
+  // leaves it where it started.
+  let timerSec = startTimer;
+  const useChoices = quick ? quick.style === "choice" : level === 1 && !tsuFocus;
+  const mixedStyle = quick?.style === "mixed";
+  const learning = !quick && level === 0;
 
   let items: Item[];
-  if (level >= 5 || tsuFocus) {
+  if (quick) {
+    items = await quickItems(game, pool, lonePool, quick, body, main, isCurrent);
+    if (!body.isConnected || !isCurrent()) return;
+    if (items.length === 0) {
+      // Only the small っ selected, with words turned off: there is no
+      // question to ask, because っ has no sound of its own.
+      body.innerHTML = `
+        <div class="card-panel kana-quiz">
+          <div class="big">っ</div>
+          <div>Nothing to ask with these settings.</div>
+          <div class="glosses" style="margin-top:8px">The small っ has no sound on its own — turn words
+            on, or add another group.</div>
+          <div class="row-actions" style="justify-content:center;margin-top:12px">
+            <button id="kana-back">Settings</button>
+          </div>
+        </div>`;
+      body.querySelector("#kana-back")!.addEventListener("click", () => void renderQuick(body, game, main, isCurrent));
+      return;
+    }
+  } else if (level >= 5 || tsuFocus) {
     // The dictionary may still have to come down the wire, which on mobile
     // data is long enough that a bare line of text reads as a hung screen.
     // So: say what is happening, and always leave a way out.
@@ -558,7 +799,7 @@ async function runLevel(
 
   const queue = learning ? [...items] : shuffle([...items]);
   let done = 0;
-  let health = game.health;
+  let health = quick ? quick.lives : game.health;
   let missedAny = false;
   let gotRight = 0;
   let active = true; // cleared on quit, so a pending auto-advance dies quietly
@@ -581,8 +822,8 @@ async function runLevel(
     : startGameSession({
         level,
         groups: game.groups,
-        poolSize: level >= 5 || tsuFocus ? items.length : new Set(items.map((item) => item.kana)).size,
-        words: level >= 5 || tsuFocus,
+        poolSize: quick || level >= 5 || tsuFocus ? items.length : new Set(items.map((item) => item.kana)).size,
+        words: quick ? quick.words : level >= 5 || tsuFocus,
       });
 
   const stopTimer = (): void => {
@@ -608,8 +849,12 @@ async function runLevel(
   const fail = async (): Promise<void> => {
     stopTimer();
     session?.end("failed");
-    game.health = MAX_HEALTH; // a fresh attempt starts with fresh hearts
-    await saveGame(game);
+    // The ladder's hearts are the ladder's business: a quick round neither
+    // spends them nor hands them back.
+    if (!quick) {
+      game.health = MAX_HEALTH; // a fresh attempt starts with fresh hearts
+      await saveGame(game);
+    }
     if (!isCurrent()) return;
     const purse = await payout();
     if (!isCurrent()) return;
@@ -617,19 +862,55 @@ async function runLevel(
       <div class="card-panel kana-quiz">
         <div class="big">💔</div>
         <div class="kana-score">Out of hearts</div>
+        <div class="glosses">${done} of ${done + queue.length} answered.</div>
         ${purse}
         <div class="row-actions" style="justify-content:center;margin-top:12px">
           <button id="kana-retry">Try again</button>
-          <button id="kana-back" class="secondary">Change groups</button>
+          <button id="kana-back" class="secondary">${quick ? "Settings" : "Change groups"}</button>
         </div>
       </div>`;
-    body.querySelector("#kana-retry")!.addEventListener("click", () => void runLevel(body, game, level, main, isCurrent));
-    body.querySelector("#kana-back")!.addEventListener("click", () => renderSelection(body, game, main, isCurrent));
+    body.querySelector("#kana-retry")!.addEventListener("click", () =>
+      void runLevel(body, game, level, main, isCurrent, quick),
+    );
+    body.querySelector("#kana-back")!.addEventListener("click", () =>
+      quick ? void renderQuick(body, game, main, isCurrent) : renderSelection(body, game, main, isCurrent),
+    );
   };
 
   const finish = async (): Promise<void> => {
     stopTimer();
     session?.end("cleared");
+    if (quick) {
+      // Nothing to unlock and nothing to restore — but the answers counted,
+      // the same as any other round, and so does the day's practice.
+      const { unlockAchievement } = await import("./achievements.js");
+      void unlockAchievement("first-kana-level");
+      await recordQuestEvents([
+        "kana-level",
+        ...(missedAny ? [] : ["kana-level-perfect"]),
+        ...game.groups.map((id) => `group-cleared:${id}`),
+      ]).catch(() => undefined);
+      const purse = await payout();
+      if (!isCurrent()) return;
+      body.innerHTML = `
+        <div class="card-panel kana-quiz">
+          <div class="big">${missedAny ? "🎉" : "💯"}</div>
+          <div class="kana-score">${gotRight} / ${items.length}</div>
+          <div class="glosses">${missedAny ? "Quick review done." : "Perfect round."}</div>
+          ${purse}
+          <div class="row-actions" style="justify-content:center;margin-top:12px">
+            <button id="kana-again">Again</button>
+            <button id="kana-settings" class="secondary">Settings</button>
+            <button id="kana-back" class="ghost">Done</button>
+          </div>
+        </div>`;
+      body.querySelector("#kana-again")!.addEventListener("click", () =>
+        void runLevel(body, game, level, main, isCurrent, quick),
+      );
+      body.querySelector("#kana-settings")!.addEventListener("click", () => void renderQuick(body, game, main, isCurrent));
+      body.querySelector("#kana-back")!.addEventListener("click", () => renderSelection(body, game, main, isCurrent));
+      return;
+    }
     game.unlocked = Math.max(game.unlocked, level + 1);
     // Clearing the last level rolls the ladder back here, not in the button
     // on the trophy screen. Leaving that screen any other way — Change
@@ -715,11 +996,31 @@ async function runLevel(
     const total = done + queue.length;
     const percent = Math.round((done / total) * 100);
 
+    // One question, one twist — drawn from the ones asked for, with plain
+    // among them so a mixed round stays mixed. A word is never flashed or
+    // hidden: half a word shown for a blink is a riddle, not a review.
+    const lone = !!item.entry;
+    const pickable = quick && lone ? quick.twists.filter((t) => t !== "speed") : [];
+    const twist =
+      pickable.length > 0
+        ? [...pickable, "plain" as const][Math.floor(Math.random() * (pickable.length + 1))]
+        : "plain";
+    const flashing = twist === "flash";
+    const listening = twist === "listen";
+    const mirrored = twist === "mirror";
+    // Listening has to be answerable without the shape, so it always offers
+    // choices; otherwise a mixed round alternates between the two styles.
+    const choicesNow = listening || useChoices || (mixedStyle && Math.random() < 0.5);
+
     body.innerHTML = `
       <div class="card-panel kana-quiz">
         <div class="kana-quiz-top">
           <button id="kana-quit" class="quiz-stop" title="Stop" aria-label="Stop">✕</button>
-          <span class="glosses quiz-level">Level ${level}: ${LEVELS[level].name}</span>
+          <span class="glosses quiz-level">${
+            quick
+              ? `⚡ Quick review${twist === "plain" ? "" : ` · ${QUICK_TWISTS.find((t) => t.id === twist)?.name ?? ""}`}`
+              : `Level ${level}: ${LEVELS[level].name}`
+          }</span>
           <span class="kana-count">${done + 1}/${total}</span>
           <span class="quiz-right">
             ${streakHtml()}${useLives ? heartsHtml(health) : ""}
@@ -727,15 +1028,21 @@ async function runLevel(
         </div>
         <div class="kana-bar"><div class="kana-bar-fill" style="width:${percent}%"></div></div>
         ${timerSec > 0 ? `<div class="kana-timer"><div class="kana-timer-fill" id="kana-timer-fill"></div></div>` : ""}
-        <div class="kana-big" lang="ja">${escapeHtml(item.kana)}</div>
-        ${item.gloss ? `<div class="kana-gloss">${escapeHtml(item.gloss)}</div>` : ""}
+        ${
+          listening
+            ? `<div class="kana-big kana-listen" id="kana-big">🔊</div>
+               <div class="kana-gloss">Listen, then pick it.</div>`
+            : `<div class="kana-big${flashing ? " kana-flashable" : ""}${mirrored ? " kana-mirrored" : ""}"
+                 id="kana-big" lang="ja">${escapeHtml(item.kana)}</div>
+               ${item.gloss ? `<div class="kana-gloss">${escapeHtml(item.gloss)}</div>` : ""}`
+        }
         ${
           learning
             ? `<div class="kana-learn-romaji">${escapeHtml(itemAnswer(item))}</div>
                <div class="row-actions" style="justify-content:center">
                  <button id="kana-next-card">Next (Enter)</button>
                </div>`
-            : useChoices
+            : choicesNow
               ? `<div class="kana-choices" id="kana-choices">${choicesFor(item, lonePool)
                   .map((choice) => `<button data-choice="${escapeHtml(choice)}">${escapeHtml(choice)}</button>`)
                   .join("")}</div>`
@@ -758,6 +1065,29 @@ async function runLevel(
     const feedback = body.querySelector<HTMLDivElement>("#kana-feedback")!;
     let settled = false;
 
+    // The flash twist shows the shape for a blink and then veils it; the
+    // listen twist never shows it at all until the answer is in. Either
+    // way the kana is uncovered on settling, so the correction is seen.
+    let flashTimer: ReturnType<typeof setTimeout> | null = null;
+    if (flashing) {
+      const big = body.querySelector<HTMLElement>("#kana-big")!;
+      flashTimer = setTimeout(() => {
+        if (!settled && big.isConnected) big.classList.add("kana-veiled");
+      }, 700);
+    }
+    if (listening) void playItem(item).catch(() => undefined);
+    const unveil = (): void => {
+      if (flashTimer !== null) clearTimeout(flashTimer);
+      const big = body.querySelector<HTMLElement>("#kana-big");
+      if (!big) return;
+      big.classList.remove("kana-veiled");
+      if (listening) {
+        big.classList.remove("kana-listen");
+        big.textContent = item.kana;
+        big.setAttribute("lang", "ja");
+      }
+    };
+
     // A single kana is synthesised, a real word is a real speaker where one
     // has recorded it. Never let a silent device stop the quiz.
     const say = (): void => {
@@ -775,6 +1105,10 @@ async function runLevel(
     const succeed = (): void => {
       settled = true;
       stopTimer();
+      unveil();
+      // The speed twist tightens the clock with every right answer, down
+      // to a floor that is still answerable.
+      if (quick?.twists.includes("speed")) timerSec = Math.max(QUICK_SPEED_FLOOR, timerSec - QUICK_SPEED_STEP);
       session?.answer(item.kana, { correct: true });
       gotRight++;
       streak++;
@@ -794,6 +1128,7 @@ async function runLevel(
     const miss = (label: string, mistake?: string, timeout = false): void => {
       settled = true;
       stopTimer();
+      unveil();
       session?.answer(item.kana, { correct: false, mistake, timeout });
       streak = 0;
       missedAny = true;
@@ -834,7 +1169,7 @@ async function runLevel(
       return;
     }
 
-    if (useChoices) {
+    if (choicesNow) {
       for (const button of body.querySelectorAll<HTMLButtonElement>("#kana-choices button")) {
         button.addEventListener("click", () => {
           if (settled) return;
@@ -956,6 +1291,63 @@ function drawByNeed(pool: KanaEntry[], weights: Map<string, number>, count: numb
  * fit is unchanged by any of this. Where there is not room, the questions go
  * where they are needed — see `needOf`.
  */
+/**
+ * The questions for one quick round.
+ *
+ * Kana are drawn the way they always are — weakest first, by the permanent
+ * record — so "quick" still means "the ones I keep forgetting". Words, if
+ * asked for, take a share of the round rather than a level of their own,
+ * which is the whole point of mixing them in.
+ */
+async function quickItems(
+  game: GameState,
+  pool: KanaEntry[],
+  lonePool: KanaEntry[],
+  quick: QuickConfig,
+  body: HTMLDivElement,
+  main: HTMLElement,
+  isCurrent: () => boolean,
+): Promise<Item[]> {
+  const wanted = Math.max(1, quick.count);
+  // A third of the round, at most, and never more words than exist.
+  const wordCount = quick.words ? Math.max(2, Math.round(wanted / 3)) : 0;
+  const kanaCount = Math.max(0, wanted - wordCount);
+
+  const items: Item[] = [];
+  if (kanaCount > 0 && lonePool.length > 0) {
+    const stats = await kanaStats().catch(() => ({}) as Record<string, KanaStat>);
+    const weights = new Map(lonePool.map((entry) => [entry.kana, needOf(stats[entry.kana])]));
+    // Everything once before anything twice, weakest first, round and round
+    // until the round is full.
+    while (items.length < kanaCount) {
+      const room = kanaCount - items.length;
+      const drawn = drawByNeed(lonePool, weights, Math.min(lonePool.length, room));
+      if (drawn.length === 0) break;
+      for (const entry of drawn) items.push({ kana: entry.kana, entry });
+    }
+  }
+
+  if (wordCount > 0) {
+    body.innerHTML = `
+      <div class="card-panel kana-quiz">
+        <div class="glosses" id="kana-loading">Finding words made only of your kana…</div>
+        <div class="row-actions" style="justify-content:center;margin-top:12px">
+          <button id="kana-back" class="secondary">Settings</button>
+        </div>
+      </div>`;
+    let left = false;
+    body.querySelector("#kana-back")!.addEventListener("click", () => {
+      left = true;
+      void renderQuick(body, game, main, isCurrent);
+    });
+    const words = await wordsFor(game, pool, wordCount, false);
+    if (left || !isCurrent() || !body.isConnected) return [];
+    if (words) items.push(...words);
+  }
+
+  return shuffle(items).slice(0, wanted);
+}
+
 async function kanaItems(pool: KanaEntry[], level: number): Promise<Item[]> {
   const cap = QUESTION_CAP[level] ?? 24;
   const stats = await kanaStats().catch(() => ({}) as Record<string, KanaStat>);
