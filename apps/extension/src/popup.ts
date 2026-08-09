@@ -15,7 +15,6 @@ const tapHint = $<HTMLDivElement>("tap-hint");
 const appUrlInput = $<HTMLInputElement>("app-url");
 const urlInput = $<HTMLInputElement>("sync-url");
 const tokenInput = $<HTMLInputElement>("sync-token");
-const handoffBtn = $<HTMLButtonElement>("handoff-btn");
 const syncBtn = $<HTMLButtonElement>("sync-btn");
 const msg = $<HTMLDivElement>("msg");
 const statTotal = $<HTMLElement>("stat-total");
@@ -108,7 +107,6 @@ async function refresh(): Promise<void> {
     statTotal.textContent = "?";
     statWaiting.textContent = "?";
     transferHint.textContent = "";
-    handoffBtn.disabled = true;
     return;
   }
 
@@ -133,17 +131,15 @@ async function refresh(): Promise<void> {
   };
   statTotal.textContent = String(stats.total);
   statWaiting.textContent = String(stats.waiting);
-  handoffBtn.disabled = stats.total === 0;
-  // Words normally travel on their own; this button is the fallback for when
-  // the app is not open in a tab (an installed app, or another browser).
-  // Saying when the last transfer happened is the difference between "this is
-  // working" and "nothing seems to happen", which is not otherwise visible.
+  // Words travel on their own. Saying when the last transfer happened is the
+  // difference between "this is working" and "nothing seems to happen",
+  // which is not otherwise visible.
   transferHint.textContent =
     stats.total === 0
       ? "Tap a Japanese word on any page to save it."
       : stats.waiting === 0
         ? `Everything saved here is in the app${stats.lastHandoffAt ? ` (last added ${describeWhen(stats.lastHandoffAt)})` : ""}.`
-        : "Could not reach the app just now. They will go across on the next save.";
+        : "Some words have not reached the app yet. They keep trying on their own.";
   if (stats.version) versionLabel.textContent = `Yomeyo ${stats.version}`;
   await refreshAudioPermission();
 }
@@ -171,19 +167,6 @@ for (const input of [appUrlInput, urlInput, tokenInput]) {
   input.addEventListener("change", () => void saveSettings());
 }
 
-handoffBtn.addEventListener("click", async () => {
-  handoffBtn.disabled = true;
-  setMessage("Opening the app…");
-  await saveSettings();
-  const result = await sendMessage<{ count?: number; error?: string }>({ type: "handoff" });
-  if (result?.error) {
-    setMessage(result.error, "error");
-    handoffBtn.disabled = false;
-  } else {
-    setMessage(`Sent ${result.count} word${result.count === 1 ? "" : "s"} to the app.`, "ok");
-  }
-});
-
 syncBtn.addEventListener("click", async () => {
   await saveSettings();
   setMessage("Syncing…");
@@ -198,7 +181,11 @@ syncBtn.addEventListener("click", async () => {
   }
 });
 
-void refresh();
+// Opening this menu is a moment somebody is wondering about their words:
+// flush anything waiting, then show the counts as they now stand.
+void sendMessage({ type: "deliverNow" })
+  .catch(() => undefined)
+  .then(() => refresh());
 
 /**
  * Audio services written for Yomitan and Anki generally refuse web pages, so

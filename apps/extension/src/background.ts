@@ -150,13 +150,22 @@ async function tellAppAboutNewWords(): Promise<void> {
  */
 let delivering: Promise<void> = Promise.resolve();
 
-/** Tabs that can host the hidden frame, the one just used first. */
+/**
+ * Tabs that can host the hidden frame: the one just used, then the active
+ * one, then every other ordinary page — a site whose policy blocks frames
+ * must not be the end of it when the next tab over would have worked.
+ */
 async function deliveryTabs(preferred?: number): Promise<number[]> {
   const ids: number[] = [];
   if (preferred !== undefined) ids.push(preferred);
   const active = await activeTab();
   if (active?.id !== undefined && !ids.includes(active.id)) ids.push(active.id);
-  return ids;
+  for (const pattern of ["https://*/*", "http://*/*"]) {
+    for (const tab of await tabsMatching(pattern).catch(() => [])) {
+      if (tab.id !== undefined && !ids.includes(tab.id)) ids.push(tab.id);
+    }
+  }
+  return ids.slice(0, 8);
 }
 
 async function deliverToApp(preferredTab?: number): Promise<void> {
@@ -268,43 +277,6 @@ async function markHandedOff(ids: unknown): Promise<number> {
 async function isSaved(term: string, reading: string): Promise<boolean> {
   const cards = await getCards();
   return Object.values(cards).some((c) => !c.deleted && c.term === term && c.reading === reading);
-}
-
-/** Base64url-encode UTF-8 JSON for the app handoff fragment. */
-function encodePayload(value: unknown): string {
-  const json = JSON.stringify(value);
-  const bytes = new TextEncoder().encode(json);
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-/**
- * Hand the words saved here over to the app.
- *
- * On a single phone there is no sync server to bridge the two stores, so the
- * cards travel in the URL fragment — which browsers never send to the server
- * — and the app imports them into its own deck. Cards stay here too, so this
- * is safe to repeat.
- */
-async function handoffToApp(): Promise<{ url: string; count: number }> {
-  const appUrl = await appUrlSetting();
-
-  const cards = await getCards();
-  const pending = Object.values(cards)
-    .filter((c) => !c.deleted)
-    .sort((a, b) => b.createdAt - a.createdAt)
-    // Keep the fragment to a sane length; repeat the handoff for more.
-    .slice(0, 300)
-    .map(({ dirty: _dirty, ...card }) => card);
-
-  const base = appUrl.endsWith("/") ? appUrl : appUrl + "/";
-  const url = `${base}#import=${encodePayload(pending)}`;
-  await ext.tabs.create({ url });
-  // Deliberately not marked as handed over here. If this import were to fail
-  // the words would be lost, whereas the automatic offer costs only one
-  // redundant transfer: the app dedupes, acknowledges, and it settles.
-  return { url, count: pending.length };
 }
 
 async function handleSync(): Promise<{ pushed: number; pulled: number }> {
@@ -422,14 +394,6 @@ ext.runtime.onMessage.addListener((message: any, sender: any, sendResponse: (r: 
         });
         break;
       }
-      case "handoff": {
-        try {
-          sendResponse(await handoffToApp());
-        } catch (err) {
-          sendResponse({ error: err instanceof Error ? err.message : String(err) });
-        }
-        break;
-      }
       case "sync": {
         try {
           sendResponse(await handleSync());
@@ -477,3 +441,20 @@ ext.runtime.onMessage.addListener((message: any, sender: any, sendResponse: (r: 
 // is wrong; flush it once things are running again.
 ext.runtime.onStartup?.addListener(() => deliverSoon());
 ext.runtime.onInstalled?.addListener(() => deliverSoon());
+
+// And whenever any ordinary page finishes loading: a save that could not be
+// delivered (every open tab restricted, or offline) goes across the moment
+// there is a page that can host the frame, not on the next save. Throttled,
+// because busy browsing fires this constantly.
+let lastAutoFlush = 0;
+ext.tabs?.onUpdated?.addListener((tabId: number, info: any, tab: any) => {
+  if (info?.status !== "complete") return;
+  if (typeof tab?.url !== "string" || !/^https?:/i.test(tab.url)) return;
+  const now = Date.now();
+  if (now - lastAutoFlush < 10000) return;
+  lastAutoFlush = now;
+  void (async () => {
+    if ((await pendingForApp()).length === 0) return;
+    deliverSoon(tabId);
+  })();
+});

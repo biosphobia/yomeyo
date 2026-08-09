@@ -260,6 +260,9 @@ const POPUP_CSS = `
   }
   .grip .spacer { width: 34px; flex: none; }
   .list { overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: 6px; }
+  /* Desktop popups have no grip bar; the list starts at the top edge. */
+  .sheet.nogrip .list { padding-top: 2px; }
+  .sheet.nogrip .entry:first-child { border-top: none; }
   .entry {
     display: flex; gap: 12px; align-items: center;
     padding: 12px 14px;
@@ -503,15 +506,31 @@ interface Anchor {
   top: number;
   right: number;
   bottom: number;
+  /** The word is in vertical text: anchor beside the column, not below the line. */
+  vertical?: boolean;
 }
 
 /**
  * Pin the popup next to the word: below it when there is room, above it
- * when there is not, always inside the viewport.
+ * when there is not, always inside the viewport. In vertical text the word
+ * is a column, so the popup stands beside it instead — to the left first,
+ * which in vertical-rl is where the eye goes next.
  */
 function placeAnchored(sheet: HTMLElement, anchor: Anchor): void {
   const margin = 8;
   const rect = sheet.getBoundingClientRect();
+  if (anchor.vertical) {
+    let left = anchor.left - rect.width - margin;
+    if (left < margin) {
+      left = Math.min(anchor.right + margin, Math.max(margin, window.innerWidth - rect.width - margin));
+    }
+    const top = Math.round(
+      Math.min(Math.max(margin, anchor.top), Math.max(margin, window.innerHeight - rect.height - margin)),
+    );
+    sheet.style.left = `${Math.round(Math.max(margin, left))}px`;
+    sheet.style.top = `${top}px`;
+    return;
+  }
   const left = Math.round(
     Math.min(Math.max(margin, anchor.left), Math.max(margin, window.innerWidth - rect.width - margin)),
   );
@@ -534,20 +553,26 @@ async function showPopup(matches: LookupMatch[], sentence: string, anchor?: Anch
   // sheet stays for touch, where a popup would sit under the finger.
   const anchored = anchor !== undefined && !IS_TOUCH;
   if (anchored) sheet.classList.add("anchored");
+  if (!IS_TOUCH) sheet.classList.add("nogrip");
 
-  const grip = document.createElement("div");
-  grip.className = "grip";
-  const spacer = document.createElement("div");
-  spacer.className = "spacer";
-  const bar = document.createElement("div");
-  bar.className = "bar";
-  const close = document.createElement("button");
-  close.className = "close";
-  close.textContent = "✕";
-  close.setAttribute("aria-label", "Close");
-  onTap(close, closePopup);
-  grip.append(spacer, bar, close);
-  sheet.appendChild(grip);
+  // The grip bar is a touch affordance for the bottom sheet. On a computer
+  // it is a dead strip of chrome; a click anywhere else dismisses, so the
+  // popup starts straight at the first definition.
+  if (IS_TOUCH) {
+    const grip = document.createElement("div");
+    grip.className = "grip";
+    const spacer = document.createElement("div");
+    spacer.className = "spacer";
+    const bar = document.createElement("div");
+    bar.className = "bar";
+    const close = document.createElement("button");
+    close.className = "close";
+    close.textContent = "✕";
+    close.setAttribute("aria-label", "Close");
+    onTap(close, closePopup);
+    grip.append(spacer, bar, close);
+    sheet.appendChild(grip);
+  }
 
   const list = document.createElement("div");
   list.className = "list";
@@ -703,34 +728,47 @@ function textAtPoint(x: number, y: number): TapText | null {
   const textNode = node as Text;
   const content = textNode.data;
   if (content.length === 0) return null;
-  // Caret positions sit between characters; when the caret lands after the
-  // tapped character, step back so scanning starts on the character touched.
+  // Caret positions sit between characters; clamp to a character index.
   if (offset >= content.length) offset = content.length - 1;
   if (offset < 0) return null;
-  if (!isJapaneseChar(content[offset]) && offset > 0 && isJapaneseChar(content[offset - 1])) {
-    offset -= 1;
-  }
-  if (!isJapaneseChar(content[offset])) return null;
 
   // caretPositionFromPoint snaps to the *nearest* character, so a tap on a
   // margin, a blank area or the padding around a paragraph still resolves to
   // some text. Without this check, tapping empty space pops up a definition —
   // exactly the kind of interruption the lookup should never cause. Require
-  // the point to actually fall on the character's box.
-  try {
-    const glyph = document.createRange();
-    glyph.setStart(textNode, offset);
-    glyph.setEnd(textNode, offset + 1);
-    const box = glyph.getBoundingClientRect();
-    const slack = 4; // forgiving for fingers, not for empty space
-    if (x < box.left - slack || x > box.right + slack || y < box.top - slack || y > box.bottom + slack) {
-      return null;
+  // the point to actually fall on the character's box — and try the
+  // neighbours too, because the caret sits *between* characters: in vertical
+  // text especially it lands on the far side of the tapped glyph.
+  const onGlyph = (at: number): boolean => {
+    try {
+      const glyph = document.createRange();
+      glyph.setStart(textNode, at);
+      glyph.setEnd(textNode, at + 1);
+      const box = glyph.getBoundingClientRect();
+      const slack = 4; // forgiving for fingers, not for empty space
+      return x >= box.left - slack && x <= box.right + slack && y >= box.top - slack && y <= box.bottom + slack;
+    } catch {
+      return false;
     }
-  } catch {
-    return null;
+  };
+  for (const at of [offset, offset - 1, offset + 1]) {
+    if (at < 0 || at >= content.length) continue;
+    if (!isJapaneseChar(content[at])) continue;
+    if (onGlyph(at)) return { text: content, offset: at, node: textNode };
   }
+  return null;
+}
 
-  return { text: content, offset, node: textNode };
+/** True when the tapped text is laid out vertically (tategaki). */
+function isVerticalText(node: Node): boolean {
+  const el = node.nodeType === Node.TEXT_NODE ? node.parentElement : (node as Element);
+  if (!el || !(el instanceof Element)) return false;
+  try {
+    const mode = getComputedStyle(el).writingMode ?? "";
+    return mode.startsWith("vertical") || mode.startsWith("sideways");
+  } catch {
+    return false;
+  }
 }
 
 function sentenceAround(text: string, offset: number): string {
@@ -768,7 +806,8 @@ async function handleLookupAt(x: number, y: number): Promise<boolean> {
   // character: on a phone a tap lands inside a word as often as at its start.
   // The highlight's rectangle doubles as the popup's anchor on desktop; the
   // click point stands in when the range cannot be built.
-  let anchor = { left: x, top: y, right: x, bottom: y };
+  const vertical = isVerticalText(tap.node);
+  let anchor: Anchor = { left: x, top: y, right: x, bottom: y, vertical };
   try {
     const range = document.createRange();
     const from = Math.max(0, Math.min(matches[0].start, tap.node.data.length));
@@ -779,7 +818,7 @@ async function handleLookupAt(x: number, y: number): Promise<boolean> {
     selection?.addRange(range);
     const rect = range.getBoundingClientRect();
     if (rect.width > 0 || rect.height > 0) {
-      anchor = { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+      anchor = { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, vertical };
     }
   } catch {
     /* the highlight is cosmetic */
@@ -903,11 +942,18 @@ ext.runtime.onMessage?.addListener((message: any, _sender: any, sendResponse: (r
     const text = selection?.toString() ?? "";
     if (text.trim()) {
       // Anchor at the selection itself on desktop, like a tapped word.
-      let anchor;
+      let anchor: Anchor | undefined;
       try {
-        const rect = selection!.getRangeAt(0).getBoundingClientRect();
+        const range = selection!.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
         if (rect.width > 0 || rect.height > 0) {
-          anchor = { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+          anchor = {
+            left: rect.left,
+            top: rect.top,
+            right: rect.right,
+            bottom: rect.bottom,
+            vertical: isVerticalText(range.startContainer),
+          };
         }
       } catch {
         /* no live range; the sheet falls back to its corner */
