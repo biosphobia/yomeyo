@@ -172,10 +172,16 @@ void storageGet<{ tapMode?: boolean | null; showToggle?: boolean }>(["tapMode", 
   },
 );
 
+/** The app's location, kept for the popup's pronunciation button. */
+let audioBase = "";
+
 void sendMessage<{ settings?: { appUrl?: string } }>({ type: "getSettings" })
   .then((data) => {
     const appUrl = data?.settings?.appUrl?.trim();
-    if (appUrl) return offerSavedWordsToApp(appUrl);
+    if (appUrl) {
+      audioBase = appUrl;
+      return offerSavedWordsToApp(appUrl);
+    }
     return undefined;
   })
   .catch(() => {
@@ -288,6 +294,18 @@ const POPUP_CSS = `
   }
   button.save.saved { background: #4cc38a; }
   button.save[disabled] { opacity: 0.6; }
+  button.speak {
+    all: unset;
+    width: 40px; height: 40px;
+    display: grid; place-items: center;
+    border-radius: 50%;
+    background: #262640;
+    font-size: 16px;
+    cursor: pointer; flex: none;
+    touch-action: manipulation;
+  }
+  button.speak:active { background: #34345a; }
+  button.speak[disabled] { opacity: 0.5; }
   .empty { padding: 14px; color: #9a97b0; }
 
   /* The always-available on/off pill. Deliberately small and translucent:
@@ -623,6 +641,56 @@ async function showPopup(matches: LookupMatch[], sentence: string, anchor?: Anch
   setTimeout(() => document.addEventListener("pointerdown", dismiss, true), 0);
 }
 
+/** The clip playing right now, so a second press does not stack voices. */
+let speakingClip: HTMLAudioElement | null = null;
+
+/**
+ * Say the word, the same way the app does: the app's own `audio.php`
+ * endpoint first — real recordings, key held on the server, same origin as
+ * the app so it works from anywhere — and the browser's Japanese speech
+ * synthesis when the endpoint has nothing or is not deployed.
+ */
+async function playEntryAudio(entry: DictEntry, button: HTMLButtonElement): Promise<void> {
+  button.disabled = true;
+  const done = (): void => {
+    button.disabled = false;
+  };
+  speakingClip?.pause();
+  speakingClip = null;
+
+  const fallback = (): void => {
+    try {
+      speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(entry.reading || entry.term);
+      utterance.lang = "ja-JP";
+      utterance.onend = done;
+      utterance.onerror = done;
+      speechSynthesis.speak(utterance);
+    } catch {
+      done();
+    }
+  };
+
+  if (!audioBase) return fallback();
+  try {
+    const base = audioBase.endsWith("/") ? audioBase : audioBase + "/";
+    const url = new URL(
+      `audio.php?term=${encodeURIComponent(entry.term)}&reading=${encodeURIComponent(entry.reading || entry.term)}`,
+      base,
+    ).href;
+    const clip = new Audio(url);
+    speakingClip = clip;
+    clip.addEventListener("ended", done);
+    clip.addEventListener("error", () => {
+      if (speakingClip === clip) speakingClip = null;
+      fallback();
+    });
+    await clip.play();
+  } catch {
+    fallback();
+  }
+}
+
 async function buildEntryRow(match: LookupMatch, entry: DictEntry, sentence: string): Promise<HTMLElement> {
   const row = document.createElement("div");
   row.className = "entry";
@@ -663,6 +731,13 @@ async function buildEntryRow(match: LookupMatch, entry: DictEntry, sentence: str
   }
 
   row.appendChild(word);
+
+  const say = document.createElement("button");
+  say.className = "speak";
+  say.textContent = "🔊";
+  say.setAttribute("aria-label", "Play pronunciation");
+  onTap(say, () => void playEntryAudio(entry, say));
+  row.appendChild(say);
 
   const btn = document.createElement("button");
   btn.className = "save";

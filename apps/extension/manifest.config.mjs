@@ -6,7 +6,7 @@
  * and additionally requires an add-on id under `browser_specific_settings`.
  */
 
-export const VERSION = "0.5.2";
+export const VERSION = "0.5.3";
 
 /** Add-on id used when signing/listing the Firefox build. */
 export const GECKO_ID = "yomeyo@yomeyo.app";
