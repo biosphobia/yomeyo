@@ -106,6 +106,34 @@ export async function startJob(book: { id: string; name: string }, total: number
   return job;
 }
 
+/**
+ * Throw away everything read of a book and read it again from page one.
+ *
+ * Both halves matter: the pages themselves, and the note of which pages
+ * the shared copy already has. Leaving the latter behind would mean the
+ * re-read never reached anybody else.
+ */
+export async function restartJob(
+  book: { id: string; name: string; sharedId?: string },
+  total: number,
+): Promise<OcrJob> {
+  const { clearBookOcr } = await import("./ocr.js");
+  await clearBookOcr(book.id, book.sharedId).catch(() => 0);
+  await setMeta(SHARED_KEY + book.id, []);
+  const job: OcrJob = {
+    bookId: book.id,
+    name: book.name,
+    total,
+    done: [],
+    failed: [],
+    state: "running",
+    startedAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+  await writeJob(job);
+  return job;
+}
+
 export async function pauseJob(bookId: string): Promise<void> {
   const job = await jobFor(bookId);
   if (!job) return;

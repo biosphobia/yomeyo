@@ -821,6 +821,30 @@ export async function ocrPage(
   return words;
 }
 
+/**
+ * Forget everything this device has read of one book, here and in the
+ * share. Returns how many pages were thrown away.
+ *
+ * The per-page Redo fixes a page that came out wrong; this is for when
+ * the reader itself has improved and the whole book deserves another
+ * pass — there is no point in a better OCR that only ever applies to
+ * pages nobody has read yet.
+ */
+export async function clearBookOcr(bookId: string, sharedId?: string): Promise<number> {
+  const { getMetaByPrefix, deleteMeta } = await import("./db.js");
+  const prefix = `${CACHE_PREFIX}${bookId}:`;
+  const held = await getMetaByPrefix(prefix).catch((): [string, unknown][] => []);
+  const books = sharedId ? await bookCloud() : null;
+  for (const [key] of held) {
+    await deleteMeta(key).catch(() => undefined);
+    const page = Number(key.slice(key.lastIndexOf(":") + 1));
+    if (books && sharedId && Number.isFinite(page)) {
+      await books.deleteSharedOcr(sharedId, page).catch(() => undefined);
+    }
+  }
+  return held.length;
+}
+
 /** Forget a page's OCR, here and (permissions willing) in the share. */
 export async function clearOcr(cacheKey: string, shared?: SharedOcrRef): Promise<void> {
   const { deleteMeta } = await import("./db.js");

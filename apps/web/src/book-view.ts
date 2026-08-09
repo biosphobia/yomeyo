@@ -4,7 +4,7 @@ import { closePopup, showLookupPopup } from "./popup.js";
 import { getBookFile, type BookInfo } from "./books.js";
 import { getMeta, setMeta } from "./db.js";
 import { cachedOcr, clearOcr, ocrPage, type OcrWord, type SharedOcrRef } from "./ocr.js";
-import { jobFor, onOcrJobs, pauseJob, runJobs, startJob } from "./ocr-jobs.js";
+import { jobFor, onOcrJobs, pauseJob, restartJob, runJobs, startJob } from "./ocr-jobs.js";
 
 /**
  * Reading one book, whatever it is made of.
@@ -653,12 +653,39 @@ function offerOcr(
  */
 function offerBatchOcr(ui: Ui, total: number, refresh: () => void): () => void {
   ui.controls.querySelector("#bk-ocr-all")?.remove();
+  ui.controls.querySelector("#bk-ocr-redo-all")?.remove();
   ui.controls.querySelector("#bk-ocr-progress")?.remove();
   const button = document.createElement("button");
   button.id = "bk-ocr-all";
   button.className = "secondary";
   button.textContent = "📚 OCR all";
   ui.controls.appendChild(button);
+
+  // Re-reading the whole book, for when the reader itself has improved:
+  // "OCR all" deliberately skips pages that are already read, so without
+  // this there is no way to get a better pass onto the pages that matter.
+  const redoAll = document.createElement("button");
+  redoAll.id = "bk-ocr-redo-all";
+  redoAll.className = "secondary";
+  redoAll.textContent = "↻ Redo all";
+  redoAll.title = "Throw away every page's OCR for this book and read it again";
+  redoAll.addEventListener("click", () => {
+    if (!confirm(`Read all ${total} pages of “${ui.book.name}” again from scratch? Everything read so far is discarded.`)) {
+      return;
+    }
+    redoAll.disabled = true;
+    void restartJob({ id: ui.book.id, name: ui.book.name, sharedId: ui.book.sharedId }, total)
+      .then(() => {
+        redoAll.disabled = false;
+        refresh();
+        void paint();
+        void runJobs().catch(() => undefined);
+      })
+      .catch(() => {
+        redoAll.disabled = false;
+      });
+  });
+  ui.controls.appendChild(redoAll);
 
   const bar = document.createElement("div");
   bar.id = "bk-ocr-progress";
@@ -732,6 +759,7 @@ function offerBatchOcr(ui: Ui, total: number, refresh: () => void): () => void {
   return () => {
     stopListening();
     window.clearInterval(timer);
+    redoAll.remove();
   };
 }
 
