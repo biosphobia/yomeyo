@@ -431,6 +431,42 @@ async function openPictures(blob: Blob, ui: Ui): Promise<Closeable> {
   };
 }
 
+/**
+ * A line of OCR text cut into words, using the dictionary itself to say
+ * where one ends and the next begins.
+ *
+ * Longest match wins, which is what makes きょうは come apart correctly:
+ * きょう is a word (今日) and は is the particle riding behind it, so they
+ * become two things to tap rather than one unfindable lump. Anything the
+ * dictionary does not know stays a single character, which is still
+ * tappable and still looks itself up.
+ */
+async function wordsOfLines(lines: string[]): Promise<{ text: string; start: number; length: number }[][]> {
+  let dict: Awaited<ReturnType<typeof activeDictionary>> | null = null;
+  try {
+    dict = await activeDictionary();
+  } catch {
+    dict = null;
+  }
+  return lines.map((line) => {
+    const chars = [...line];
+    const pieces: { text: string; start: number; length: number }[] = [];
+    let at = 0;
+    while (at < chars.length) {
+      let length = 1;
+      if (dict && isJapaneseChar(chars[at])) {
+        const matches = lookup(dict, line, at);
+        if (matches.length > 0 && matches[0].matchLength > 0) {
+          length = Math.min(matches[0].matchLength, chars.length - at);
+        }
+      }
+      pieces.push({ text: chars.slice(at, at + length).join(""), start: at, length });
+      at += length;
+    }
+    return pieces;
+  });
+}
+
 // ---------------- OCR overlay ----------------
 
 /**
@@ -500,35 +536,57 @@ function offerOcr(
 
   const overlay = (words: OcrWord[], quiet = false): void => {
     layer.innerHTML = "";
-    const pageText = words.map((w) => w.text).join("");
+    // The page as one run of text, with a break between lines, so a tap
+    // gets a sentence for its card rather than the whole page glued up.
+    const pageText = words.map((w) => w.text).join("\n");
     let offset = 0;
-    for (const word of words) {
-      const start = offset;
-      offset += [...word.text].length;
-      const el = document.createElement("span");
-      el.className = "bk-ocr-word";
-      el.style.left = `${(word.x * 100).toFixed(2)}%`;
-      el.style.top = `${(word.y * 100).toFixed(2)}%`;
-      el.style.width = `${(word.w * 100).toFixed(2)}%`;
-      el.style.height = `${(word.h * 100).toFixed(2)}%`;
-      el.title = word.text;
-      el.addEventListener("click", (ev) => {
-        ev.stopPropagation();
-        layer.querySelectorAll(".hl").forEach((e) => e.classList.remove("hl"));
-        // A short block is one word: look it up straight away. A whole
-        // bubble opens as tappable text beside its box, so the finger
-        // picks the exact word rather than the popup guessing one.
-        if ([...word.text].length <= 4) {
-          void lookUpAt(pageText, start, ui.status).then((match) => {
-            if (match) el.classList.add("hl");
+    const placed: { line: OcrWord; start: number }[] = [];
+    for (const line of words) {
+      placed.push({ line, start: offset });
+      offset += [...line.text].length + 1; // the newline counts
+    }
+
+    // Each line is a run of evenly set characters, so its box divides into
+    // one cell per character — and a word is however many cells the
+    // dictionary says it spans. That is what makes single words tappable
+    // instead of a whole bubble opening as a list.
+    void wordsOfLines(placed.map((p) => p.line.text)).then((perLine) => {
+      if (!layer.isConnected) return;
+      layer.innerHTML = "";
+      placed.forEach(({ line, start }, at) => {
+        const chars = [...line.text].length;
+        if (chars === 0) return;
+        const vertical = line.vertical ?? line.h >= line.w;
+        for (const piece of perLine[at]) {
+          const el = document.createElement("span");
+          el.className = "bk-ocr-word";
+          // The cells this word covers, along the line's own direction.
+          const from = piece.start / chars;
+          const span = piece.length / chars;
+          if (vertical) {
+            el.style.left = `${(line.x * 100).toFixed(2)}%`;
+            el.style.width = `${(line.w * 100).toFixed(2)}%`;
+            el.style.top = `${((line.y + line.h * from) * 100).toFixed(2)}%`;
+            el.style.height = `${(line.h * span * 100).toFixed(2)}%`;
+          } else {
+            el.style.top = `${(line.y * 100).toFixed(2)}%`;
+            el.style.height = `${(line.h * 100).toFixed(2)}%`;
+            el.style.left = `${((line.x + line.w * from) * 100).toFixed(2)}%`;
+            el.style.width = `${(line.w * span * 100).toFixed(2)}%`;
+          }
+          el.title = piece.text;
+          el.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            layer.querySelectorAll(".hl").forEach((e) => e.classList.remove("hl"));
+            el.classList.add("hl");
+            void lookUpAt(pageText, start + piece.start, ui.status).then((match) => {
+              if (!match) el.classList.remove("hl");
+            });
           });
-        } else {
-          el.classList.add("hl");
-          openOcrStrip(layer, word, ui.status);
+          layer.appendChild(el);
         }
       });
-      layer.appendChild(el);
-    }
+    });
     if (!quiet) ui.status.textContent = words.length === 0 ? "OCR found no Japanese on this page." : "";
   };
 
@@ -677,39 +735,6 @@ function offerBatchOcr(ui: Ui, total: number, refresh: () => void): () => void {
   };
 }
 
-/**
- * A recognised bubble, opened as tappable text beside its box: every
- * character a span, exactly like the text reader, so the lookup starts
- * from the word actually touched.
- */
-function openOcrStrip(layer: HTMLDivElement, word: OcrWord, status: HTMLElement | null): void {
-  layer.querySelector(".bk-ocr-strip")?.remove();
-  const strip = document.createElement("div");
-  strip.className = "bk-ocr-strip";
-  // Beside the box when there is room, under it when there is not.
-  const below = word.y + word.h < 0.85;
-  strip.style.left = `${Math.min(78, word.x * 100).toFixed(2)}%`;
-  strip.style.top = below ? `${((word.y + word.h) * 100).toFixed(2)}%` : "auto";
-  if (!below) strip.style.bottom = `${((1 - word.y) * 100).toFixed(2)}%`;
-  const close = document.createElement("button");
-  close.className = "bk-strip-close";
-  close.textContent = "✕";
-  close.addEventListener("click", (ev) => {
-    ev.stopPropagation();
-    strip.remove();
-  });
-  const text = document.createElement("div");
-  text.className = "bk-strip-text";
-  text.lang = "ja";
-  renderTappableText(text, word.text, status);
-  strip.append(close, text);
-  strip.addEventListener("click", (ev) => ev.stopPropagation());
-  layer.appendChild(strip);
-}
-
-// ---------------- shared controls ----------------
-
-/** Prev / next page (or chapter), with the count kept in the header. */
 function pager(controls: HTMLElement, current: () => number, total: number, go: (index: number) => void): void {
   const wrap = document.createElement("div");
   wrap.className = "row-actions bk-pager";

@@ -370,7 +370,7 @@ export async function sweepShares(): Promise<void> {
     const sent = new Set((await getMeta<number[]>(SHARED_KEY + book.id)) ?? []);
     // Every page this device has read, batch or not: the cache is the
     // record, so a page read one at a time while offline travels too.
-    const read = await getMetaByPrefix(`bookOcr3:${book.id}:`).catch((): [string, unknown][] => []);
+    const read = await getMetaByPrefix(`bookOcr4:${book.id}:`).catch((): [string, unknown][] => []);
     let changed = false;
     for (const [key, words] of read) {
       const page = Number(key.slice(key.lastIndexOf(":") + 1));

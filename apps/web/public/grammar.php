@@ -109,7 +109,7 @@ if ($ocr) {
         $ocrImages[] = $img;
       }
     }
-    if (count($ocrImages) === 0 || count($ocrImages) > 40) {
+    if (count($ocrImages) === 0 || count($ocrImages) > 80) {
       http_response_code(400);
       exit;
     }
@@ -272,13 +272,18 @@ $body = [
       ],
   "system" => ($ocr && $ocrCrops)
     ? "You transcribe Japanese print from small numbered crops of a page, " .
-      "usually manga. Each crop is one block: a speech bubble, a caption, " .
-      "a sign, a title. Return exactly one entry per crop with i set to " .
-      "its number and text set to what it prints, EXACTLY as printed, " .
-      "including っ and small kana. Vertical text reads top to bottom, " .
-      "columns right to left. A crop that holds no readable printed " .
-      "Japanese (artwork, screentone, an empty scrap) gets an empty " .
-      "string. Never translate, never invent, never describe a picture."
+      "usually manga. Each crop is ONE LINE of text: a single column read " .
+      "top to bottom when it is marked vertical, a single row read left to " .
+      "right when it is not. Return exactly one entry per crop, with i set " .
+      "to its number and text set to that line's characters in order, " .
+      "EXACTLY as printed — every kana, small kana and っ, long vowel " .
+      "marks, and punctuation such as ！？。、 exactly where they appear. " .
+      "Give only the characters of that one line: no spaces, no line " .
+      "breaks, nothing from a neighbouring column, and no furigana unless " .
+      "the crop IS the furigana. A crop holding no readable printed " .
+      "Japanese (artwork, screentone, an empty scrap, a page number) gets " .
+      "an empty string. Never translate, never invent, never describe a " .
+      "picture, and never add characters to make a line read better."
     : ($ocr
     ? "You read Japanese text off a page image, usually manga or a scan. " .
       "Return every distinct block of printed Japanese (a speech bubble, a " .
@@ -321,15 +326,18 @@ $body = [
   "messages" => [[
     "role" => "user",
     "content" => $ocrCrops
-      ? (function () use ($ocrImages, $ocrMedia) {
+      ? (function () use ($ocrImages, $ocrMedia, $req) {
+          $vertical = is_array($req["vertical"] ?? null) ? $req["vertical"] : [];
           $content = [];
           foreach ($ocrImages as $at => $img) {
-            $content[] = ["type" => "text", "text" => "Crop " . ($at + 1) . ":"];
+            $isVertical = ($vertical[$at] ?? true) ? "vertical, read top to bottom" : "horizontal, read left to right";
+            $content[] = ["type" => "text", "text" => "Crop " . ($at + 1) . " (" . $isVertical . "):"];
             $content[] = ["type" => "image", "source" => ["type" => "base64", "media_type" => $ocrMedia, "data" => $img]];
           }
           $content[] = ["type" => "text", "text" =>
-            "Transcribe each numbered crop. One blocks entry per crop, i matching its number, " .
-            "empty text for a crop with no readable printed Japanese."];
+            "Transcribe each numbered crop: one blocks entry per crop, i matching its number, " .
+            "text being just that line's characters in order, empty for a crop with no readable " .
+            "printed Japanese."];
           return $content;
         })()
       : ($ocr

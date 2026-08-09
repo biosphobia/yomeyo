@@ -71,11 +71,17 @@ export interface OcrWord {
   y: number;
   w: number;
   h: number;
+  /**
+   * Vertical writing: the characters run down the box rather than across
+   * it. This is what lets a line be divided into one cell per character,
+   * which is how individual words become tappable.
+   */
+  vertical?: boolean;
 }
 
 // Versioned: results from the old estimate-the-box pipeline are not worth
 // keeping, so a prefix bump quietly retires them.
-const CACHE_PREFIX = "bookOcr3:";
+const CACHE_PREFIX = "bookOcr4:";
 
 /**
  * "Ask again in a moment", not "this cannot be read".
@@ -193,7 +199,7 @@ async function claudeOcr(canvas: AnyCanvas, onStatus?: (line: string) => void): 
     context2d(frame).drawImage(canvas as CanvasImageSource, 0, 0, frame.width, frame.height);
   }
 
-  const found = detectTextBlocks(frame);
+  const found = detectTextLines(frame);
   // Claude is here and found nothing print-shaped: the page is a drawing.
   // That is an answer, not a failure, and Tesseract would not do better.
   if (found.length === 0) return [];
@@ -206,8 +212,14 @@ async function claudeOcr(canvas: AnyCanvas, onStatus?: (line: string) => void): 
   return words;
 }
 
-/** Each detected block, cropped and sent for transcription only. */
-async function transcribeBlocks(frame: AnyCanvas, boxes: DetectedBox[]): Promise<OcrWord[] | null> {
+/**
+ * Each detected line, cropped and sent for transcription only.
+ *
+ * One line per crop is the whole point: a single column cannot be read in
+ * the wrong order, and what comes back belongs to exactly one box, whose
+ * characters can then be placed along it.
+ */
+async function transcribeBlocks(frame: AnyCanvas, boxes: DetectedLine[]): Promise<OcrWord[] | null> {
   const images: string[] = [];
   for (const box of boxes) {
     const pad = 6;
@@ -270,6 +282,7 @@ async function transcribeBlocks(frame: AnyCanvas, boxes: DetectedBox[]): Promise
       y: box.y / frame.height,
       w: box.w / frame.width,
       h: box.h / frame.height,
+      vertical: box.vertical,
     });
   });
   return words;
@@ -284,6 +297,11 @@ interface DetectedBox {
   w: number;
   h: number;
   ink: number;
+}
+
+/** One line of print: a column of vertical text, or a row of horizontal. */
+interface DetectedLine extends DetectedBox {
+  vertical: boolean;
 }
 
 /** One mark on the page: a character, a speck, a stroke of a drawing. */
@@ -305,19 +323,19 @@ interface Mark {
  * artwork is dark too — but SHAPE and COMPANY. A printed character is a
  * compact mark of a particular size, and it never appears alone: its
  * neighbours are the same size, evenly spaced, and lined up with it, down
- * a column or across a row. Drawings have none of that discipline, and
- * screentone dots and hatching fail the size test outright.
+ * a column or across a row.
  *
- * So: threshold against the LOCAL average (a bubble on a grey panel is
- * still white paper locally, and this is what makes screentone drop out),
- * take every connected mark, keep the ones shaped like characters, and
- * join up marks that are the same size and properly lined up. A run of two
- * or more joined marks is a line of text, and its box is theirs.
+ * What comes back is one entry per LINE — a single column of vertical
+ * text, or a single row of horizontal text — never a whole bubble. That
+ * matters three times over: a column crops to an unambiguous strip so
+ * nothing is read out of order, a line's box hugs its own text instead of
+ * a bubble's worth of white, and a line of N characters can be divided
+ * into N cells, which is what makes individual words tappable.
  *
  * Both polarities run: black on white, and the white-on-black lettering
  * manga puts inside title pills.
  */
-function detectTextBlocks(frame: AnyCanvas): DetectedBox[] {
+function detectTextLines(frame: AnyCanvas): DetectedLine[] {
   const DETECT = 1100;
   const s = Math.min(1, DETECT / Math.max(frame.width, frame.height));
   const w = Math.max(16, Math.round(frame.width * s));
@@ -346,25 +364,24 @@ function detectTextBlocks(frame: AnyCanvas): DetectedBox[] {
     else if (luma[i] > mean[i] + MARGIN) light[i] = 1;
   }
 
-  let found = [...linesOfText(dark, w, h), ...linesOfText(light, w, h)];
-  // Nothing character-shaped anywhere: a blurred scan, or a page whose
-  // print is too small to survive the downscale. The blunt detector gets
-  // a turn rather than leaving the page unread.
-  if (found.length === 0) found = blobBlocks(dark, w, h);
-
-  found = mergeTouching(found);
-  found.sort((a, b) => b.ink - a.ink);
-  const top = found.slice(0, 24);
-  // Manga reading order: right to left, then down.
-  top.sort((a, b) => b.x + b.w - (a.x + a.w) || a.y - b.y);
+  // Black on white first. Then white on black — but only where it is not
+  // standing inside something already read: the white enclosed by a 口 or
+  // a 日 is a hole in a character, and rows of holes line up convincingly
+  // into lines that are not there. Lettering in a black title pill has no
+  // such parent, because the pill itself is far too big to be a character.
+  const inked = linesOfText(dark, w, h);
+  const reversed = linesOfText(light, w, h).filter((line) => !insideAny(line, inked));
+  const kept = dropDuplicates([...inked, ...reversed]);
+  ordered(kept);
 
   const inv = 1 / s;
-  return top.map((b) => ({
-    x: Math.max(0, Math.round((b.x - 1) * inv)),
-    y: Math.max(0, Math.round((b.y - 1) * inv)),
-    w: Math.min(frame.width, Math.round((b.w + 2) * inv)),
-    h: Math.min(frame.height, Math.round((b.h + 2) * inv)),
-    ink: b.ink,
+  return kept.slice(0, 60).map((line) => ({
+    x: Math.max(0, Math.round((line.x - 1) * inv)),
+    y: Math.max(0, Math.round((line.y - 1) * inv)),
+    w: Math.min(frame.width, Math.round((line.w + 2) * inv)),
+    h: Math.min(frame.height, Math.round((line.h + 2) * inv)),
+    vertical: line.vertical,
+    ink: line.ink,
   }));
 }
 
@@ -394,12 +411,20 @@ function localMean(src: Uint8Array, w: number, h: number, r: number): Uint8Array
 }
 
 /**
- * Marks of this mask that are shaped like characters, joined into the
- * lines they belong to. A joined pair is the same size, side by side or
- * one under the other, and lined up on the other axis — the arrangement
- * print has and drawings do not.
+ * The lines of print in this mask.
+ *
+ * Marks are joined along ONE axis at a time, which is what separates a
+ * line from a paragraph: characters in a column are stacked with their
+ * centres in line, characters in a row sit side by side with theirs. The
+ * two readings are worked out separately and then compete — a mark
+ * belongs to the longest line that claims it — so a column of ten never
+ * loses to some accidental pair running the other way.
+ *
+ * Joining one axis at a time also handles characters made of separate
+ * strokes (い, り, 川): their parts sit side by side within the width of
+ * one character, so a column swallows them all without a second thought.
  */
-function linesOfText(mask: Uint8Array, w: number, h: number): DetectedBox[] {
+function linesOfText(mask: Uint8Array, w: number, h: number): DetectedLine[] {
   const maxSide = Math.max(w, h);
   const minChar = Math.max(5, maxSide * 0.011);
   const maxChar = maxSide * 0.17;
@@ -408,20 +433,47 @@ function linesOfText(mask: Uint8Array, w: number, h: number): DetectedBox[] {
     const size = Math.max(c.w, c.h);
     const thin = Math.max(1, Math.min(c.w, c.h));
     const fill = c.ink / (c.w * c.h);
-    // A character is compact, of printed size, and neither a hairline nor
-    // a solid block. Hatching is too thin, screentone too small, a filled
-    // panel too big and too solid.
+    // A character is a compact mark of printed size. The tolerances are
+    // wide on purpose: a stroke like the bar of 一 or a stem of 川 fills
+    // its box almost solidly and is many times longer than it is thick,
+    // and refusing those loses whole characters — which breaks the column
+    // they stand in, because the gap left behind is what a line ends at.
+    // Hatching is still excluded (far too long and thin), and screentone
+    // (far too small), which is what these bounds are really for.
     if (size < minChar || size > maxChar) continue;
-    if (size / thin > 4.5) continue;
-    if (fill < 0.12 || fill > 0.96) continue;
+    if (size / thin > 8) continue;
+    if (fill < 0.12) continue;
     marks.push({ x: c.x, y: c.y, w: c.w, h: c.h, ink: c.ink, size });
   }
-  if (marks.length < 2) return [];
+  if (marks.length === 0) return [];
 
-  // Only near neighbours can be joined, so the marks go in a coarse grid
-  // and each is tested against its own cell and the ring around it.
+  const candidates = [...runsAlong(marks, true, w, maxChar), ...runsAlong(marks, false, w, maxChar)];
+  // Longest first, so the real line wins the marks it shares with a
+  // chance alignment crossing it.
+  candidates.sort((a, b) => b.members.length - a.members.length || b.ink - a.ink);
+
+  const taken = new Set<number>();
+  const lines: DetectedLine[] = [];
+  for (const run of candidates) {
+    const free = run.members.filter((i) => !taken.has(i));
+    if (free.length < run.members.length * 0.6) continue;
+    const line = measure(free.map((i) => marks[i]), run.vertical, maxSide);
+    if (!line) continue;
+    for (const i of free) taken.add(i);
+    lines.push(line);
+  }
+  return lines;
+}
+
+/** Every maximal run of marks joined along one axis. */
+function runsAlong(
+  marks: Mark[],
+  vertical: boolean,
+  w: number,
+  maxChar: number,
+): { members: number[]; vertical: boolean; ink: number }[] {
   const cell = Math.max(8, Math.round(maxChar));
-  const cols = Math.ceil(w / cell);
+  const cols = Math.ceil(w / cell) + 1;
   const buckets = new Map<number, number[]>();
   marks.forEach((m, i) => {
     const key = Math.floor((m.y + m.h / 2) / cell) * cols + Math.floor((m.x + m.w / 2) / cell);
@@ -441,11 +493,6 @@ function linesOfText(mask: Uint8Array, w: number, h: number): DetectedBox[] {
     }
     return root;
   };
-  const union = (a: number, b: number): void => {
-    const ra = find(a);
-    const rb = find(b);
-    if (ra !== rb) parent[rb] = ra;
-  };
 
   marks.forEach((a, i) => {
     const cx = Math.floor((a.x + a.w / 2) / cell);
@@ -454,47 +501,31 @@ function linesOfText(mask: Uint8Array, w: number, h: number): DetectedBox[] {
       for (let gx = cx - 1; gx <= cx + 1; gx++) {
         for (const j of buckets.get(gy * cols + gx) ?? []) {
           if (j <= i) continue;
-          if (neighbours(a, marks[j])) union(i, j);
+          if (!inLine(a, marks[j], vertical)) continue;
+          const ra = find(i);
+          const rb = find(j);
+          if (ra !== rb) parent[rb] = ra;
         }
       }
     }
   });
 
-  const groups = new Map<number, Mark[]>();
-  marks.forEach((m, i) => {
+  const groups = new Map<number, number[]>();
+  marks.forEach((_, i) => {
     const root = find(i);
     const held = groups.get(root);
-    if (held) held.push(m);
-    else groups.set(root, [m]);
+    if (held) held.push(i);
+    else groups.set(root, [i]);
   });
-
-  const pageArea = w * h;
-  const out: DetectedBox[] = [];
-  for (const members of groups.values()) {
-    // One mark alone is a speck, a stray, or an eye. Text keeps company.
-    if (members.length < 2) continue;
-    let x0 = w;
-    let y0 = h;
-    let x1 = 0;
-    let y1 = 0;
-    let ink = 0;
-    for (const m of members) {
-      if (m.x < x0) x0 = m.x;
-      if (m.y < y0) y0 = m.y;
-      if (m.x + m.w > x1) x1 = m.x + m.w;
-      if (m.y + m.h > y1) y1 = m.y + m.h;
-      ink += m.ink;
-    }
-    const box = { x: x0, y: y0, w: x1 - x0, h: y1 - y0, ink };
-    // A "line" spanning the page is a row of look-alike drawings, not print.
-    if (box.w * box.h > pageArea * 0.3) continue;
-    out.push(box);
-  }
-  return out;
+  return [...groups.values()].map((members) => ({
+    members,
+    vertical,
+    ink: members.reduce((sum, i) => sum + marks[i].ink, 0),
+  }));
 }
 
-/** Are these two marks neighbours in the same line of print? */
-function neighbours(a: Mark, b: Mark): boolean {
+/** Do these two marks follow each other along one axis of a line? */
+function inLine(a: Mark, b: Mark, vertical: boolean): boolean {
   const ratio = Math.max(a.size, b.size) / Math.max(1, Math.min(a.size, b.size));
   // Print sets a line in one size. Furigana beside a column is half the
   // size of the words it belongs to, and stays a line of its own.
@@ -502,56 +533,145 @@ function neighbours(a: Mark, b: Mark): boolean {
   const reach = (a.size + b.size) / 2;
   const dx = Math.abs(a.x + a.w / 2 - (b.x + b.w / 2));
   const dy = Math.abs(a.y + a.h / 2 - (b.y + b.h / 2));
-  // Stacked (vertical writing) or side by side (horizontal writing): close
-  // along the line, and squarely lined up across it.
-  return (dx <= reach * 0.55 && dy <= reach * 1.7) || (dy <= reach * 0.55 && dx <= reach * 1.7);
+  // Along the line, the reach spans a little over two characters, so one
+  // character the mark-finder happened to miss does not cut a column in
+  // half. Across it, the tolerance stays tight: that is what keeps
+  // neighbouring columns apart.
+  return vertical ? dx <= reach * 0.55 && dy <= reach * 2.4 : dy <= reach * 0.55 && dx <= reach * 2.4;
 }
 
 /**
- * The blunt detector, kept for pages whose print does not survive as
- * separate characters: grow every mark until neighbours touch, then take
- * the blobs of a text-like size and density.
+ * A run of marks as a line, if it looks like one.
+ *
+ * The test that earns its keep is thickness: a column of print is barely
+ * wider than one character, however tall it grows. A run of marks that
+ * happens to trend downwards through a drawing sprawls, and is refused
+ * here — which is what stops a box swallowing half a panel.
  */
-function blobBlocks(mask: Uint8Array, w: number, h: number): DetectedBox[] {
-  const pageArea = w * h;
-  const r = Math.max(2, Math.round(Math.max(w, h) * 0.009));
-  return blobs(dilate(mask, w, h, r), mask, w, h).filter((b) => {
-    const density = b.ink / (b.w * b.h);
-    const aspect = Math.max(b.w, b.h) / Math.max(1, Math.min(b.w, b.h));
-    return (
-      b.ink >= 30 && Math.min(b.w, b.h) >= 6 && b.w * b.h <= pageArea * 0.25 && density >= 0.06 && aspect <= 25
-    );
-  });
+function measure(members: Mark[], vertical: boolean, maxSide: number): DetectedLine | null {
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = 0;
+  let y1 = 0;
+  let ink = 0;
+  const sizes: number[] = [];
+  for (const m of members) {
+    x0 = Math.min(x0, m.x);
+    y0 = Math.min(y0, m.y);
+    x1 = Math.max(x1, m.x + m.w);
+    y1 = Math.max(y1, m.y + m.h);
+    ink += m.ink;
+    sizes.push(m.size);
+  }
+  sizes.sort((a, b) => a - b);
+  const em = sizes[Math.floor(sizes.length / 2)];
+  const box = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  const across = vertical ? box.w : box.h;
+  const along = vertical ? box.h : box.w;
+
+  // One mark on its own is a speck — unless it is big, in which case it is
+  // a lone kana in a small bubble, which is real text worth reading.
+  if (members.length < 2 && em < maxSide * 0.025) return null;
+  // A line is barely wider than its characters. Anything sprawling is a
+  // trail through a drawing, not print.
+  if (across > em * 2.0) return null;
+  // And a line of several characters is longer than it is thick.
+  if (members.length >= 3 && along < across * 1.2) return null;
+  // Print covers a knowable share of its own box: much less is a couple of
+  // specks that happen to line up, much more is a solid shape.
+  const density = ink / Math.max(1, box.w * box.h);
+  if (density < 0.12 || density > 0.72) return null;
+  // A pair on its own is the easiest thing to find by accident, so a pair
+  // has to look the part: two marks of the same size, and not tiny.
+  if (members.length === 2) {
+    const ratio = Math.max(members[0].size, members[1].size) / Math.max(1, Math.min(members[0].size, members[1].size));
+    if (ratio > 1.7 || em < maxSide * 0.015) return null;
+  }
+  return { ...box, vertical, ink };
 }
 
-/** Boxes that overlap or sit against each other are one block. */
-function mergeTouching(boxes: DetectedBox[]): DetectedBox[] {
-  const kept = [...boxes];
-  let merged = true;
-  while (merged) {
-    merged = false;
-    outer: for (let i = 0; i < kept.length; i++) {
-      for (let j = i + 1; j < kept.length; j++) {
-        const a = kept[i];
-        const b = kept[j];
-        if (a.x < b.x + b.w + 2 && b.x < a.x + a.w + 2 && a.y < b.y + b.h + 2 && b.y < a.y + a.h + 2) {
-          const x0 = Math.min(a.x, b.x);
-          const y0 = Math.min(a.y, b.y);
-          kept[i] = {
-            x: x0,
-            y: y0,
-            w: Math.max(a.x + a.w, b.x + b.w) - x0,
-            h: Math.max(a.y + a.h, b.y + b.h) - y0,
-            ink: a.ink + b.ink,
-          };
-          kept.splice(j, 1);
-          merged = true;
-          break outer;
-        }
+/** Does this line stand largely within lines already found? */
+function insideAny(line: DetectedLine, held: DetectedLine[]): boolean {
+  const area = Math.max(1, line.w * line.h);
+  let covered = 0;
+  for (const other of held) {
+    const ox = Math.max(0, Math.min(other.x + other.w, line.x + line.w) - Math.max(other.x, line.x));
+    const oy = Math.max(0, Math.min(other.y + other.h, line.y + line.h) - Math.max(other.y, line.y));
+    covered += ox * oy;
+  }
+  return covered > area * 0.5;
+}
+
+/**
+ * The same line found in both polarities (or twice over) counts once.
+ * Overlap decides, not adjacency, so neighbouring columns of the same
+ * bubble stay the separate lines they are.
+ */
+function dropDuplicates(lines: DetectedLine[]): DetectedLine[] {
+  const kept: DetectedLine[] = [];
+  for (const line of lines.slice().sort((a, b) => b.w * b.h - a.w * a.h)) {
+    const area = line.w * line.h;
+    const covered = kept.some((held) => {
+      const ox = Math.max(0, Math.min(held.x + held.w, line.x + line.w) - Math.max(held.x, line.x));
+      const oy = Math.max(0, Math.min(held.y + held.h, line.y + line.h) - Math.max(held.y, line.y));
+      return ox * oy > area * 0.5;
+    });
+    if (!covered) kept.push(line);
+  }
+  return kept;
+}
+
+/**
+ * Reading order, in place: lines gather into the bubbles they belong to,
+ * bubbles run right to left and down the page the way manga is read, and
+ * a bubble's own columns run right to left inside it. The order is what
+ * the sentence around a tapped word is built from, so it is worth getting
+ * right even though every line is tappable on its own.
+ */
+function ordered(lines: DetectedLine[]): void {
+  const near = (a: DetectedLine, b: DetectedLine): boolean => {
+    const gap = Math.max(a.vertical ? a.w : a.h, b.vertical ? b.w : b.h) * 1.6;
+    const ox = Math.max(a.x, b.x) - Math.min(a.x + a.w, b.x + b.w);
+    const oy = Math.max(a.y, b.y) - Math.min(a.y + a.h, b.y + b.h);
+    return ox < gap && oy < gap;
+  };
+  const group = new Int32Array(lines.length).map((_, i) => i);
+  const find = (i: number): number => {
+    while (group[i] !== i) i = group[i] = group[group[i]];
+    return i;
+  };
+  for (let i = 0; i < lines.length; i++) {
+    for (let j = i + 1; j < lines.length; j++) {
+      if (lines[i].vertical === lines[j].vertical && near(lines[i], lines[j])) {
+        const a = find(i);
+        const b = find(j);
+        if (a !== b) group[b] = a;
       }
     }
   }
-  return kept;
+  const bubbleOf = new Map<number, { right: number; top: number }>();
+  lines.forEach((line, i) => {
+    const root = find(i);
+    const held = bubbleOf.get(root);
+    if (held) {
+      held.right = Math.max(held.right, line.x + line.w);
+      held.top = Math.min(held.top, line.y);
+    } else {
+      bubbleOf.set(root, { right: line.x + line.w, top: line.y });
+    }
+  });
+  const rank = new Map(lines.map((line, i) => [line, i]));
+  lines.sort((a, b) => {
+    const ba = bubbleOf.get(find(rank.get(a)!))!;
+    const bb = bubbleOf.get(find(rank.get(b)!))!;
+    if (ba !== bb) {
+      // Right to left, but a bubble clearly higher up comes first.
+      if (Math.abs(ba.top - bb.top) > 40 && Math.abs(ba.right - bb.right) < 60) return ba.top - bb.top;
+      if (ba.right !== bb.right) return bb.right - ba.right;
+      return ba.top - bb.top;
+    }
+    return a.vertical ? b.x + b.w - (a.x + a.w) : a.y - b.y;
+  });
 }
 
 /** Connected blobs of `mask`, each measured as the tight bounds of `base`. */
