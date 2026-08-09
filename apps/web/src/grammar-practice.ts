@@ -12,7 +12,7 @@ import {
 } from "./grammar-data.js";
 import { generateSentences } from "./grammar-ai.js";
 import { PER_CORRECT, earnYennies, formatYennies, yennies } from "./yennies.js";
-import { carRow, chunkHtml, romajiOf, spoken, splitChunk, wordBlock } from "./grammar-draw.js";
+import { carRow, chunkHtml, spoken, splitChunk, wordBlock } from "./grammar-draw.js";
 
 /**
  * The grammar drill engine: one unit of sentence-dissection tasks.
@@ -181,7 +181,6 @@ function promptFor(task: Task): string {
 export async function runUnit(
   body: HTMLDivElement,
   unitIndex: number,
-  romaji: boolean,
   isCurrent: () => boolean,
   hooks: UnitHooks,
 ): Promise<void> {
@@ -239,7 +238,6 @@ export async function runUnit(
     cleanups = [];
     const task = queue[0];
     const percent = Math.round((done / total) * 100);
-    const showRomaji = romaji;
 
     body.innerHTML = `
       <div class="card-panel kana-quiz gram-quiz">
@@ -292,7 +290,7 @@ export async function runUnit(
         .map((chunk) => {
           const mark =
             marks?.mistake === chunk ? " is-wrong" : marks?.answer === chunk ? " is-answer" : "";
-          return chunkHtml(chunk, showRomaji, true, mark);
+          return chunkHtml(chunk, false, true, mark);
         })
         .join("");
       extra.innerHTML = task.sentence.lit
@@ -366,7 +364,7 @@ export async function runUnit(
       const visible = task.sentence.chunks.filter((c) => c.role !== "ghost");
       const shown = shuffle(visible.map((chunk, i) => ({ chunk, i })));
       train.innerHTML = shown
-        .map(({ i }) => `<button class="gram-car" data-i="${i}">${carRow(visible[i], showRomaji)}</button>`)
+        .map(({ i }) => `<button class="gram-car" data-i="${i}">${carRow(visible[i], false)}</button>`)
         .join("");
       const answer = visible.find((c) => c.role === "engine");
       for (const button of train.querySelectorAll<HTMLButtonElement>("button.gram-car")) {
@@ -397,7 +395,7 @@ export async function runUnit(
       const ghostChunk = task.sentence.chunks.find((c) => c.role === "ghost");
       const visible = task.sentence.chunks.filter((c) => c.role !== "ghost");
       train.innerHTML = visible
-        .map((chunk, i) => `<button class="gram-car" data-i="${i}">${carRow(chunk, showRomaji)}</button>`)
+        .map((chunk, i) => `<button class="gram-car" data-i="${i}">${carRow(chunk, false)}</button>`)
         .join("");
       if (unitIndex >= 1) {
         extra.innerHTML = `
@@ -497,7 +495,6 @@ export async function runUnit(
           (sn) =>
             `<button class="gram-swap-line" data-en="${escapeHtml(sn.en)}">
                <span lang="ja">${escapeHtml(spoken(sn))}</span>
-               ${showRomaji ? `<span class="gram-romaji">${escapeHtml(romajiOf(sn))}</span>` : ""}
              </button>`,
         )
         .join("")}</div>`;
@@ -546,7 +543,7 @@ export async function runUnit(
     if (task.kind === "meaning") {
       train.innerHTML = task.sentence.chunks
         .filter((c) => c.role !== "ghost")
-        .map((chunk) => carRow(chunk, showRomaji))
+        .map((chunk) => carRow(chunk, false))
         .join("");
       const others = unit.sentences.filter((sn) => sn !== task.sentence).map((sn) => sn.en);
       const options = shuffle([task.sentence.en, ...shuffle(others).slice(0, 2)]);
@@ -573,8 +570,8 @@ export async function runUnit(
       train.innerHTML = task.sentence.chunks
         .map((chunk) =>
           chunk.role === "ghost"
-            ? carRow({ ...chunk, g: "?" }, showRomaji, chunk.role, true)
-            : carRow(chunk, showRomaji, chunk.role),
+            ? carRow({ ...chunk, g: "?" }, false, chunk.role, true)
+            : carRow(chunk, false, chunk.role),
         )
         .join("");
       const pool = ["I", "you", "she", "he", "it", "they"];
@@ -610,7 +607,6 @@ export async function runUnit(
           (side) =>
             `<button class="gram-swap-line" data-en="${escapeHtml(side.en)}">
                <span lang="ja">${escapeHtml(side.jp)}</span>
-               ${showRomaji ? `<span class="gram-romaji">${escapeHtml(side.r)}</span>` : ""}
              </button>`,
         )
         .join("")}</div>`;
@@ -660,8 +656,8 @@ export async function runUnit(
         .filter((c) => c.role !== "ghost")
         .map((chunk) =>
           chunk === target
-            ? `<span class="gram-car-row">${wordBlock(stem.word, stem.wordR, showRomaji)}<span class="gram-particle hole"><b class="gram-hole">?</b></span></span>`
-            : carRow(chunk, showRomaji),
+            ? `<span class="gram-car-row">${wordBlock(stem.word, stem.wordR, false)}<span class="gram-particle hole"><b class="gram-hole">?</b></span></span>`
+            : carRow(chunk, false),
         )
         .join("");
       const options = shuffle([...new Set([target.p!, ...unit.particles])]).slice(0, 4);
@@ -722,10 +718,7 @@ export async function runUnit(
     }
     const allPieces = cars.flatMap((c) => c.pieces);
 
-    const pieceHtml = (piece: BuildPiece): string =>
-      `<span lang="ja">${escapeHtml(piece.text)}</span>${
-        showRomaji ? `<span class="gram-romaji">${escapeHtml(piece.r)}</span>` : ""
-      }`;
+    const pieceHtml = (piece: BuildPiece): string => `<span lang="ja">${escapeHtml(piece.text)}</span>`;
 
     train.innerHTML = `<div class="gram-slots" id="gram-answer"><span class="glosses" id="gram-answer-hint">Drag the pieces up here.</span></div>`;
     const answer = train.querySelector<HTMLDivElement>("#gram-answer")!;

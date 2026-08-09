@@ -30,7 +30,6 @@ const DONE_KEY = "grammarLessonsDone";
 const UNITS_DONE_KEY = "grammarUnitsDone";
 /** The old Practice tab's save, read once to carry progress across. */
 const OLD_GAME_KEY = "grammarGame";
-const ROMAJI_KEY = "grammarRomaji";
 
 /** Best test score per chapter index, as a percent. */
 type Progress = Record<number, number>;
@@ -167,7 +166,6 @@ async function drawLesson(
   const lesson = LESSONS[index];
   const unitIndex = UNIT_FOR[index];
   const unit = unitIndex !== undefined ? GRAMMAR_UNITS[unitIndex] : null;
-  const romaji = (await getMeta<boolean>(ROMAJI_KEY)) ?? true;
   window.scrollTo({ top: 0 });
   body.innerHTML = `
     <button class="ghost lesson-back" id="lesson-back">← All chapters</button>
@@ -190,7 +188,6 @@ async function drawLesson(
             <button class="speaker" title="Say it" aria-label="Say it">🔊</button>
             <div>
               <div class="lesson-example-jp" lang="ja">${escapeHtml(ex.jp)}</div>
-              <div class="lesson-example-r">${escapeHtml(ex.r)}</div>
               <div class="glosses">${escapeHtml(ex.en)}</div>
             </div>
           </div>`,
@@ -205,9 +202,6 @@ async function drawLesson(
       ${
         unit
           ? `<div class="glosses">First drill it on real sentences — ${escapeHtml(unit.tagline)}</div>
-             <label class="unseen-toggle" style="justify-content:center;margin:6px 0">
-               <input type="checkbox" id="lesson-romaji" ${romaji ? "checked" : ""} /> Show romaji
-             </label>
              <div class="row-actions" style="justify-content:center">
                <button id="lesson-drill">${drilled.has(unitIndex!) ? "🎯 Drill it again" : "🎯 Drill it"}</button>
              </div>
@@ -238,13 +232,9 @@ async function drawLesson(
       void speak(unit.dataset.say ?? "", { rate: 0.8 }).catch(() => undefined);
     });
   }
-  body.querySelector<HTMLInputElement>("#lesson-romaji")?.addEventListener("change", (ev) => {
-    void setMeta(ROMAJI_KEY, (ev.target as HTMLInputElement).checked);
-  });
-  body.querySelector("#lesson-drill")?.addEventListener("click", async () => {
+  body.querySelector("#lesson-drill")?.addEventListener("click", () => {
     void preloadReactions();
-    const showRomaji = (await getMeta<boolean>(ROMAJI_KEY)) ?? true;
-    void runUnit(body, unitIndex!, showRomaji, isCurrent, {
+    void runUnit(body, unitIndex!, isCurrent, {
       continueLabel: "Back to the chapter",
       onCleared: async () => {
         drilled.add(unitIndex!);
@@ -323,11 +313,10 @@ function visualHtml(visual: LessonVisual): string {
         <div class="lesson-visual lv-five">
           ${visual.items
             .map(
-              ([particle, job, said]) => `
+              ([particle, job]) => `
             <button class="lv-p" type="button" data-say="${escapeHtml(SPOKEN_TAG[particle] ?? particle)}">
               <span class="stk-tag ${tagClass(particle)}" lang="ja">${escapeHtml(particle)}</span>
               <span class="lv-p-cap">${escapeHtml(job)}</span>
-              <span class="lv-p-said">"${escapeHtml(said)}"</span>
             </button>`,
             )
             .join("")}
@@ -428,9 +417,8 @@ function runQuiz(
           <button id="lq-list" class="ghost">All chapters</button>
         </div>
       </div>`;
-    body.querySelector("#lq-drill")?.addEventListener("click", async () => {
-      const showRomaji = (await getMeta<boolean>(ROMAJI_KEY)) ?? true;
-      void runUnit(body, unit!, showRomaji, isCurrent, {
+    body.querySelector("#lq-drill")?.addEventListener("click", () => {
+      void runUnit(body, unit!, isCurrent, {
         continueLabel: "Back to the chapter",
         onCleared: async () => {
           drilled.add(unit!);

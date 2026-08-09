@@ -10,7 +10,6 @@ import {
   formHint,
   guessKind,
   isKana,
-  kanaToRomaji,
   kindFitsShape,
   kindFromPos,
   startState,
@@ -346,7 +345,6 @@ function drawBoard(out: HTMLDivElement, body: HTMLDivElement): void {
       <div class="pg-result">
         <button class="speaker" id="pg-say" title="Say it" aria-label="Say it">🔊</button>
         <div class="pg-result-jp" lang="ja">${escapeHtml(state.kana)}</div>
-        <div class="pg-result-romaji">${escapeHtml(kanaToRomaji(state.kana))}</div>
         <div class="pg-result-en" id="pg-en">${recipeHtml(w, steps)}</div>
       </div>
       <div class="pg-chain">

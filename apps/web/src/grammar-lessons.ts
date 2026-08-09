@@ -1,20 +1,19 @@
 /**
  * The Learn course: a structured walk through Japanese grammar from zero.
  *
- * Seventeen lessons in reading order, how a sentence is built, then every
+ * Sixteen lessons in reading order, how a sentence is built, then every
  * particle one by one, then verbs, endings and describing words. Each
  * lesson is written to be read in a few minutes, every claim carries an
  * example, and a short test at the end checks it stuck.
  *
- * The register matches the rest of the grammar tab: kana only, romaji on
- * every example, plain words wherever a plain word exists. The one piece of
+ * The register matches the rest of the grammar tab: kana only, no romaji
+ * anywhere, plain words wherever a plain word exists. The one piece of
  * jargon the course does teach is "particle", because the learner will meet
  * it everywhere else, it is introduced once, in lesson 1, and defined.
  */
 
 export interface LessonExample {
   jp: string;
-  r: string;
   en: string;
 }
 
@@ -29,9 +28,9 @@ export type LessonVisual =
       caption?: string;
     }
   | {
-      /** A sticker sheet: the particle, its job, how it's said. */
+      /** A sticker sheet: the particle and its job. Tap to hear it. */
       kind: "tags";
-      items: [particle: string, job: string, said: string][];
+      items: [particle: string, job: string][];
     }
   | {
       /** A word changing shape, left to right, arrows between. */
@@ -81,8 +80,8 @@ export const LESSONS: Lesson[] = [
           "English goes \"who does what\". Japanese goes \"who, what, does\". You find out what happened " +
           "at the end.",
         examples: [
-          { jp: "さくらが みずを のむ", r: "sakura ga mizu wo nomu", en: "Sakura drinks water. (literally: Sakura water drinks)" },
-          { jp: "ねこが ねる", r: "neko ga neru", en: "The cat sleeps." },
+          { jp: "さくらが みずを のむ", en: "Sakura drinks water. (literally: Sakura water drinks)" },
+          { jp: "ねこが ねる", en: "The cat sleeps." },
         ],
       },
       {
@@ -97,7 +96,7 @@ export const LESSONS: Lesson[] = [
       },
       {
         heading: "Five stickers to know",
-        visual: { kind: "tags", items: [["は", "the topic", "wa"], ["が", "the doer", "ga"], ["を", "lands on it", "o"], ["に", "headed there", "ni"], ["で", "happens there", "de"]] },
+        visual: { kind: "tags", items: [["は", "the topic"], ["が", "the doer"], ["を", "lands on it"], ["に", "headed there"], ["で", "happens there"]] },
         body: "Each one gets its own chapter later. For now, just meet them. Tap any of them to hear it.",
       },
       {
@@ -111,9 +110,9 @@ export const LESSONS: Lesson[] = [
           "friends, in your head, in casual writing: だ. ねこだ and ねこです both mean \"it's a cat\"; the " +
           "only difference is the tone of voice.",
         examples: [
-          { jp: "ねこだ", r: "neko da", en: "(It) is a cat." },
-          { jp: "がくせいだ", r: "gakusei da", en: "(I) am a student." },
-          { jp: "わたしは がくせいです", r: "watashi wa gakusei desu", en: "I am a student., polite" },
+          { jp: "ねこだ", en: "(It) is a cat." },
+          { jp: "がくせいだ", en: "(I) am a student." },
+          { jp: "わたしは がくせいです", en: "I am a student., polite" },
         ],
       },
       {
@@ -133,10 +132,10 @@ export const LESSONS: Lesson[] = [
           "it only adds politeness. You can keep it or drop it.\n\n" +
           "Add か to the end and it becomes a question.",
         examples: [
-          { jp: "わたしは ピエトロです", r: "watashi wa pietoro desu", en: "As for me, it's Pietro. = I'm Pietro." },
-          { jp: "ピエトロです", r: "pietoro desu", en: "Enough on its own: the topic was obvious." },
-          { jp: "わたしは ライスです", r: "watashi wa raisu desu", en: "As for me, it's rice. = I'll have rice." },
-          { jp: "これは ねこですか", r: "kore wa neko desu ka", en: "Is this a cat?" },
+          { jp: "わたしは ピエトロです", en: "As for me, it's Pietro. = I'm Pietro." },
+          { jp: "ピエトロです", en: "Enough on its own: the topic was obvious." },
+          { jp: "わたしは ライスです", en: "As for me, it's rice. = I'll have rice." },
+          { jp: "これは ねこですか", en: "Is this a cat?" },
         ],
       },
       {
@@ -148,8 +147,8 @@ export const LESSONS: Lesson[] = [
           "Only two things are fixed: the ending comes last, and a describing word comes right before what " +
           "it describes.",
         examples: [
-          { jp: "さくらが みずを のむ", r: "sakura ga mizu wo nomu", en: "Sakura drinks water." },
-          { jp: "みずを さくらが のむ", r: "mizu wo sakura ga nomu", en: "Same meaning. The stickers didn't move." },
+          { jp: "さくらが みずを のむ", en: "Sakura drinks water." },
+          { jp: "みずを さくらが のむ", en: "Same meaning. The stickers didn't move." },
         ],
       },
       {
@@ -159,8 +158,8 @@ export const LESSONS: Lesson[] = [
           "someone, clear from the situation, drinks. No \"I\", \"him\" or \"it\" needed if it's clear from " +
           "context. Japanese drops words like this a lot, just like the topic above.",
         examples: [
-          { jp: "のむ", r: "nomu", en: "(I'll) drink. A full sentence." },
-          { jp: "あつい", r: "atsui", en: "(It's) hot. Also a full sentence." },
+          { jp: "のむ", en: "(I'll) drink. A full sentence." },
+          { jp: "あつい", en: "(It's) hot. Also a full sentence." },
         ],
       },
     ],
@@ -242,9 +241,9 @@ export const LESSONS: Lesson[] = [
           "が tags whoever, or whatever, the ending is about: the one walking, the thing that is red, the " +
           "person who exists in the room. Find the が and you've found the sentence's anchor.",
         examples: [
-          { jp: "とりが とぶ", r: "tori ga tobu", en: "The bird flies." },
-          { jp: "みずが つめたい", r: "mizu ga tsumetai", en: "The water is cold." },
-          { jp: "さくらが がくせいだ", r: "sakura ga gakusei da", en: "Sakura is a student." },
+          { jp: "とりが とぶ", en: "The bird flies." },
+          { jp: "みずが つめたい", en: "The water is cold." },
+          { jp: "さくらが がくせいだ", en: "Sakura is a student." },
         ],
       },
       {
@@ -253,8 +252,8 @@ export const LESSONS: Lesson[] = [
           "“Doer” is loose on purpose: with つめたい (is cold) the water isn't doing anything, it just IS the " +
           "cold one. が works for all three kinds of ending, actions, describing words, and thing+だ.",
         examples: [
-          { jp: "いぬが おおきい", r: "inu ga ookii", en: "The dog is big." },
-          { jp: "ねこが いる", r: "neko ga iru", en: "There is a cat. (a cat exists)" },
+          { jp: "いぬが おおきい", en: "The dog is big." },
+          { jp: "ねこが いる", en: "There is a cat. (a cat exists)" },
         ],
       },
       {
@@ -264,8 +263,8 @@ export const LESSONS: Lesson[] = [
           "たべる by itself has an invisible “I が” inside it. Getting comfortable with that invisible が is " +
           "the single most useful habit in this course.",
         examples: [
-          { jp: "たべる", r: "taberu", en: "(I) eat., the doer is unsaid" },
-          { jp: "きれいだ", r: "kirei da", en: "(It) is pretty." },
+          { jp: "たべる", en: "(I) eat., the doer is unsaid" },
+          { jp: "きれいだ", en: "(It) is pretty." },
         ],
       },
     ],
@@ -320,8 +319,8 @@ export const LESSONS: Lesson[] = [
           "about it.” わたしは こうちゃが すきだ is literally “as for me, tea is pleasing”. The topic is me, " +
           "but the が is on the tea.",
         examples: [
-          { jp: "きょうは あつい", r: "kyou wa atsui", en: "As for today, (it's) hot." },
-          { jp: "ねこは かわいい", r: "neko wa kawaii", en: "As for cats, (they're) cute." },
+          { jp: "きょうは あつい", en: "As for today, (it's) hot." },
+          { jp: "ねこは かわいい", en: "As for cats, (they're) cute." },
         ],
       },
       {
@@ -334,10 +333,10 @@ export const LESSONS: Lesson[] = [
           "わたしが がくせいだ singles you out: “I'm THE student, the one you're looking for.” This isn't a " +
           "strict rule, just a useful feel.",
         examples: [
-          { jp: "さくらが きた", r: "sakura ga kita", en: "SAKURA came. (answering: who came?)" },
-          { jp: "さくらは きた", r: "sakura wa kita", en: "As for Sakura, she came. (we were already talking about her)" },
-          { jp: "わたしは がくせいだ", r: "watashi wa gakusei da", en: "I'm a student. (introducing)" },
-          { jp: "わたしが がくせいだ", r: "watashi ga gakusei da", en: "I'm THE student. (the one in question)" },
+          { jp: "さくらが きた", en: "SAKURA came. (answering: who came?)" },
+          { jp: "さくらは きた", en: "As for Sakura, she came. (we were already talking about her)" },
+          { jp: "わたしは がくせいだ", en: "I'm a student. (introducing)" },
+          { jp: "わたしが がくせいだ", en: "I'm THE student. (the one in question)" },
         ],
       },
       {
@@ -348,8 +347,8 @@ export const LESSONS: Lesson[] = [
           "かれは めが おおきい is literally “as for him, the eyes are big”. English just says “his eyes are " +
           "big”. When you see は and が together, the は part is the headline and the が part is the detail.",
         examples: [
-          { jp: "かれは めが おおきい", r: "kare wa me ga ookii", en: "His eyes are big. (as for him, the eyes are big)" },
-          { jp: "ぞうは はなが ながい", r: "zou wa hana ga nagai", en: "Elephants have long noses. (as for elephants, the nose is long)" },
+          { jp: "かれは めが おおきい", en: "His eyes are big. (as for him, the eyes are big)" },
+          { jp: "ぞうは はなが ながい", en: "Elephants have long noses. (as for elephants, the nose is long)" },
         ],
       },
       {
@@ -362,9 +361,9 @@ export const LESSONS: Lesson[] = [
           "Nobody chooses は or が by a rule, natives included. The feel comes from seeing sentences. When " +
           "in doubt, use は and move on.",
         examples: [
-          { jp: "わたしは たべる", r: "watashi wa taberu", en: "As for me, (I) eat." },
-          { jp: "トムです", r: "tomu desu", en: "(I'm) Tom., the obvious topic just stays home" },
-          { jp: "わたしは うなぎだ", r: "watashi wa unagi da", en: "As for me, (the order) is eel." },
+          { jp: "わたしは たべる", en: "As for me, (I) eat." },
+          { jp: "トムです", en: "(I'm) Tom., the obvious topic just stays home" },
+          { jp: "わたしは うなぎだ", en: "As for me, (the order) is eel." },
         ],
       },
     ],
@@ -423,9 +422,9 @@ export const LESSONS: Lesson[] = [
           "lands on. It's written を but read “o”. The doer keeps が (or hides behind は); the thing acted on " +
           "takes を.",
         examples: [
-          { jp: "ねこが さかなを たべる", r: "neko ga sakana wo taberu", en: "The cat eats a fish." },
-          { jp: "わたしは ほんを よむ", r: "watashi wa hon wo yomu", en: "I read a book." },
-          { jp: "みずを のむ", r: "mizu wo nomu", en: "(I) drink water." },
+          { jp: "ねこが さかなを たべる", en: "The cat eats a fish." },
+          { jp: "わたしは ほんを よむ", en: "I read a book." },
+          { jp: "みずを のむ", en: "(I) drink water." },
         ],
       },
       {
@@ -435,8 +434,8 @@ export const LESSONS: Lesson[] = [
           "たべる, the cat eats the fish. さかなが ねこを たべる, the fish eats the cat. The tags decide, " +
           "not the order.",
         examples: [
-          { jp: "ねこが さかなを たべる", r: "neko ga sakana wo taberu", en: "The cat eats the fish." },
-          { jp: "さかなが ねこを たべる", r: "sakana ga neko wo taberu", en: "The fish eats the cat." },
+          { jp: "ねこが さかなを たべる", en: "The cat eats the fish." },
+          { jp: "さかなが ねこを たべる", en: "The fish eats the cat." },
         ],
       },
       {
@@ -446,8 +445,8 @@ export const LESSONS: Lesson[] = [
           "tag: ともだちに あう (meet TO a friend), でんしゃに のる (ride ON a train). When you learn a new " +
           "action word, notice which tag it likes, the pair travels together.",
         examples: [
-          { jp: "ともだちに あう", r: "tomodachi ni au", en: "(I) meet a friend., に, not を" },
-          { jp: "でんしゃに のる", r: "densha ni noru", en: "(I) get on the train., に, not を" },
+          { jp: "ともだちに あう", en: "(I) meet a friend., に, not を" },
+          { jp: "でんしゃに のる", en: "(I) get on the train., に, not を" },
         ],
       },
     ],
@@ -499,9 +498,9 @@ export const LESSONS: Lesson[] = [
           "に drops a pin: where something ends up (がっこうに いく, go to school), where it sits (へやに いる " +
           ",  be in the room), or who it's aimed at (ともだちに あげる, give to a friend).",
         examples: [
-          { jp: "さくらが がっこうに いく", r: "sakura ga gakkou ni iku", en: "Sakura goes to school." },
-          { jp: "ねこが へやに いる", r: "neko ga heya ni iru", en: "The cat is in the room." },
-          { jp: "ともだちに てがみを かく", r: "tomodachi ni tegami wo kaku", en: "(I) write a letter to a friend." },
+          { jp: "さくらが がっこうに いく", en: "Sakura goes to school." },
+          { jp: "ねこが へやに いる", en: "The cat is in the room." },
+          { jp: "ともだちに てがみを かく", en: "(I) write a letter to a friend." },
         ],
       },
       {
@@ -510,8 +509,8 @@ export const LESSONS: Lesson[] = [
           "Clock times and dates take に, just where English says at, on or in: 9じに (at nine), にちようびに " +
           "(on Sunday). Loose words like today, tomorrow and every day stand alone, no に needed.",
         examples: [
-          { jp: "9じに おきる", r: "ku-ji ni okiru", en: "(I) get up at nine." },
-          { jp: "きょう がっこうに いく", r: "kyou gakkou ni iku", en: "Today (I) go to school., きょう takes no に" },
+          { jp: "9じに おきる", en: "(I) get up at nine." },
+          { jp: "きょう がっこうに いく", en: "Today (I) go to school., きょう takes no に" },
         ],
       },
       {
@@ -520,8 +519,8 @@ export const LESSONS: Lesson[] = [
           "へ (read “e”) points a direction rather than pinning a spot, “towards.” In everyday speech に and " +
           "へ overlap for destinations; へ feels a little more like a compass needle, に like an X on the map.",
         examples: [
-          { jp: "うちへ かえる", r: "uchi e kaeru", en: "(I) head home." },
-          { jp: "とりが そらへ とぶ", r: "tori ga sora e tobu", en: "The bird flies toward the sky." },
+          { jp: "うちへ かえる", en: "(I) head home." },
+          { jp: "とりが そらへ とぶ", en: "The bird flies toward the sky." },
         ],
       },
     ],
@@ -579,8 +578,8 @@ export const LESSONS: Lesson[] = [
           "the room, a pin) but へやで あそぶ (plays IN the room, the room is the stage the playing happens " +
           "on). If something is being done, the place it's being done takes で.",
         examples: [
-          { jp: "こどもが こうえんで あそぶ", r: "kodomo ga kouen de asobu", en: "The child plays in the park." },
-          { jp: "としょかんで べんきょうする", r: "toshokan de benkyou suru", en: "(I) study at the library." },
+          { jp: "こどもが こうえんで あそぶ", en: "The child plays in the park." },
+          { jp: "としょかんで べんきょうする", en: "(I) study at the library." },
         ],
       },
       {
@@ -589,8 +588,8 @@ export const LESSONS: Lesson[] = [
           "The same で marks what an action is done WITH, the tool, the method, the vehicle: はしで たべる " +
           "(eat with chopsticks), でんしゃで いく (go by train), にほんごで はなす (speak in Japanese).",
         examples: [
-          { jp: "はしで たべる", r: "hashi de taberu", en: "(I) eat with chopsticks." },
-          { jp: "でんしゃで いく", r: "densha de iku", en: "(I) go by train." },
+          { jp: "はしで たべる", en: "(I) eat with chopsticks." },
+          { jp: "でんしゃで いく", en: "(I) go by train." },
         ],
       },
       {
@@ -600,8 +599,8 @@ export const LESSONS: Lesson[] = [
           "HAPPENING, で. がっこうに いく (school is the destination) but がっこうで べんきょうする (school is " +
           "where the studying happens).",
         examples: [
-          { jp: "がっこうに いく", r: "gakkou ni iku", en: "(I) go to school., destination" },
-          { jp: "がっこうで べんきょうする", r: "gakkou de benkyou suru", en: "(I) study at school., stage" },
+          { jp: "がっこうに いく", en: "(I) go to school., destination" },
+          { jp: "がっこうで べんきょうする", en: "(I) study at school., stage" },
         ],
       },
     ],
@@ -657,8 +656,8 @@ export const LESSONS: Lesson[] = [
           "Between things, と lists them ALL: ねこと いぬ, the cat and the dog, that's the whole list. After a " +
           "person, it also means doing something together: さくらと はなす, talk with Sakura.",
         examples: [
-          { jp: "ねこと いぬが いる", r: "neko to inu ga iru", en: "There's a cat and a dog." },
-          { jp: "さくらと はなす", r: "sakura to hanasu", en: "(I) talk with Sakura." },
+          { jp: "ねこと いぬが いる", en: "There's a cat and a dog." },
+          { jp: "さくらと はなす", en: "(I) talk with Sakura." },
         ],
       },
       {
@@ -667,7 +666,7 @@ export const LESSONS: Lesson[] = [
           "や also joins things, but leaves the list open, “things like…”: パンや たまごを かう means (I) buy " +
           "bread and eggs, among other things. と closes the list; や leaves the door ajar.",
         examples: [
-          { jp: "パンや たまごを かう", r: "pan ya tamago wo kau", en: "(I) buy bread, eggs and such." },
+          { jp: "パンや たまごを かう", en: "(I) buy bread, eggs and such." },
         ],
       },
       {
@@ -677,8 +676,8 @@ export const LESSONS: Lesson[] = [
           "“both… and…”: ねこも いぬも すきだ. I like both cats and dogs. Note that も pushes the other " +
           "particle out; you never say がも.",
         examples: [
-          { jp: "わたしも いく", r: "watashi mo iku", en: "I'm going too." },
-          { jp: "ねこも いぬも すきだ", r: "neko mo inu mo suki da", en: "(I) like both cats and dogs." },
+          { jp: "わたしも いく", en: "I'm going too." },
+          { jp: "ねこも いぬも すきだ", en: "(I) like both cats and dogs." },
         ],
       },
     ],
@@ -736,8 +735,8 @@ export const LESSONS: Lesson[] = [
           "の links two things, and the first one owns or frames the second: わたしの ほん, my book. さくらの " +
           "ねこ. Sakura's cat. Read A の B as “B of A” and the order never trips you.",
         examples: [
-          { jp: "わたしの ほん", r: "watashi no hon", en: "my book" },
-          { jp: "さくらの ねこ", r: "sakura no neko", en: "Sakura's cat" },
+          { jp: "わたしの ほん", en: "my book" },
+          { jp: "さくらの ねこ", en: "Sakura's cat" },
         ],
       },
       {
@@ -747,8 +746,8 @@ export const LESSONS: Lesson[] = [
           "Japanese-language book), がっこうの ともだち (a friend from school). Any thing can dress up another " +
           "thing this way.",
         examples: [
-          { jp: "にほんごの ほん", r: "nihongo no hon", en: "a Japanese book (a book of Japanese)" },
-          { jp: "がっこうの ともだち", r: "gakkou no tomodachi", en: "a friend from school" },
+          { jp: "にほんごの ほん", en: "a Japanese book (a book of Japanese)" },
+          { jp: "がっこうの ともだち", en: "a friend from school" },
         ],
       },
       {
@@ -757,8 +756,8 @@ export const LESSONS: Lesson[] = [
           "Once the thing is obvious, の can replace it entirely: あかいのが すきだ, “I like the red ONE.” " +
           "The の holds the place of the thing you'd otherwise repeat.",
         examples: [
-          { jp: "あかいのが すきだ", r: "akai no ga suki da", en: "(I) like the red one." },
-          { jp: "わたしのだ", r: "watashi no da", en: "(It's) mine." },
+          { jp: "あかいのが すきだ", en: "(I) like the red one." },
+          { jp: "わたしのだ", en: "(It's) mine." },
         ],
       },
     ],
@@ -805,13 +804,13 @@ export const LESSONS: Lesson[] = [
     sections: [
       {
         heading: "か turns anything into a question",
-        visual: { kind: "tags", items: [["か", "asks", "ka"], ["ね", "invites a nod", "ne"], ["よ", "hands over news", "yo"]] },
+        visual: { kind: "tags", items: [["か", "asks"], ["ね", "invites a nod"], ["よ", "hands over news"]] },
         body:
           "No do-you, no word flipping: put か on the end and the sentence becomes a question. ねこですか, " +
           "is it a cat? In casual speech the か often drops and the voice just rises: ねこ？",
         examples: [
-          { jp: "ねこですか", r: "neko desu ka", en: "Is it a cat?" },
-          { jp: "いきますか", r: "ikimasu ka", en: "Are (you) going?" },
+          { jp: "ねこですか", en: "Is it a cat?" },
+          { jp: "いきますか", en: "Are (you) going?" },
         ],
       },
       {
@@ -820,8 +819,8 @@ export const LESSONS: Lesson[] = [
           "ね at the end is “…right?” or “…isn't it?”. It invites the listener to nod along. あついですね, hot " +
           "today, isn't it. Japanese conversation runs on ね the way English runs on small talk.",
         examples: [
-          { jp: "あついですね", r: "atsui desu ne", en: "Hot, isn't it?" },
-          { jp: "かわいいね", r: "kawaii ne", en: "Cute, right?" },
+          { jp: "あついですね", en: "Hot, isn't it?" },
+          { jp: "かわいいね", en: "Cute, right?" },
         ],
       },
       {
@@ -830,8 +829,8 @@ export const LESSONS: Lesson[] = [
           "よ marks what you're saying as news to the listener, “I'm telling you.” バスが きたよ, the bus is " +
           "here (you didn't seem to notice). Use it gently; too much よ sounds pushy.",
         examples: [
-          { jp: "バスが きたよ", r: "basu ga kita yo", en: "The bus is here, you know." },
-          { jp: "おいしいよ", r: "oishii yo", en: "It's good, trust me." },
+          { jp: "バスが きたよ", en: "The bus is here, you know." },
+          { jp: "おいしいよ", en: "It's good, trust me." },
         ],
       },
     ],
@@ -888,8 +887,8 @@ export const LESSONS: Lesson[] = [
           "から marks where or when something starts: えきから (from the station), 9じから (from nine " +
           "o'clock). Anything with a beginning can wear it.",
         examples: [
-          { jp: "でんしゃが えきから でる", r: "densha ga eki kara deru", en: "The train leaves from the station." },
-          { jp: "9じから はたらく", r: "ku-ji kara hataraku", en: "(I) work from nine." },
+          { jp: "でんしゃが えきから でる", en: "The train leaves from the station." },
+          { jp: "9じから はたらく", en: "(I) work from nine." },
         ],
       },
       {
@@ -898,8 +897,8 @@ export const LESSONS: Lesson[] = [
           "まで marks how far something goes, in space or time: えきまで あるく (walk as far as the station), " +
           "よるまで はたらく (work until night). から and まで love to travel as a pair.",
         examples: [
-          { jp: "えきまで あるく", r: "eki made aruku", en: "(I) walk to the station." },
-          { jp: "あさから よるまで はたらく", r: "asa kara yoru made hataraku", en: "(I) work from morning until night." },
+          { jp: "えきまで あるく", en: "(I) walk to the station." },
+          { jp: "あさから よるまで はたらく", en: "(I) work from morning until night." },
         ],
       },
       {
@@ -909,8 +908,8 @@ export const LESSONS: Lesson[] = [
           "it's cold, SO I'm staying home. The reason comes first, the result after, the reverse of English " +
           "“because”.",
         examples: [
-          { jp: "さむいから、うちに いる", r: "samui kara, uchi ni iru", en: "It's cold, so (I'm) staying home." },
-          { jp: "たかいから、かわない", r: "takai kara, kawanai", en: "It's expensive, so (I) won't buy it." },
+          { jp: "さむいから、うちに いる", en: "It's cold, so (I'm) staying home." },
+          { jp: "たかいから、かわない", en: "It's expensive, so (I) won't buy it." },
         ],
       },
     ],
@@ -963,7 +962,7 @@ export const LESSONS: Lesson[] = [
           "plain form is a real, usable ending, たべる is “(I) eat / will eat” among friends. There is no " +
           "future tense to learn; plain form covers now and later.",
         examples: [
-          { jp: "あした いく", r: "ashita iku", en: "(I'll) go tomorrow., plain form, future meaning" },
+          { jp: "あした いく", en: "(I'll) go tomorrow., plain form, future meaning" },
         ],
       },
       {
@@ -975,9 +974,9 @@ export const LESSONS: Lesson[] = [
           "かく→かき→かきます.\n\nWhich family a る-ending verb belongs to has to be learned, the playground " +
           "tab is built for exactly that experimenting.",
         examples: [
-          { jp: "たべる → たべます", r: "taberu → tabemasu", en: "eat, る-group: る drops off" },
-          { jp: "かく → かきます", r: "kaku → kakimasu", en: "write, う-group: く shifts to き" },
-          { jp: "のむ → のみます", r: "nomu → nomimasu", en: "drink, う-group: む shifts to み" },
+          { jp: "たべる → たべます", en: "eat, る-group: る drops off" },
+          { jp: "かく → かきます", en: "write, う-group: く shifts to き" },
+          { jp: "のむ → のみます", en: "drink, う-group: む shifts to み" },
         ],
       },
       {
@@ -987,8 +986,8 @@ export const LESSONS: Lesson[] = [
           "irregular verbs in the language, and する is everywhere, because thing+する builds verbs: " +
           "べんきょうする (study), りょこうする (travel).",
         examples: [
-          { jp: "べんきょうする → べんきょうします", r: "benkyou suru → benkyou shimasu", en: "study, the する rebel" },
-          { jp: "くる → きます", r: "kuru → kimasu", en: "come, the くる rebel" },
+          { jp: "べんきょうする → べんきょうします", en: "study, the する rebel" },
+          { jp: "くる → きます", en: "come, the くる rebel" },
         ],
       },
       {
@@ -998,7 +997,7 @@ export const LESSONS: Lesson[] = [
           "its stem (たべ, いき) is the hook many other endings hang on, you'll meet it again with たい (want " +
           "to) and ましょう (let's).",
         examples: [
-          { jp: "まいにち みずを のみます", r: "mainichi mizu wo nomimasu", en: "(I) drink water every day., polite" },
+          { jp: "まいにち みずを のみます", en: "(I) drink water every day., polite" },
         ],
       },
     ],
@@ -1050,8 +1049,8 @@ export const LESSONS: Lesson[] = [
           "ending in ない then behaves exactly like an い describing word, remember that, it pays off " +
           "immediately.",
         examples: [
-          { jp: "たべる → たべない", r: "taberu → tabenai", en: "eat → don't eat" },
-          { jp: "かく → かかない", r: "kaku → kakanai", en: "write → don't write" },
+          { jp: "たべる → たべない", en: "eat → don't eat" },
+          { jp: "かく → かかない", en: "write → don't write" },
         ],
       },
       {
@@ -1060,8 +1059,8 @@ export const LESSONS: Lesson[] = [
           "The past is the た form: たべる→たべた (ate). る-group swaps る for た. う-group endings pair up " +
           "the same way they do for て (next lesson): かく→かいた, のむ→のんだ, かう→かった.",
         examples: [
-          { jp: "たべた", r: "tabeta", en: "(I) ate." },
-          { jp: "のんだ", r: "nonda", en: "(I) drank." },
+          { jp: "たべた", en: "(I) ate." },
+          { jp: "のんだ", en: "(I) drank." },
         ],
       },
       {
@@ -1071,8 +1070,8 @@ export const LESSONS: Lesson[] = [
           "(didn't eat).\n\nPolitely, ます has its own set: たべません (don't eat), たべました (ate), たべません" +
           "でした (didn't eat). Four plain forms, four polite forms, that's the whole tense system.",
         examples: [
-          { jp: "たべなかった", r: "tabenakatta", en: "(I) didn't eat." },
-          { jp: "たべませんでした", r: "tabemasen deshita", en: "(I) didn't eat., polite" },
+          { jp: "たべなかった", en: "(I) didn't eat." },
+          { jp: "たべませんでした", en: "(I) didn't eat., polite" },
         ],
       },
     ],
@@ -1126,9 +1125,9 @@ export const LESSONS: Lesson[] = [
           "く→いて (かく→かいて), ぐ→いで, す→して\n" +
           "する→して, くる→きて, and the one oddball: いく→いって.",
         examples: [
-          { jp: "たべる → たべて", r: "taberu → tabete", en: "eat → eating-and…" },
-          { jp: "のむ → のんで", r: "nomu → nonde", en: "drink → drinking-and…" },
-          { jp: "いく → いって", r: "iku → itte", en: "go → going-and… (the oddball)" },
+          { jp: "たべる → たべて", en: "eat → eating-and…" },
+          { jp: "のむ → のんで", en: "drink → drinking-and…" },
+          { jp: "いく → いって", en: "go → going-and… (the oddball)" },
         ],
       },
       {
@@ -1138,16 +1137,16 @@ export const LESSONS: Lesson[] = [
           "(I) eat bread and drink water. Chain as many as you like; the real ending still comes last and " +
           "carries the tense for the whole chain.",
         examples: [
-          { jp: "パンを たべて、みずを のむ", r: "pan wo tabete, mizu wo nomu", en: "(I) eat bread and drink water." },
-          { jp: "おきて、がっこうに いった", r: "okite, gakkou ni itta", en: "(I) got up and went to school., the last word sets the past" },
+          { jp: "パンを たべて、みずを のむ", en: "(I) eat bread and drink water." },
+          { jp: "おきて、がっこうに いった", en: "(I) got up and went to school., the last word sets the past" },
         ],
       },
       {
         heading: "Superpower 2: asking, てください",
         body: "て plus ください asks politely: みてください, please look. まってください, please wait.",
         examples: [
-          { jp: "みてください", r: "mite kudasai", en: "Please look." },
-          { jp: "ちょっと まってください", r: "chotto matte kudasai", en: "Please wait a moment." },
+          { jp: "みてください", en: "Please look." },
+          { jp: "ちょっと まってください", en: "Please wait a moment." },
         ],
       },
       {
@@ -1157,8 +1156,8 @@ export const LESSONS: Lesson[] = [
           "ends in る, it's a る-group verb again, ready for every bend you know: たべています, たべていない, " +
           "たべていた.",
         examples: [
-          { jp: "ねこが ねている", r: "neko ga nete iru", en: "The cat is sleeping." },
-          { jp: "ほんを よんでいる", r: "hon wo yonde iru", en: "(I'm) reading a book." },
+          { jp: "ねこが ねている", en: "The cat is sleeping." },
+          { jp: "ほんを よんでいる", en: "(I'm) reading a book." },
         ],
       },
     ],
@@ -1208,8 +1207,8 @@ export const LESSONS: Lesson[] = [
           "Words like あかい, おおきい, たのしい end in い and already contain “is”, あかい alone means “(it) " +
           "is red”, a full sentence. In front of a thing they describe it directly: あかい はな, a red flower.",
         examples: [
-          { jp: "この ほんは おもしろい", r: "kono hon wa omoshiroi", en: "This book is interesting., no だ needed" },
-          { jp: "あかい はなが さく", r: "akai hana ga saku", en: "A red flower blooms." },
+          { jp: "この ほんは おもしろい", en: "This book is interesting., no だ needed" },
+          { jp: "あかい はなが さく", en: "A red flower blooms." },
         ],
       },
       {
@@ -1219,8 +1218,8 @@ export const LESSONS: Lesson[] = [
           "Drop the い and bend: あかくない (isn't red), あかかった (was red), あかくなかった (wasn't red), " +
           "あかくて (red and…). One warning: never put だ after an い-word, the “is” is already inside.",
         examples: [
-          { jp: "たかくない", r: "takakunai", en: "isn't expensive" },
-          { jp: "たのしかった", r: "tanoshikatta", en: "was fun" },
+          { jp: "たかくない", en: "isn't expensive" },
+          { jp: "たのしかった", en: "was fun" },
         ],
       },
       {
@@ -1230,9 +1229,9 @@ export const LESSONS: Lesson[] = [
           "(うみが しずかだ), and to sit in front of a thing they wear な: しずかな うみ, a quiet sea. That " +
           "な is where the name comes from.\n\nWatch out: きれい ends in い but is a な-word, きれいな はな.",
         examples: [
-          { jp: "うみが しずかだ", r: "umi ga shizuka da", en: "The sea is quiet." },
-          { jp: "しずかな うみ", r: "shizuka na umi", en: "a quiet sea" },
-          { jp: "きれいな はな", r: "kirei na hana", en: "a pretty flower, きれい is a な-word in disguise" },
+          { jp: "うみが しずかだ", en: "The sea is quiet." },
+          { jp: "しずかな うみ", en: "a quiet sea" },
+          { jp: "きれいな はな", en: "a pretty flower, きれい is a な-word in disguise" },
         ],
       },
       {
@@ -1241,8 +1240,8 @@ export const LESSONS: Lesson[] = [
           "な-words bend by bending the borrowed だ: しずかだった (was quiet), しずかじゃない (isn't quiet), " +
           "しずかじゃなかった (wasn't quiet). Same machinery as plain things, because that's what they are.",
         examples: [
-          { jp: "げんきじゃない", r: "genki ja nai", en: "isn't doing well" },
-          { jp: "きれいだった", r: "kirei datta", en: "was pretty" },
+          { jp: "げんきじゃない", en: "isn't doing well" },
+          { jp: "きれいだった", en: "was pretty" },
         ],
       },
     ],
@@ -1286,14 +1285,14 @@ export const LESSONS: Lesson[] = [
     sections: [
       {
         heading: "だけ and しか: only, two ways",
-        visual: { kind: "tags", items: [["だけ", "only", "dake"], ["しか", "only + negative", "shika"], ["ぐらい", "about", "gurai"], ["ごろ", "around", "goro"], ["けど", "but", "kedo"]] },
+        visual: { kind: "tags", items: [["だけ", "only"], ["しか", "only + negative"], ["ぐらい", "about"], ["ごろ", "around"], ["けど", "but"]] },
         body:
           "だけ means “only”, plainly: みずだけ のむ. I drink only water. しか also means “only” but demands a " +
           "negative ending and adds a note of “no more than that”: みずしか のまない. I drink nothing but " +
           "water.\n\nだけ counts what's there; しか laments what isn't.",
         examples: [
-          { jp: "みずだけ のむ", r: "mizu dake nomu", en: "(I) drink only water." },
-          { jp: "みずしか のまない", r: "mizu shika nomanai", en: "(I) drink nothing but water." },
+          { jp: "みずだけ のむ", en: "(I) drink only water." },
+          { jp: "みずしか のまない", en: "(I) drink nothing but water." },
         ],
       },
       {
@@ -1302,8 +1301,8 @@ export const LESSONS: Lesson[] = [
           "ぐらい (or くらい) is “about” for amounts: 3じかんぐらい, about three hours. ごろ is “about” for " +
           "points in time: 3じごろ, around three o'clock. Amounts take ぐらい, clock-points take ごろ.",
         examples: [
-          { jp: "3じかんぐらい べんきょうする", r: "san-jikan gurai benkyou suru", en: "(I) study about three hours." },
-          { jp: "3じごろ かえる", r: "san-ji goro kaeru", en: "(I'll) head back around three." },
+          { jp: "3じかんぐらい べんきょうする", en: "(I) study about three hours." },
+          { jp: "3じごろ かえる", en: "(I'll) head back around three." },
         ],
       },
       {
@@ -1312,7 +1311,7 @@ export const LESSONS: Lesson[] = [
           "とか lists like や but even more casually, “like, stuff such as”: すしとか ラーメンとか たべる, " +
           "I eat sushi, ramen, that kind of thing. Everyday speech leans on it constantly.",
         examples: [
-          { jp: "すしとか ラーメンとか たべる", r: "sushi toka raamen toka taberu", en: "(I) eat things like sushi and ramen." },
+          { jp: "すしとか ラーメンとか たべる", en: "(I) eat things like sushi and ramen." },
         ],
       },
       {
@@ -1322,8 +1321,8 @@ export const LESSONS: Lesson[] = [
           "stacks reasons: やすいし、おいしいし, it's cheap, AND it's tasty (so of course). Both sit on the " +
           "end of a finished thought, like から does.",
         examples: [
-          { jp: "たかいけど、かう", r: "takai kedo, kau", en: "It's expensive, but (I'll) buy it." },
-          { jp: "やすいし、おいしい", r: "yasui shi, oishii", en: "It's cheap, and tasty too." },
+          { jp: "たかいけど、かう", en: "It's expensive, but (I'll) buy it." },
+          { jp: "やすいし、おいしい", en: "It's cheap, and tasty too." },
         ],
       },
     ],
@@ -1382,8 +1381,8 @@ export const LESSONS: Lesson[] = [
           "“(I) ate.” When a sentence looks like it's missing something, it is, and that's fine. Ask who or " +
           "what it must be about, and the answer is almost always sitting in the situation.",
         examples: [
-          { jp: "たべた？", r: "tabeta?", en: "Did (you) eat?" },
-          { jp: "たべた", r: "tabeta", en: "(I) ate." },
+          { jp: "たべた？", en: "Did (you) eat?" },
+          { jp: "たべた", en: "(I) ate." },
         ],
       },
       {
@@ -1393,8 +1392,8 @@ export const LESSONS: Lesson[] = [
           "さくらが よんだ ほん, the book Sakura read (literally: the Sakura-read book). English builds a " +
           "clause after the noun; Japanese stacks it before, in exactly the spot describing words go.",
         examples: [
-          { jp: "さくらが よんだ ほん", r: "sakura ga yonda hon", en: "the book Sakura read" },
-          { jp: "ねている ねこは かわいい", r: "nete iru neko wa kawaii", en: "The sleeping cat is cute." },
+          { jp: "さくらが よんだ ほん", en: "the book Sakura read" },
+          { jp: "ねている ねこは かわいい", en: "The sleeping cat is cute." },
         ],
       },
       {
@@ -1407,7 +1406,6 @@ export const LESSONS: Lesson[] = [
         examples: [
           {
             jp: "きのう ともだちと えいがを みて、ラーメンを たべた",
-            r: "kinou tomodachi to eiga wo mite, raamen wo tabeta",
             en: "Yesterday (I) watched a film with a friend and ate ramen.",
           },
         ],
