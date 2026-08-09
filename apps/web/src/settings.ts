@@ -418,8 +418,13 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
       msg.textContent = "Syncing…";
       msg.className = "msg";
       try {
-        const result = await syncNow();
-        msg.textContent = `Synced: sent ${result.pushed}, received ${result.pulled}.`;
+        // Through the same funnel as the automatic rounds, so a press
+        // during one joins it rather than racing it.
+        const { autoSync } = await import("./auto-sync.js");
+        const result = await autoSync({ force: true, loud: true });
+        msg.textContent = result
+          ? `Synced: sent ${result.pushed}, received ${result.pulled}.`
+          : "Already up to date.";
         msg.className = "msg ok";
       } catch (err) {
         msg.textContent = err instanceof Error ? err.message : String(err);

@@ -146,6 +146,10 @@ onAccountChange(() => route());
 onAccountChange(() => {
   if (!activeAccount()) return;
   void import("./progress-sync.js").then((m) => m.syncProgress()).catch(() => undefined);
+  // The deck travels with the account as well. Without this the cards are
+  // only fetched when somebody presses Sync, and a new device claims an
+  // empty deck until they do.
+  void import("./auto-sync.js").then((m) => m.autoSync()).catch(() => undefined);
 });
 
 /**
@@ -162,8 +166,10 @@ if (activeAccount()) {
   void (async () => {
     if (await getFirebaseConfig()) {
       await currentAccount().catch(() => null);
-      // The session stands: bring over any progress made elsewhere.
+      // The session stands: bring over any progress made elsewhere, and
+      // the cards themselves.
       await import("./progress-sync.js").then((m) => m.syncProgress()).catch(() => undefined);
+      await import("./auto-sync.js").then((m) => m.autoSync()).catch(() => undefined);
     }
   })();
 }
@@ -174,6 +180,7 @@ listenForExtensionCards(
   (count) => {
     toast(`Added ${count} word${count === 1 ? "" : "s"} saved with the extension.`);
     route(); // the deck on screen is now out of date
+    void import("./auto-sync.js").then((m) => m.autoSync({ force: true })).catch(() => undefined);
   },
   () => {
     // The extension introduced itself. Screens that say whether it is there
@@ -207,6 +214,14 @@ if ("serviceWorker" in navigator && import.meta.env.PROD) {
     /* offline support is progressive enhancement */
   });
 }
+
+// The deck keeps itself up to date: at startup, when the tab comes back,
+// and on a slow timer. A round that brings cards down redraws whatever is
+// on screen, because it was drawn without them.
+void import("./auto-sync.js").then((m) => {
+  m.onSynced(() => route());
+  m.startAutoSync();
+});
 
 // A book left half-read by "OCR all pages" carries on where it stopped —
 // here while the app is open, and in the service worker once it is not.
