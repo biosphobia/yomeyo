@@ -1217,6 +1217,196 @@ export const SCENARIOS: Scenario[] = [
       s.once("pop", 14.2, () => s.sfx.open());
     },
   },
+
+  /**
+   * Kaiju. Yuuri, five storeys of her, washed faintly green and coming up
+   * the avenue one building at a time. Chito, regular size, running for
+   * both their lives. Every stomp lands through the camera; the buildings
+   * are spare crates worn sideways; the last warehouse coughs up the prize.
+   */
+  {
+    id: "kaiju",
+    location: "city",
+    seconds: 18,
+    opensAt: 15.2,
+    shots: [
+      // Street level, looking up the avenue into fog: a silhouette too big.
+      { at: 0, from: [0.9, 0.5, 4.6], look: [0, 6.5, -20], to: [0.7, 0.7, 4.2], shake: 0.03 },
+      // The one running: close, low, terror at a steady jog.
+      {
+        at: 3.2,
+        from: (s) => {
+          const p = s.cast[1]?.root.position;
+          return [(p?.x ?? 0) + 1.25, 1.3, (p?.z ?? 0) + 2.3];
+        },
+        look: (s) => posOf(s.cast[1], 1.15),
+        fov: 30,
+        shake: 0.05,
+      },
+      // The whole of her, framed like the poster.
+      {
+        at: 6.0,
+        from: [-2.6, 1.0, 2.4],
+        look: (s) => posOf(s.cast[0], 5.6),
+        fov: 46,
+        shake: 0.06,
+      },
+      // Wide for the demolition.
+      { at: 8.6, from: [3.5, 2.3, 3.2], look: [-1.2, 4.2, -10], shake: 0.08 },
+      // Down the giant's shoulder at the snack refusing to stop.
+      {
+        at: 11.4,
+        from: (s) => {
+          const p = s.cast[0]?.root.position;
+          return [(p?.x ?? 0) + 1.4, 8.4, (p?.z ?? 0) + 1.2];
+        },
+        look: (s) => posOf(s.cast[1], 0.9),
+        fov: 34,
+        shake: 0.05,
+      },
+      // Street level for the crate's arrival.
+      { at: 13.2, from: [1.7, 0.9, 4.8], look: [0.3, 0.6, 2.2], shake: 0.04 },
+      // In for the glow.
+      { at: 15.0, from: [0.3, 1.5, 4.7], look: [0.3, 0.45, 2.2], to: [0.3, 1.1, 3.6] },
+    ],
+    lines: [
+      { at: 0.8, seconds: 2.0, who: "Chito", text: "Yuuri? You seem taller" },
+      { at: 2.7, seconds: 1.6, who: "Yuuri", text: "GAO.", loud: true },
+      { at: 4.5, seconds: 2.0, who: "Chito", text: "That is not a word you know" },
+      { at: 6.6, seconds: 1.4, who: "", text: "(a building files no complaint)" },
+      { at: 8.7, seconds: 1.8, who: "Yuuri", text: "the city is crunchy" },
+      { at: 10.5, seconds: 1.8, who: "Chito", text: "I am NOT rations!", loud: true },
+      { at: 12.4, seconds: 1.6, who: "Yuuri", text: "everything is rations" },
+      { at: 13.9, seconds: 1.4, who: "", text: "(a warehouse surrenders its last crate)" },
+      { at: 15.5, seconds: 1.8, who: "Yuuri", text: "it dropped a snack", loud: true },
+    ],
+    run(t, _dt, s) {
+      const [yuuri, chito] = s.cast;
+
+      // The buildings: spare crates stood up five storeys, lining the
+      // avenue. [x, z, height]. Painted once, the first frame they exist.
+      const BUILDINGS: [number, number, number][] = [
+        [-4.4, -22, 7.5],
+        [4.6, -19, 9],
+        [-4.2, -15.5, 8],
+        [4.4, -12, 7.5],
+        [-4.5, -9, 9],
+        [4.3, -6.2, 8],
+      ];
+      // The giant's march: from deep fog to looming, at one speed, so each
+      // building's demolition time falls straight out of her position.
+      const MARCH_FROM = -26;
+      const MARCH_TO = -4.5;
+      const MARCH_SECONDS = 14;
+      const giantZ = MARCH_FROM + (MARCH_TO - MARCH_FROM) * clamp01(t / MARCH_SECONDS);
+      const smashTime = (z: number): number => ((z - MARCH_FROM) / (MARCH_TO - MARCH_FROM)) * MARCH_SECONDS + 0.3;
+
+      BUILDINGS.forEach(([x, z, h], i) => {
+        const building = s.spares[i];
+        if (!building) return;
+        building.visible = true;
+        if (t < 0.1) {
+          building.traverse((node: any) => {
+            if (node.isMesh) node.material.color.setHex(i % 2 === 0 ? 0x525a66 : 0x464e5a);
+          });
+        }
+        building.scale.set(3.2, h / 0.72, 3.2);
+        const falls = smashTime(z);
+        if (t < falls) {
+          building.position.set(x, h / 2, z);
+          building.rotation.set(0, 0, 0);
+        } else {
+          // Swatted: it leans away from the street, sinks, and stays down.
+          const p = smooth(clamp01((t - falls) / 0.9));
+          building.rotation.z = -Math.sign(x) * p * 1.35;
+          building.position.set(x + Math.sign(x) * p * 2.2, h / 2 - p * (h * 0.42), z);
+          s.once(`crash${i}`, falls, () => {
+            s.sfx.clatter();
+            s.sfx.thud();
+          });
+        }
+      });
+
+      // The kaiju herself: five times anybody's size, faintly reactor-green,
+      // little arms out front, one slow stomp after another.
+      if (yuuri) {
+        yuuri.root.scale.setScalar(5);
+        tint(yuuri, s.THREE, 0x7fd06a, 0.5);
+        const STEP = 1.3;
+        const stepPhase = (t % STEP) / STEP;
+        const marching = t < MARCH_SECONDS;
+        yuuri.root.position.set(
+          Math.sin(t * 0.7) * 0.4,
+          marching ? Math.abs(Math.sin(stepPhase * Math.PI)) * 0.35 : 0,
+          giantZ,
+        );
+        yuuri.root.rotation.z = marching ? Math.sin(t * (Math.PI / STEP)) * 0.05 : 0;
+        face(yuuri);
+        // A swat when a building is due; T-rex arms the rest of the time.
+        const swatting = BUILDINGS.some(([, z]) => Math.abs(t - smashTime(z)) < 0.35);
+        pose(yuuri, "clear", 1);
+        if (swatting) pose(yuuri, "swing", 1);
+        else pose(yuuri, "reach", 0.45);
+        if (marching) {
+          for (let n = 0; n < Math.floor(t / STEP); n++) {
+            s.once(`hit${n}`, n * STEP + STEP * 0.5, () => {
+              s.sfx.thud();
+            });
+          }
+        }
+      }
+      s.once("roar1", 2.6, () => {
+        s.sfx.menace(1.4);
+        s.sfx.growl();
+      });
+      s.once("roar2", 9.2, () => {
+        s.sfx.menace(1.2);
+        s.sfx.growl();
+      });
+
+      // The snack: flat out down the middle of the road, one look back she
+      // immediately regrets, sheltering behind the crate once it lands.
+      if (chito) {
+        s.walking = t < 14.4;
+        const glance = t >= 7.4 && t < 8.2;
+        const run = clamp01(t / 14.4);
+        chito.root.position.set(
+          0.35 + Math.sin(t * 2.1) * 0.25,
+          0,
+          -6 + 10.2 * smooth(run),
+        );
+        face(chito, glance ? Math.PI : 0);
+        pose(chito, "clear", 1);
+        pose(chito, "panic", glance ? 1 : 0.55 + Math.sin(t * 6) * 0.15, t);
+        if (t >= 14.4) {
+          face(chito, Math.PI); // turned back to watch, from cover
+          pose(chito, "clear", 1);
+          pose(chito, "gaze", 0.8);
+        }
+      }
+
+      // The last warehouse gives up the goods: the crate arcs out of the
+      // wreckage and lands in the road between them.
+      const EJECT = smashTime(-6.2) + 0.15;
+      if (t >= EJECT) {
+        const p = clamp01((t - EJECT) / 0.85);
+        showCrate(
+          s,
+          mix(4.3, 0.3, p),
+          Math.sin(p * Math.PI) * 2.6 + (1 - p) * 2.2,
+          mix(-6.2, 2.2, p),
+        );
+        s.crate.rotation.z = p * Math.PI * 2;
+        if (p >= 1) {
+          s.crate.rotation.z = 0;
+          s.crate.position.y = 0.36;
+        }
+        s.once("land-crate", EJECT + 0.85, () => s.sfx.thud());
+      }
+      s.once("pop", 15.2, () => s.sfx.open());
+      popLid(s, (t - 15.2) / 0.8);
+    },
+  },
 ];
 
 /** Where somebody is, plus a height — used by the shot definitions. */
