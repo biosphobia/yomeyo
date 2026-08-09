@@ -5483,13 +5483,26 @@ button.gram-swap-line:hover {
 .bk-controls .glosses { font-size: 0.8rem; }
 #bk-status:empty { display: none; padding: 0; }
 .bk-pager, .bk-zoom { display: flex; align-items: center; gap: 6px; }
-.bk-textview { max-height: 70vh; overflow-y: auto; }
+/* Same for a chapter of text: it runs as long as it runs, and the page
+   scrolls. A scrollbox inside a scrollable page pleases nobody. */
+.bk-textview { max-height: none; }
 
 /* Page stage: scrolls in both directions once zoomed past its box. */
+/*
+ * The page is not kept in a little window of its own.
+ *
+ * This used to cap at 76vh and scroll inside itself, which on a desktop
+ * meant a manga page arrived with a scrollbar down its side and only two
+ * thirds of it visible — a reader scrolling a picture inside a page that
+ * also scrolls. It is simply as tall as it is now, and the document
+ * scrolls the way documents do. Sideways is the exception: past the width
+ * of the panel, which only happens when zoomed in, the page slides within
+ * the stage rather than pushing the whole app wider.
+ */
 .bk-stage {
   margin-top: 10px;
-  overflow: auto;
-  max-height: 76vh;
+  overflow-x: auto;
+  overflow-y: hidden;
   border-radius: 10px;
   background: #101018;
   touch-action: pan-x pan-y;

@@ -90,6 +90,24 @@ function renderTappableText(view: HTMLElement, text: string, status: HTMLElement
   });
 }
 
+/**
+ * How wide to draw a page, given its shape.
+ *
+ * On a phone the answer is the panel's width: you read down the page and
+ * scroll, which is how a phone reads anything. On a desktop there is
+ * height to spare and no reason to make somebody scroll a picture at all,
+ * so the page is drawn to whichever of width or height runs out first —
+ * the whole page on screen, in one piece. Zoom multiplies whatever that
+ * came to, and panning takes over from there.
+ */
+function pageWidthFor(stage: HTMLElement, aspect: number, zoom: number): number {
+  const byWidth = stage.clientWidth || 640;
+  if (window.innerWidth < 900) return Math.round(byWidth * zoom);
+  const top = Math.max(0, stage.getBoundingClientRect().top);
+  const room = Math.min(window.innerHeight, Math.max(360, window.innerHeight - top - 24));
+  return Math.round(Math.min(byWidth, room * aspect) * zoom);
+}
+
 // ---------------- opening a book ----------------
 
 export async function openBook(host: HTMLElement, book: BookInfo, onBack: () => void): Promise<Closeable> {
@@ -257,7 +275,7 @@ async function openPdf(blob: Blob, ui: Ui): Promise<Closeable> {
     await setMeta(POS_PREFIX + ui.book.id, page);
     const pdfPage = await doc.getPage(page);
     const base = pdfPage.getViewport({ scale: 1 });
-    const scale = ((stage.clientWidth || 640) / base.width) * zoom;
+    const scale = pageWidthFor(stage, base.width / base.height, zoom) / base.width;
     const viewport = pdfPage.getViewport({ scale });
     canvas.width = Math.round(viewport.width * devicePixelRatio);
     canvas.height = Math.round(viewport.height * devicePixelRatio);
@@ -394,7 +412,7 @@ async function openPictures(blob: Blob, ui: Ui): Promise<Closeable> {
       img.onerror = () => resolve();
       img.src = url!;
     });
-    const width = Math.round((stage.clientWidth || 640) * zoom);
+    const width = pageWidthFor(stage, (img.naturalWidth || 1) / (img.naturalHeight || 1), zoom);
     img.style.width = `${width}px`;
     pageBox.style.width = `${width}px`;
     pageBox.style.height = "auto";
