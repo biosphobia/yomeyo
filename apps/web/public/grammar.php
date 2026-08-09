@@ -13,6 +13,7 @@
  *   POST grammar.php {prompt, mode:parse}     one real sentence, taken apart
  *   POST grammar.php {prompt, mode:deck}      vocabulary cards for a deck
  *   POST grammar.php {prompt, mode:translate} one built word, translated
+ *   POST grammar.php {prompt, mode:explain}   why a quiz answer was right/wrong
  *
  * On a host without the key file the app notices and simply uses the
  * sentences that ship with it, so nothing here is ever load-bearing.
@@ -74,6 +75,7 @@ $mode = (string) ($req["mode"] ?? "");
 $parse = ($mode === "parse");
 $deck = ($mode === "deck");
 $translate = ($mode === "translate");
+$explain = ($mode === "explain");
 
 // Taking a real sentence apart adds kanji, a reading per piece, and the
 // whole-sentence translations; writing practice sentences does not.
@@ -110,7 +112,17 @@ $translateSchema = [
   "additionalProperties" => false,
 ];
 
-$schema = $translate
+// Feedback on one answered question: a sentence or two, nothing else.
+$explainSchema = [
+  "type" => "object",
+  "properties" => ["why" => ["type" => "string"]],
+  "required" => ["why"],
+  "additionalProperties" => false,
+];
+
+$schema = $explain
+  ? $explainSchema
+  : ($translate
   ? $translateSchema
   : ($deck
   ? [
@@ -150,16 +162,27 @@ $schema = $translate
       ],
       "required" => ["sentences"],
       "additionalProperties" => false,
-    ]));
+    ])));
 
 $body = [
-  "model" => "claude-sonnet-5",
-  "max_tokens" => 16000,
-  "output_config" => [
-    "effort" => $parse ? "high" : ($translate ? "low" : "medium"),
-    "format" => ["type" => "json_schema", "schema" => $schema],
-  ],
-  "system" => $translate
+  // Feedback has to land while the answer still stings, so it rides the
+  // fastest model; everything else keeps the careful one.
+  "model" => $explain ? "claude-haiku-4-5-20251001" : "claude-sonnet-5",
+  "max_tokens" => $explain ? 300 : 16000,
+  "output_config" => $explain
+    ? ["format" => ["type" => "json_schema", "schema" => $schema]]
+    : [
+        "effort" => $parse ? "high" : ($translate ? "low" : "medium"),
+        "format" => ["type" => "json_schema", "schema" => $schema],
+      ],
+  "system" => $explain
+    ? "You give feedback on one answered quiz question in a beginner " .
+      "Japanese course. One or two short sentences, plain everyday words, " .
+      "no grammar jargon, no em dashes, no scolding. If they were right, " .
+      "say in a few words why that answer does the job. If they were " .
+      "wrong, say what the word they picked actually does and why the " .
+      "correct one fits this sentence. Do not repeat the question."
+    : ($translate
     ? "You translate a learner's playground output: a single conjugated " .
       "Japanese word, or a short sentence built from a pattern. Give the " .
       "shortest natural English that carries the form, tense, politeness, " .
@@ -179,7 +202,7 @@ $body = [
       "Follow the model and the wording rules in the request exactly."
     : "You write practice sentences for a beginner Japanese course. " .
       "Follow the rules in the request exactly; every sentence is shown to a " .
-      "learner as fact, so a wrong label teaches something wrong.")),
+      "learner as fact, so a wrong label teaches something wrong."))),
   "messages" => [["role" => "user", "content" => $prompt]],
 ];
 

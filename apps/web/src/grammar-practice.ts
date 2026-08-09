@@ -299,7 +299,37 @@ export async function runUnit(
         ? `<div class="gram-lit">literally: ${escapeHtml(task.sentence.lit)}</div>`
         : "";
       if (!missed) gotRight++;
-      feedback.innerHTML = `${note}<div class="glosses">Enter (or tap) to continue</div>`;
+      feedback.innerHTML = `${note}<div class="ai-why" id="gram-why">…</div><div class="glosses">Enter (or tap) to continue</div>`;
+      // Claude's line or two on why, while the sentence is still open on
+      // screen. Never waited on: the dots resolve or quietly go.
+      {
+        const whyBox = feedback.querySelector<HTMLDivElement>("#gram-why");
+        const plain = (html: string): string => html.replace(/<[^>]+>/g, "").trim();
+        const nameOf = (chunk?: Chunk): string | null =>
+          chunk ? `${chunk.t || "(nothing said)"}${chunk.g ? ` (${chunk.g})` : ""}` : null;
+        const jp = task.sentence.chunks
+          .filter((c) => c.role !== "ghost")
+          .map((c) => c.t)
+          .join("");
+        void import("./grammar-ai.js")
+          .then((ai) =>
+            ai.explainAnswer({
+              question: plain(promptFor(task)),
+              sentence: `${jp} = "${task.sentence.en}"`,
+              picked:
+                nameOf(marks?.mistake) ??
+                (missed ? plain(note) || "a different piece" : (nameOf(marks?.answer) ?? "the correct piece")),
+              correct: nameOf(marks?.answer) ?? (plain(note) || "the shown answer"),
+              wasRight: !missed,
+            }),
+          )
+          .then((why) => {
+            if (!whyBox?.isConnected) return;
+            if (why) whyBox.textContent = why;
+            else whyBox.remove();
+          })
+          .catch(() => whyBox?.remove());
+      }
       void showReaction(body.querySelector("#gram-cheer"), missed ? "wrong" : "correct");
       void speak(spoken(task.sentence), { rate: 0.85 }).catch(() => undefined);
       const panel = body.querySelector<HTMLDivElement>(".gram-quiz")!;

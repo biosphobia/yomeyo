@@ -463,7 +463,29 @@ function runQuiz(
         feedback.innerHTML = `${
           good ? `<span class="ok-text">✓</span>` : `<span class="err-text">✗</span>`
         } <span class="glosses">${escapeHtml(question.why)}</span>
+          <div class="ai-why" id="lq-why">…</div>
           <div class="glosses">Enter (or tap) to continue</div>`;
+        // Claude says why, in a line or two, while the answer is still on
+        // screen. The dots resolve or quietly disappear; nothing waits.
+        {
+          const whyBox = feedback.querySelector<HTMLDivElement>("#lq-why");
+          void import("./grammar-ai.js")
+            .then((ai) =>
+              ai.explainAnswer({
+                question: question.q,
+                sentence: question.jp,
+                picked: question.choices[picked],
+                correct: question.choices[question.answer],
+                wasRight: good,
+              }),
+            )
+            .then((why) => {
+              if (!whyBox?.isConnected) return;
+              if (why) whyBox.textContent = why;
+              else whyBox.remove();
+            })
+            .catch(() => whyBox?.remove());
+        }
         void showReaction(body.querySelector("#lq-cheer"), good ? "correct" : "wrong");
         // A line with a gap in it would be read out with the answer missing,
         // which sounds like broken Japanese — whole lines only.

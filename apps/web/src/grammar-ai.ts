@@ -165,3 +165,67 @@ export async function generateSentences(
     return null;
   }
 }
+
+// ---------------- why an answer was right or wrong ----------------
+
+export interface AnswerContext {
+  /** The question as the learner saw it. */
+  question: string;
+  /** The sentence involved, if there is one. */
+  sentence?: string;
+  /** What they picked, and what was correct, named plainly. */
+  picked: string;
+  correct: string;
+  wasRight: boolean;
+}
+
+/** The same answer to the same question is the same explanation. */
+const explainCache = new Map<string, Promise<string | null>>();
+
+/**
+ * A sentence or two from Claude on why this answer was right or wrong,
+ * or null when the endpoint is missing, slow, or answers nonsense — the
+ * quiz never waits on this, it only gets better when it lands.
+ */
+export function explainAnswer(input: AnswerContext): Promise<string | null> {
+  const key = JSON.stringify(input);
+  const held = explainCache.get(key);
+  if (held) return held;
+
+  const asking = (async (): Promise<string | null> => {
+    if (!(await generationAvailable())) return null;
+    const prompt =
+      `A beginner answered a quiz question in a Japanese course.\n` +
+      `Question: ${input.question}\n` +
+      (input.sentence ? `Sentence: ${input.sentence}\n` : "") +
+      `Correct answer: ${input.correct}\n` +
+      `Their answer: ${input.picked} (${input.wasRight ? "correct" : "wrong"})\n` +
+      `Explain briefly why their answer was ${input.wasRight ? "right" : "wrong"}.`;
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 12000);
+      const res = await fetch(assetUrl("grammar.php"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ prompt, mode: "explain" }),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      if (!res.ok) return null;
+      const { raw } = (await res.json()) as { raw?: string };
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as { why?: string };
+      const why = typeof parsed.why === "string" ? parsed.why.trim() : "";
+      return why || null;
+    } catch {
+      return null;
+    }
+  })();
+
+  explainCache.set(key, asking);
+  // A failure is not an answer: forget it, so the next encounter retries.
+  void asking.then((why) => {
+    if (why === null) explainCache.delete(key);
+  });
+  return asking;
+}
