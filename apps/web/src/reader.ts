@@ -75,7 +75,7 @@ async function openShelfBook(main: HTMLElement, body: HTMLElement, id: string): 
 // ---------------- my books ----------------
 
 async function renderShelf(main: HTMLElement, body: HTMLElement): Promise<void> {
-  const { listBooks, addBookFromFile, forgetBook, publishBook, unpublishBook, shelfAccount, SHARE_LIMIT_BYTES } =
+  const { listBooks, addBookFromFiles, forgetBook, publishBook, unpublishBook, shelfAccount, SHARE_LIMIT_BYTES } =
     await import("./books.js");
   const books = await listBooks();
   const account = await shelfAccount();
@@ -83,11 +83,12 @@ async function renderShelf(main: HTMLElement, body: HTMLElement): Promise<void> 
   body.innerHTML = `
     <div class="card-panel">
       <b>Add something to read</b>
-      <div class="glosses">PDF, EPUB, CBZ (manga), plain text, HTML, subtitles, or a single image.
+      <div class="glosses">PDF, EPUB, CBZ (manga), plain text, HTML, subtitles, or images.
+        Select many page images at once and they become one book, ordered by filename.
         Pages the computer cannot read get OCR, so even manga is tappable.</div>
       <div class="row-actions" style="margin-top:10px">
-        <button id="bk-upload">Upload a file…</button>
-        <input type="file" id="bk-file" style="display:none"
+        <button id="bk-upload">Upload files…</button>
+        <input type="file" id="bk-file" style="display:none" multiple
           accept=".pdf,.epub,.cbz,.zip,.txt,.md,.html,.htm,.srt,.ass,.png,.jpg,.jpeg,.webp,.gif" />
       </div>
     </div>
@@ -98,10 +99,10 @@ async function renderShelf(main: HTMLElement, body: HTMLElement): Promise<void> 
   const fileInput = body.querySelector<HTMLInputElement>("#bk-file")!;
   body.querySelector("#bk-upload")!.addEventListener("click", () => fileInput.click());
   fileInput.addEventListener("change", async () => {
-    const file = fileInput.files?.[0];
-    if (!file) return;
+    const files = [...(fileInput.files ?? [])];
+    if (files.length === 0) return;
     try {
-      const book = await addBookFromFile(file);
+      const book = await addBookFromFiles(files);
       openBookId = book.id;
       renderReader(main);
     } catch (err) {
