@@ -5254,3 +5254,75 @@ button.gram-swap-line:hover {
   flex: 0 1 260px;
   accent-color: var(--accent);
 }
+
+/* ---------------- the admin panel ---------------- */
+
+.adm-user-row {
+  all: unset;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.adm-user-row:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.adm-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+.adm-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin: 8px 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.adm-section { margin-top: 14px; }
+.adm-grants input, .adm-dayrow input[type="date"] {
+  background: var(--panel-2, var(--panel));
+  color: inherit;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+}
+.adm-quest {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+}
+.adm-quest-name { flex: 1; min-width: 0; }
+.adm-quest input[type="number"] {
+  width: 72px;
+  background: var(--panel-2, var(--panel));
+  color: inherit;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px;
+}
+.adm-prizes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 4px 12px;
+  margin-top: 8px;
+}
+.adm-prize {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  cursor: pointer;
+}
+.adm-prize span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

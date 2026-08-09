@@ -69,6 +69,8 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
       <div id="account-body"></div>
     </div>
 
+    <div id="admin-home"></div>
+
     <div class="card-panel">
       <b>Scheduling</b>
       <div id="deck-config"></div>
@@ -147,6 +149,18 @@ export async function renderSettings(main: HTMLElement, isCurrent: () => boolean
   void renderDeckConfig(main, advanced);
   renderAnkiImport(main, account, advanced);
   wireDictionary(main);
+  // The admin panel, for exactly one account: the admin/owner seat holder.
+  // Everyone else never sees the card and never pays for the module.
+  if (account) {
+    void import("./library.js")
+      .then((library) => library.adminState())
+      .then(async (state) => {
+        const home = main.querySelector<HTMLElement>("#admin-home");
+        if (!state.isAdmin || !isCurrent() || !home) return;
+        await import("./admin-panel.js").then((m) => m.mountAdminPanel(home));
+      })
+      .catch(() => undefined);
+  }
   if (advanced) {
     void renderExtraDictionaries(main);
     wireServerSync(main);

@@ -184,10 +184,21 @@ const KEYS: { key: string; merge: Merge }[] = [
   { key: "gachaItems", merge: perKeyMax },
   { key: "yuuriDoorBribes", merge: larger },
   { key: "questStart", merge: earliestDay },
-  { key: "questLog", merge: questLogMerge },
   { key: "questXpAwarded", merge: paidUnion },
   { key: "casinoGateSeen", merge: seenMerge },
 ];
+
+/**
+ * The quest log is special: the admin panel can rewrite anyone's calendar —
+ * completing a missed day, deleting one — and a deletion can never survive
+ * a max-merge. So the panel writes the log verbatim and bumps
+ * `questLogRev`; a client that sees a rev ahead of its own adopts the
+ * remote log as-is, once, and organic play merges on top as before.
+ */
+const QUEST_LOG_KEY = "questLog";
+const QUEST_REV_KEY = "questLogRev";
+/** The user's own hidden-prize list; only ever written by the admin panel. */
+const HIDDEN_PRIZES_KEY = "hiddenPrizes";
 
 let running: Promise<boolean> | null = null;
 
@@ -227,6 +238,37 @@ async function exchange(): Promise<boolean> {
         localChanged = true;
       }
       if (!same(merged, remote[key])) upload[key] = canonical(merged);
+    }
+
+    // The quest log: adopt an admin rewrite outright, merge otherwise.
+    {
+      const localLog = await getMeta<unknown>(QUEST_LOG_KEY);
+      const localRev = num(await getMeta<unknown>(QUEST_REV_KEY));
+      const remoteRev = num(remote[QUEST_REV_KEY]);
+      if (remoteRev > localRev && isMap(remote[QUEST_LOG_KEY])) {
+        await setMeta(QUEST_LOG_KEY, remote[QUEST_LOG_KEY]);
+        await setMeta(QUEST_REV_KEY, remoteRev);
+        localChanged = true;
+      } else {
+        const merged = questLogMerge(localLog, remote[QUEST_LOG_KEY]);
+        if (merged !== undefined) {
+          if (!same(merged, localLog)) {
+            await setMeta(QUEST_LOG_KEY, merged);
+            localChanged = true;
+          }
+          if (!same(merged, remote[QUEST_LOG_KEY])) upload[QUEST_LOG_KEY] = canonical(merged);
+        }
+      }
+    }
+
+    // The hidden-prize list is the admin's alone: whatever the cloud says
+    // stands, and the client never writes it back.
+    if (Array.isArray(remote[HIDDEN_PRIZES_KEY])) {
+      const local = await getMeta<unknown>(HIDDEN_PRIZES_KEY);
+      if (!same(remote[HIDDEN_PRIZES_KEY], local)) {
+        await setMeta(HIDDEN_PRIZES_KEY, remote[HIDDEN_PRIZES_KEY]);
+        localChanged = true;
+      }
     }
 
     if (Object.keys(upload).length > 0) {

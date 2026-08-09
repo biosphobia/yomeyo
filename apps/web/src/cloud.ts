@@ -455,8 +455,16 @@ export async function firestoreBackend(): Promise<SyncBackend> {
       for (let i = 0; i < cards.length; i += 400) {
         const batch = storeApi.writeBatch(db);
         for (const card of cards.slice(i, i + 400)) {
+          // Firestore refuses `undefined` outright — one card carrying
+          // `sentence: undefined` (imports do this) failed the whole batch.
+          // An absent optional field and an undefined one mean the same
+          // thing here, so drop them.
+          const clean: Record<string, unknown> = {};
+          for (const [key, value] of Object.entries(card)) {
+            if (value !== undefined) clean[key] = value;
+          }
           batch.set(storeApi.doc(cardsRef, card.id), {
-            ...card,
+            ...clean,
             syncedAt: storeApi.serverTimestamp(),
           });
         }

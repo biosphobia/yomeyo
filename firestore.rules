@@ -55,11 +55,14 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      // The user document itself holds nothing; cards live beneath it.
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      // The user document holds the deck records and the account's synced
+      // progress. The admin may read anyone's and write it — that is the
+      // admin panel: fixing a calendar day, granting a missed streak,
+      // curating which gacha prizes an account sees.
+      allow read, write: if (request.auth != null && request.auth.uid == userId) || isAdmin();
 
       match /cards/{cardId} {
-        allow read: if isOwner(userId);
+        allow read: if isOwner(userId) || isAdmin();
         allow delete: if isOwner(userId);
         allow create, update: if isOwner(userId) && isValidCard();
       }

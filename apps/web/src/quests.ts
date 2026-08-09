@@ -83,6 +83,9 @@ export function dateKey(date: Date = new Date()): string {
 
 const START_KEY = "questStart";
 let startCached: string | null = null;
+onAccountChange(() => {
+  startCached = null;
+});
 
 /** The journey's day 1, fixed the first time anything asks. */
 export async function questStart(): Promise<string> {
@@ -193,7 +196,15 @@ function vanityQuest(day: number): QuestDef {
  * nobody misses a quest that was never put to them.
  */
 export async function planForDay(key: string): Promise<DayPlan> {
-  const start = await questStart();
+  return planForDayFrom(key, await questStart());
+}
+
+/**
+ * The same plan, from an explicit journey start. The plan is a pure function
+ * of the date and the start day, which is what lets the admin panel work out
+ * anyone's day: their start travels in their synced progress.
+ */
+export function planForDayFrom(key: string, start: string): DayPlan {
   const day = dayNumber(key, start);
   const hiragana = KANA_GROUPS.filter((group) => group.script === "hiragana");
 

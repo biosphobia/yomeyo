@@ -1,5 +1,5 @@
 import { assetUrl } from "./store.js";
-import { getMeta, setMeta } from "./db.js";
+import { getMeta, onAccountChange, setMeta } from "./db.js";
 
 /**
  * What the gacha can give out, and how likely each is.
@@ -158,6 +158,12 @@ function cleanPrize(raw: unknown, rarities: Record<string, RarityInfo>): Prize |
 }
 
 let loaded: Promise<PrizeTable> | null = null;
+// The table folds in per-account state (local edits, the admin's hidden
+// list), so a different account — or a sync that changed either — means a
+// rebuild.
+onAccountChange(() => {
+  loaded = null;
+});
 
 /**
  * The admin's local edits: per-prize rarity, name and caption, laid over
@@ -252,11 +258,20 @@ export function prizeTable(): Promise<PrizeTable> {
         if (merged.type === "gif" && (edit.on === "correct" || edit.on === "wrong")) merged.on = edit.on;
         return merged;
       };
+      // Prizes the admin has hidden for this account: not shown, not
+      // drawable, not in the reaction pool — as if the table never had them.
+      const hidden = new Set(
+        ((await getMeta<string[]>("hiddenPrizes").catch((): string[] => [])) ?? []).filter(
+          (id): id is string => typeof id === "string",
+        ),
+      );
       const prizes = (
         Array.isArray(raw.prizes)
           ? raw.prizes.map((p) => cleanPrize(p, rarities)).filter((p): p is Prize => p !== null)
           : []
-      ).map((prize) => apply(apply(prize, (global as Record<string, PrizeOverride>)[prize.id]), local[prize.id]));
+      )
+        .filter((prize) => !hidden.has(prize.id))
+        .map((prize) => apply(apply(prize, (global as Record<string, PrizeOverride>)[prize.id]), local[prize.id]));
       return {
         cost: typeof raw.cost === "number" && raw.cost > 0 ? Math.floor(raw.cost) : FALLBACK.cost,
         draw: (raw.draw === "rarity" ? "rarity" : "uniform") as DrawMode,
