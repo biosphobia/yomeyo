@@ -1,7 +1,7 @@
 import { openZip } from "@yomeyo/core";
 import { getMeta, getMetaByPrefix, setMeta } from "./db.js";
 import { getMedia } from "./media.js";
-import { cachedOcr, newCanvas, ocrPage, type AnyCanvas } from "./ocr.js";
+import { cachedOcr, newCanvas, ocrPage, OcrBusyError, type AnyCanvas } from "./ocr.js";
 
 /**
  * Reading a whole book, page after page, without anybody watching.
@@ -31,6 +31,10 @@ export interface OcrJob {
   state: "running" | "paused" | "done";
   /** Set when the job cannot run here at all (a PDF in the background). */
   note?: string;
+  /** Why the last page that would not read did not read. */
+  lastError?: string;
+  /** When a busy server asked us to come back; the job resumes itself. */
+  waitUntil?: number;
   startedAt: number;
   updatedAt: number;
 }
@@ -117,7 +121,10 @@ export async function forgetJob(bookId: string): Promise<void> {
 
 /** Is anything waiting to be read? Asked on startup, and by the worker. */
 export async function pendingJobs(): Promise<OcrJob[]> {
-  return Object.values(await allJobs()).filter((job) => job.state === "running");
+  const now = Date.now();
+  return Object.values(await allJobs()).filter(
+    (job) => job.state === "running" && !(job.waitUntil && job.waitUntil > now),
+  );
 }
 
 // ---------------- getting at a book's pages ----------------
@@ -274,7 +281,7 @@ async function runOne(job: OcrJob, deadline: number, signal?: { stopped: boolean
 
   const done = new Set(job.done);
   let failed = new Set(job.failed);
-  let live: OcrJob = { ...job, total: source.total, note: undefined };
+  let live: OcrJob = { ...job, total: source.total, note: undefined, waitUntil: undefined };
   await writeJob(live);
 
   try {
@@ -301,8 +308,24 @@ async function runOne(job: OcrJob, deadline: number, signal?: { stopped: boolean
           }
           done.add(slot);
           failed.delete(slot);
-        } catch {
+        } catch (err) {
+          if (err instanceof OcrBusyError) {
+            // The service is rate-limiting, which says nothing about this
+            // page. Stop, note when to come back, and leave the job running
+            // so it picks itself up rather than condemning the rest.
+            const seconds = err.retryAfter > 0 ? Math.min(600, err.retryAfter) : 90;
+            await patchJob(job.bookId, {
+              waitUntil: Date.now() + seconds * 1000,
+              lastError: `The reading service was busy. Carrying on in about ${
+                seconds < 90 ? `${seconds} seconds` : `${Math.round(seconds / 60)} minutes`
+              }.`,
+            });
+            return false;
+          }
           failed.add(slot);
+          live = (await patchJob(job.bookId, {
+            lastError: err instanceof Error ? err.message : String(err),
+          })) ?? live;
         }
         live =
           (await patchJob(job.bookId, {

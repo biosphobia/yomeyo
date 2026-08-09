@@ -622,7 +622,9 @@ function offerBatchOcr(ui: Ui, total: number, refresh: () => void): () => void {
         const missed = job.failed.length;
         fill.style.width = "100%";
         text.textContent = missed
-          ? `Read ${job.done.length} of ${job.total} pages. ${missed} would not read — run it again to retry.`
+          ? `Read ${job.done.length} of ${job.total} pages. ${missed} would not read${
+              job.lastError ? `: ${job.lastError}` : ""
+            } — run it again to retry those.`
           : `All ${job.total} pages read.`;
         // A page finished while this one was open deserves its boxes now.
         if (seen !== job.done.length) {
@@ -636,12 +638,15 @@ function offerBatchOcr(ui: Ui, total: number, refresh: () => void): () => void {
     const percent = job.total > 0 ? Math.round((job.done.length / job.total) * 100) : 0;
     fill.style.width = `${percent}%`;
     const running = job.state === "running";
+    const waiting = running && job.waitUntil !== undefined && job.waitUntil > Date.now();
     button.textContent = running ? "⏸ Pause OCR" : "▶ Resume OCR";
-    text.textContent = job.note
-      ? job.note
-      : running
-        ? `Reading page ${Math.min(job.total, job.done.length + 1)} of ${job.total}. This keeps going if you leave.`
-        : `Paused at ${job.done.length} of ${job.total}.`;
+    text.textContent = waiting
+      ? `${job.done.length} of ${job.total} read. ${job.lastError ?? "Waiting to carry on."}`
+      : job.note
+        ? job.note
+        : running
+          ? `Reading page ${Math.min(job.total, job.done.length + 1)} of ${job.total}. This keeps going if you leave.`
+          : `Paused at ${job.done.length} of ${job.total}.`;
     if (seen !== job.done.length) {
       seen = job.done.length;
       refresh();

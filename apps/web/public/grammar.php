@@ -345,11 +345,20 @@ $body = [
   ]],
 ];
 
+// A rate limit is not a failure, it is "later" — so the header that says
+// how much later is kept and handed back to the app.
+$retryAfter = "";
 $ch = curl_init("https://api.anthropic.com/v1/messages");
 curl_setopt_array($ch, [
   CURLOPT_POST => true,
   CURLOPT_RETURNTRANSFER => true,
   CURLOPT_TIMEOUT => 90,
+  CURLOPT_HEADERFUNCTION => function ($curl, $header) use (&$retryAfter) {
+    if (stripos($header, "retry-after:") === 0) {
+      $retryAfter = trim(substr($header, strlen("retry-after:")));
+    }
+    return strlen($header);
+  },
   CURLOPT_HTTPHEADER => [
     "content-type: application/json",
     "x-api-key: " . $key,
@@ -362,9 +371,17 @@ $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
 curl_close($ch);
 
 if ($res === false || $status < 200 || $status >= 300) {
-  http_response_code(502);
+  // Tell the app WHICH kind of no this is. Too many requests, or the model
+  // briefly overloaded, means wait and ask again — quite different from a
+  // request that will never work, and the app backs off rather than
+  // treating a whole book as unreadable.
+  $busy = ($status === 429 || $status === 529 || $status >= 500);
+  http_response_code($busy ? 429 : 502);
+  if ($retryAfter !== "") {
+    header("retry-after: " . $retryAfter);
+  }
   header("content-type: application/json");
-  echo json_encode(["error" => "generation failed"]);
+  echo json_encode(["error" => $busy ? "busy" : "generation failed", "status" => $status]);
   exit;
 }
 

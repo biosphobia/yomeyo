@@ -77,6 +77,26 @@ export interface OcrWord {
 // keeping, so a prefix bump quietly retires them.
 const CACHE_PREFIX = "bookOcr3:";
 
+/**
+ * "Ask again in a moment", not "this cannot be read".
+ *
+ * A whole book is hundreds of requests in a row, and an API answers that
+ * with a rate limit sooner or later. Treating that as a failed page would
+ * condemn the rest of the book on the strength of a queue being full, so
+ * it gets a type of its own and the batch waits instead.
+ */
+export class OcrBusyError extends Error {
+  /** Seconds the server asked us to wait, when it said. */
+  readonly retryAfter: number;
+  constructor(message: string, retryAfter = 0) {
+    super(message);
+    this.name = "OcrBusyError";
+    this.retryAfter = retryAfter;
+  }
+}
+
+const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
 /** Where a shared book's OCR lives, when the book is shared at all. */
 export interface SharedOcrRef {
   id: string;
@@ -157,9 +177,10 @@ function claudeAvailable(): Promise<boolean> {
  * says. The boxes drawn on the page are the detected ones, so they sit on
  * the ink by construction.
  *
- * When detection finds nothing at all, this returns null and Tesseract
- * takes the page — it is a worse reader, but its boxes are its own too.
- * Nothing here ever asks a model where something is.
+ * Null means one thing only: this host has no key, so the fallback engine
+ * should take the page. Anything else that goes wrong is thrown, because
+ * a busy service and a failed request are both "ask again", not "read it
+ * some worse way". Nothing here ever asks a model where something is.
  */
 async function claudeOcr(canvas: AnyCanvas, onStatus?: (line: string) => void): Promise<OcrWord[] | null> {
   if (!(await claudeAvailable())) return null;
@@ -173,9 +194,16 @@ async function claudeOcr(canvas: AnyCanvas, onStatus?: (line: string) => void): 
   }
 
   const found = detectTextBlocks(frame);
-  if (found.length === 0) return null;
+  // Claude is here and found nothing print-shaped: the page is a drawing.
+  // That is an answer, not a failure, and Tesseract would not do better.
+  if (found.length === 0) return [];
   onStatus?.(`Reading ${found.length} block${found.length === 1 ? "" : "s"} of text…`);
-  return transcribeBlocks(frame, found).catch(() => null);
+  const words = await transcribeBlocks(frame, found);
+  // Claude is configured here but this request would not go through. That
+  // is a page to try again later, not a page for the fallback engine —
+  // handing it to Tesseract would download a huge model to do worse.
+  if (!words) throw new Error("The reading service did not answer. Try this page again.");
+  return words;
 }
 
 /** Each detected block, cropped and sent for transcription only. */
@@ -194,12 +222,28 @@ async function transcribeBlocks(frame: AnyCanvas, boxes: DetectedBox[]): Promise
     images.push(await jpegBase64(crop, 0.85));
   }
 
-  const res = await fetch(assetUrl("grammar.php"), {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ mode: "ocr", images, media: "image/jpeg" }),
-  });
-  if (!res.ok) return null;
+  // Hundreds of pages in a row will meet a rate limit. Wait the time the
+  // server asks for (or a growing guess), and only give up after several
+  // tries — and then say it was busy, which is not the same as unreadable.
+  let res: Response | null = null;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    res = await fetch(assetUrl("grammar.php"), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: "ocr", images, media: "image/jpeg" }),
+    }).catch(() => null);
+    if (res?.ok) break;
+    const busy = !res || res.status === 429 || res.status >= 500;
+    if (!busy) return null;
+    if (attempt === 3) {
+      const asked = Number(res?.headers.get("retry-after") ?? 0);
+      throw new OcrBusyError("The reading service is busy.", Number.isFinite(asked) ? asked : 0);
+    }
+    const asked = Number(res?.headers.get("retry-after") ?? 0);
+    const backoff = Number.isFinite(asked) && asked > 0 ? asked * 1000 : 2000 * 3 ** attempt;
+    await wait(Math.min(60000, backoff));
+  }
+  if (!res?.ok) return null;
   const { raw } = (await res.json()) as { raw?: string };
   if (!raw) return null;
   let parsed: { blocks?: unknown[] };
@@ -618,12 +662,16 @@ export async function ocrPage(
   };
 
   // Claude first: better print reading by far, and its boxes are this
-  // device's own. Tesseract only when that could not run at all — the
-  // host has no key, the network is down, or nothing on the page looked
-  // like print. A page Claude did read and found no words on is finished:
-  // it is artwork, and saying so once saves reading it again.
+  // device's own. A page it read and found no words on is finished — it is
+  // artwork, and saying so once saves reading it again.
+  //
+  // Tesseract is for hosts with no key at all. It is emphatically NOT the
+  // answer to a busy server: it would download fifteen megabytes of model
+  // on a phone to do a worse job of a page that was only ever going to
+  // need asking again, so a busy answer is passed up instead and the batch
+  // waits.
   if (isCanvas(image)) {
-    const viaClaude = await claudeOcr(image, onStatus).catch(() => null);
+    const viaClaude = await claudeOcr(image, onStatus);
     if (viaClaude) {
       await setMeta(CACHE_PREFIX + cacheKey, viaClaude);
       contribute(viaClaude);

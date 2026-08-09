@@ -76,6 +76,15 @@ export function resumeOcrJobs(): void {
     if (jobs.length > 0) void runJobs().catch(() => undefined);
   });
 
+  // A job that stopped because the service was busy books its own return.
+  // Nothing else would wake it, so the app checks in periodically and
+  // starts the run again the moment the wait is over.
+  window.setInterval(() => {
+    void pendingJobs().then((jobs) => {
+      if (jobs.length > 0) void runJobs().catch(() => undefined);
+    });
+  }, 30000);
+
   // Leaving, or putting the phone down: hand the rest to the worker.
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") void handOverToWorker();
