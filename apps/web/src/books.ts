@@ -306,7 +306,8 @@ export async function publishBook(
   account: AccountInfo,
   book: BookInfo,
   ownerName: string,
-  onProgress?: (done: number, total: number) => void,
+  onProgress?: (done: number, total: number, bytesSent: number) => void,
+  signal?: { stopped: boolean },
 ): Promise<string> {
   if (book.size > SHARE_LIMIT_BYTES) {
     throw new Error(`Too big to share — the cap is ${Math.round(SHARE_LIMIT_BYTES / 1024 / 1024)}MB.`);
@@ -318,24 +319,47 @@ export async function publishBook(
   const sharedId = `${account.uid}__book_${Date.now().toString(36)}`;
   const bytes = new Uint8Array(await blob.arrayBuffer());
   const blockCount = Math.ceil(bytes.length / BLOCK_BYTES);
-  // Blocks first, record second: a half-uploaded book is invisible, not broken.
-  for (let i = 0; i < blockCount; i++) {
-    await storeApi.setDoc(storeApi.doc(db, "books", sharedId, "blocks", String(i)), {
-      data: bytesToBase64(bytes.subarray(i * BLOCK_BYTES, (i + 1) * BLOCK_BYTES)),
-    });
-    // A big book is hundreds of blocks over whatever connection is to
-    // hand, so the wait is worth narrating.
-    onProgress?.(i + 1, blockCount);
+
+  // Blocks first, record second: a half-uploaded book is invisible, not
+  // broken. Several at a time, because each block is one round trip to the
+  // other side of the world and waiting for each in turn spends most of a
+  // big upload doing nothing at all.
+  let done = 0;
+  let sent = 0;
+  let next = 0;
+  const upload = async (): Promise<void> => {
+    for (;;) {
+      const i = next++;
+      if (i >= blockCount || signal?.stopped) return;
+      const slice = bytes.subarray(i * BLOCK_BYTES, (i + 1) * BLOCK_BYTES);
+      await storeApi.setDoc(storeApi.doc(db, "books", sharedId, "blocks", String(i)), {
+        data: blockPayload(storeApi, slice),
+      });
+      done++;
+      sent += slice.length;
+      onProgress?.(done, blockCount, sent);
+    }
+  };
+  try {
+    await Promise.all(Array.from({ length: Math.min(6, blockCount) }, upload));
+  } catch (err) {
+    throw publishError(err);
   }
-  await storeApi.setDoc(storeApi.doc(db, "books", sharedId), {
-    name: book.name,
-    kind: book.kind,
-    size: bytes.length,
-    blockCount,
-    ownerUid: account.uid,
-    ownerName: ownerName || "Someone",
-    publishedAt: storeApi.serverTimestamp(),
-  });
+  if (signal?.stopped) throw new Error("Sharing stopped. Nothing was published.");
+
+  try {
+    await storeApi.setDoc(storeApi.doc(db, "books", sharedId), {
+      name: book.name,
+      kind: book.kind,
+      size: bytes.length,
+      blockCount,
+      ownerUid: account.uid,
+      ownerName: ownerName || "Someone",
+      publishedAt: storeApi.serverTimestamp(),
+    });
+  } catch (err) {
+    throw publishError(err);
+  }
 
   await saveShelf(
     (await listBooks()).map((b) => (b.id === book.id ? { ...b, sharedId, ownerName } : b)),
@@ -344,6 +368,38 @@ export async function publishBook(
   // downstream pays for a page that has been read once.
   await publishAllOcr(book.id, sharedId).catch(() => undefined);
   return sharedId;
+}
+
+/**
+ * A block's payload, as raw bytes where the database will take them.
+ *
+ * Base64 is a third bigger than what it carries, and a book is the one
+ * thing here big enough for that to matter: eighty megabytes of manga
+ * become a hundred and ten. Firestore has a bytes type; older shared
+ * books were written as base64 strings and are still read as such.
+ */
+function blockPayload(storeApi: typeof import("firebase/firestore"), slice: Uint8Array): unknown {
+  const Bytes = (storeApi as { Bytes?: { fromUint8Array: (b: Uint8Array) => unknown } }).Bytes;
+  return Bytes ? Bytes.fromUint8Array(slice) : bytesToBase64(slice);
+}
+
+/** A stored block, however it was written: raw bytes, or older base64. */
+function blockBytes(data: unknown): Uint8Array | null {
+  if (typeof data === "string") return data ? base64ToBytes(data) : null;
+  const asBytes = (data as { toUint8Array?: () => Uint8Array })?.toUint8Array;
+  return typeof asBytes === "function" ? asBytes.call(data) : null;
+}
+
+/** Say what a refusal actually means, which is nearly always the rules. */
+function publishError(err: unknown): Error {
+  const code = (err as { code?: string })?.code ?? "";
+  if (code.includes("permission-denied")) {
+    return new Error(
+      "The library refused this book. The security rules on the server are older than this app — " +
+        "deploy them (firebase deploy --only firestore:rules) and try again.",
+    );
+  }
+  return err instanceof Error ? err : new Error(String(err));
 }
 
 export async function browseBooks(): Promise<LibraryBook[]> {
@@ -368,17 +424,30 @@ export async function browseBooks(): Promise<LibraryBook[]> {
 }
 
 /** Fetch a shared book onto this shelf. Returns the local book. */
-export async function downloadBook(shared: LibraryBook): Promise<BookInfo> {
+export async function downloadBook(
+  shared: LibraryBook,
+  onProgress?: (done: number, total: number) => void,
+): Promise<BookInfo> {
   const { db, storeApi } = await firestoreApi();
-  const parts: Uint8Array[] = [];
-  for (let i = 0; i < shared.blockCount; i++) {
-    const snapshot = await storeApi.getDoc(storeApi.doc(db, "books", shared.id, "blocks", String(i)));
-    const data = snapshot.data?.();
-    if (!snapshot.exists?.() || typeof data?.data !== "string") {
-      throw new Error("That book is missing a piece; ask its publisher to share it again.");
+  const parts = new Array<Uint8Array>(shared.blockCount);
+  // Several at a time, for the same reason the upload does it.
+  let done = 0;
+  let next = 0;
+  const fetchBlocks = async (): Promise<void> => {
+    for (;;) {
+      const i = next++;
+      if (i >= shared.blockCount) return;
+      const snapshot = await storeApi.getDoc(storeApi.doc(db, "books", shared.id, "blocks", String(i)));
+      const data = snapshot.data?.();
+      const piece = blockBytes(data?.data);
+      if (!snapshot.exists?.() || !piece) {
+        throw new Error("That book is missing a piece; ask its publisher to share it again.");
+      }
+      parts[i] = piece;
+      onProgress?.(++done, shared.blockCount);
     }
-    parts.push(base64ToBytes(data.data));
-  }
+  };
+  await Promise.all(Array.from({ length: Math.min(6, shared.blockCount) }, fetchBlocks));
   const blob = new Blob(parts as unknown as BlobPart[]);
   const id = `shared-${shared.id.slice(-10)}`;
   await saveMedia(bookFileKey(id), blob);

@@ -149,16 +149,36 @@ async function renderShelf(main: HTMLElement, body: HTMLElement): Promise<void> 
       const button = ev.currentTarget as HTMLButtonElement;
       button.disabled = true;
       button.textContent = "Sharing…";
+      // Tens of megabytes over a phone's uplink takes minutes, so it says
+      // how much has actually gone — a percentage alone, moving once per
+      // block, reads as stuck — and there is a way to call it off.
+      const signal = { stopped: false };
+      const stop = document.createElement("button");
+      stop.className = "ghost";
+      stop.textContent = "Stop";
+      stop.addEventListener("click", () => {
+        signal.stopped = true;
+        stop.disabled = true;
+        button.textContent = "Stopping…";
+      });
+      button.after(stop);
       try {
         const { ensureProfile } = await import("./profile.js");
         const ownerName = (await ensureProfile()).name;
-        // Hundreds of blocks for a big book: say how far along it is, or a
-        // three-minute upload looks like a hung button.
-        await publishBook(account!, book, ownerName, (done, total) => {
-          button.textContent = `Sharing… ${Math.round((done / total) * 100)}%`;
-        });
+        await publishBook(
+          account!,
+          book,
+          ownerName,
+          (done, total, bytesSent) => {
+            button.textContent = `Sharing ${formatSize(bytesSent)} of ${formatSize(book.size)} · ${Math.round(
+              (done / total) * 100,
+            )}%`;
+          },
+          signal,
+        );
         renderReader(main);
       } catch (err) {
+        stop.remove();
         button.disabled = false;
         button.textContent = "Share with everyone";
         const status = document.createElement("div");

@@ -190,10 +190,14 @@ service cloud.firestore {
       && book.blockCount is number && book.blockCount >= 1 && book.blockCount <= 300;
   }
 
+  // A block carries its bytes either way: books are written as raw bytes
+  // (base64 is a third bigger, which on a manga volume is tens of
+  // megabytes of nothing), decks and older books as base64 strings.
   function isValidBlock() {
-    return request.resource.data.keys().hasOnly(['data'])
-      && request.resource.data.data is string
-      && request.resource.data.data.size() > 0;
+    let d = request.resource.data;
+    return d.keys().hasOnly(['data'])
+      && (d.data is string || d.data is bytes)
+      && d.data.size() > 0;
   }
 
   // Keep obviously malformed writes out of the deck. This is a shape check,
