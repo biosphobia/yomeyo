@@ -27,7 +27,9 @@ export interface OcrWord {
   h: number;
 }
 
-const CACHE_PREFIX = "bookOcr:";
+// Versioned: results from the old estimate-the-box pipeline are not worth
+// keeping, so a prefix bump quietly retires them.
+const CACHE_PREFIX = "bookOcr2:";
 
 /** Where a shared book's OCR lives, when the book is shared at all. */
 export interface SharedOcrRef {
@@ -81,11 +83,16 @@ function claudeAvailable(): Promise<boolean> {
 }
 
 /**
- * Claude reads the page. The canvas is downscaled to what vision models
- * see best, and because the boxes come back in thousandths of that exact
- * frame, mapping them onto the page keeps the coordinate spaces honest —
- * and then each box is SNAPPED to the actual ink under it, because a
- * model's spatial estimate lands near the text, not on it.
+ * Claude reads the page — but never guesses where anything is. A vision
+ * model transcribes print beautifully and estimates coordinates terribly,
+ * so the two jobs are split: this device finds the text blocks itself by
+ * looking at the pixels (exact positions, no judgement calls), and Claude
+ * is shown each block as its own numbered crop, purely to say what it
+ * says. The boxes drawn on the page are the detected ones, so they sit on
+ * the ink by construction.
+ *
+ * When detection finds nothing to crop (low contrast, odd pages), the old
+ * whole-page estimate runs as a fallback, snapped to ink after the fact.
  */
 async function claudeOcr(canvas: HTMLCanvasElement, onStatus?: (line: string) => void): Promise<OcrWord[] | null> {
   if (!(await claudeAvailable())) return null;
@@ -100,6 +107,73 @@ async function claudeOcr(canvas: HTMLCanvasElement, onStatus?: (line: string) =>
     frame.height = Math.round(canvas.height * scale);
     frame.getContext("2d")!.drawImage(canvas, 0, 0, frame.width, frame.height);
   }
+
+  const found = detectTextBlocks(frame);
+  if (found.length > 0) {
+    const words = await transcribeBlocks(frame, found).catch(() => null);
+    if (words && words.length > 0) return words;
+  }
+  return estimateWholePage(frame);
+}
+
+/** Each detected block, cropped and sent for transcription only. */
+async function transcribeBlocks(frame: HTMLCanvasElement, boxes: DetectedBox[]): Promise<OcrWord[] | null> {
+  const images: string[] = [];
+  for (const box of boxes) {
+    const pad = 6;
+    const x = Math.max(0, box.x - pad);
+    const y = Math.max(0, box.y - pad);
+    const cw = Math.min(frame.width - x, box.w + pad * 2);
+    const ch = Math.min(frame.height - y, box.h + pad * 2);
+    const crop = document.createElement("canvas");
+    // Tiny crops read badly; double them so the strokes survive JPEG.
+    const up = Math.max(cw, ch) < 120 ? 2 : 1;
+    crop.width = Math.max(1, cw * up);
+    crop.height = Math.max(1, ch * up);
+    crop.getContext("2d")!.drawImage(frame, x, y, cw, ch, 0, 0, crop.width, crop.height);
+    const dataUrl = crop.toDataURL("image/jpeg", 0.85);
+    images.push(dataUrl.slice(dataUrl.indexOf(",") + 1));
+  }
+
+  const res = await fetch(assetUrl("grammar.php"), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ mode: "ocr", images, media: "image/jpeg" }),
+  });
+  if (!res.ok) return null;
+  const { raw } = (await res.json()) as { raw?: string };
+  if (!raw) return null;
+  let parsed: { blocks?: unknown[] };
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(parsed.blocks)) return null;
+
+  const textOf = new Map<number, string>();
+  for (const block of parsed.blocks as { i?: unknown; text?: unknown }[]) {
+    const i = Number(block.i);
+    if (Number.isInteger(i) && typeof block.text === "string") textOf.set(i, block.text.trim());
+  }
+  const words: OcrWord[] = [];
+  boxes.forEach((box, at) => {
+    const text = textOf.get(at + 1) ?? "";
+    // Crops that were artwork after all come back empty and vanish here.
+    if (!text || !hasJapanese(text)) return;
+    words.push({
+      text,
+      x: box.x / frame.width,
+      y: box.y / frame.height,
+      w: box.w / frame.width,
+      h: box.h / frame.height,
+    });
+  });
+  return words;
+}
+
+/** The old whole-page ask, kept as the fallback when nothing detects. */
+async function estimateWholePage(frame: HTMLCanvasElement): Promise<OcrWord[] | null> {
   const dataUrl = frame.toDataURL("image/jpeg", 0.88);
   const image = dataUrl.slice(dataUrl.indexOf(",") + 1);
 
@@ -131,6 +205,231 @@ async function claudeOcr(canvas: HTMLCanvasElement, onStatus?: (line: string) =>
     words.push(snapToInk({ text, x: per(block.x), y: per(block.y), w, h }, ink));
   }
   return words;
+}
+
+// ---------------- finding the text blocks ourselves ----------------
+
+/** A text block found on the page, in pixels of the frame. */
+interface DetectedBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  ink: number;
+}
+
+/**
+ * Where is the text on this page? Answered from the pixels alone.
+ *
+ * The page is binarised, long straight runs are cut (panel borders and
+ * ruled lines weld everything they touch into one blob), and every
+ * remaining mark is grown a little so the characters of a block join
+ * hands while separate blocks stay apart — a bubble pads its text more
+ * than lines pad each other. Each connected blob becomes a candidate,
+ * filtered by size and ink density so page-wide artwork and stray specks
+ * drop out. What survives might still include drawings; those come back
+ * from transcription as empty text and vanish. The boxes are the tight
+ * bounds of the real ink, so a box always sits exactly on its text.
+ */
+function detectTextBlocks(frame: HTMLCanvasElement): DetectedBox[] {
+  const DETECT = 700;
+  const s = Math.min(1, DETECT / Math.max(frame.width, frame.height));
+  const w = Math.max(8, Math.round(frame.width * s));
+  const h = Math.max(8, Math.round(frame.height * s));
+  const small = document.createElement("canvas");
+  small.width = w;
+  small.height = h;
+  const ctx = small.getContext("2d")!;
+  ctx.drawImage(frame, 0, 0, w, h);
+  const { data } = ctx.getImageData(0, 0, w, h);
+  const ink = new Uint8Array(w * h);
+  for (let i = 0; i < ink.length; i++) {
+    const at = i * 4;
+    ink[i] = data[at] * 0.299 + data[at + 1] * 0.587 + data[at + 2] * 0.114 < 110 ? 1 : 0;
+  }
+
+  // Cut long straight runs: no character stroke is 5% of the page long.
+  const maxRun = Math.round(Math.max(w, h) * 0.05);
+  const cut = Uint8Array.from(ink);
+  for (let y = 0; y < h; y++) {
+    let run = 0;
+    for (let x = 0; x <= w; x++) {
+      if (x < w && ink[y * w + x]) run++;
+      else {
+        if (run > maxRun) for (let k = x - run; k < x; k++) cut[y * w + k] = 0;
+        run = 0;
+      }
+    }
+  }
+  for (let x = 0; x < w; x++) {
+    let run = 0;
+    for (let y = 0; y <= h; y++) {
+      if (y < h && ink[y * w + x]) run++;
+      else {
+        if (run > maxRun) for (let k = y - run; k < y; k++) cut[k * w + x] = 0;
+        run = 0;
+      }
+    }
+  }
+
+  const r = Math.max(2, Math.round(Math.max(w, h) * 0.009));
+  const pageArea = w * h;
+
+  // Ordinary text: blobs of the cut map, measured on the real ink.
+  const kept = blobs(dilate(cut, w, h, r), cut, w, h).filter((b) => {
+    const density = b.ink / (b.w * b.h);
+    const aspect = Math.max(b.w, b.h) / Math.max(1, Math.min(b.w, b.h));
+    return (
+      b.ink >= 30 &&
+      Math.min(b.w, b.h) >= 6 &&
+      b.w * b.h <= pageArea * 0.25 &&
+      density >= 0.06 &&
+      aspect <= 25
+    );
+  });
+
+  // The line cut erases solid shapes, and some of those are text: manga
+  // titles printed white on a black pill. A second pass over the uncut
+  // ink keeps free-standing solid blobs of plausible pill size as
+  // candidates too — the solid ones that are just art transcribe to
+  // nothing and vanish downstream.
+  const solid = blobs(dilate(ink, w, h, r), ink, w, h).filter((b) => {
+    const density = b.ink / (b.w * b.h);
+    const aspect = Math.max(b.w, b.h) / Math.max(1, Math.min(b.w, b.h));
+    return (
+      density >= 0.45 &&
+      Math.min(b.w, b.h) >= 8 &&
+      b.w * b.h <= pageArea * 0.08 &&
+      aspect <= 12
+    );
+  });
+  for (const pill of solid) {
+    const claimed = kept.some((b) => {
+      const ox = Math.max(0, Math.min(b.x + b.w, pill.x + pill.w) - Math.max(b.x, pill.x));
+      const oy = Math.max(0, Math.min(b.y + b.h, pill.y + pill.h) - Math.max(b.y, pill.y));
+      return ox * oy > pill.w * pill.h * 0.3;
+    });
+    if (!claimed) kept.push(pill);
+  }
+
+  // Blobs that ended up touching are one block.
+  let merged = true;
+  while (merged) {
+    merged = false;
+    outer: for (let i = 0; i < kept.length; i++) {
+      for (let j = i + 1; j < kept.length; j++) {
+        const a = kept[i];
+        const b = kept[j];
+        if (a.x < b.x + b.w + 2 && b.x < a.x + a.w + 2 && a.y < b.y + b.h + 2 && b.y < a.y + a.h + 2) {
+          const x0 = Math.min(a.x, b.x);
+          const y0 = Math.min(a.y, b.y);
+          kept[i] = {
+            x: x0,
+            y: y0,
+            w: Math.max(a.x + a.w, b.x + b.w) - x0,
+            h: Math.max(a.y + a.h, b.y + b.h) - y0,
+            ink: a.ink + b.ink,
+          };
+          kept.splice(j, 1);
+          merged = true;
+          break outer;
+        }
+      }
+    }
+  }
+
+  kept.sort((a, b) => b.ink - a.ink);
+  const top = kept.slice(0, 32);
+  // Manga reading order: right to left, then down.
+  top.sort((a, b) => b.x + b.w - (a.x + a.w) || a.y - b.y);
+
+  const inv = 1 / s;
+  return top.map((b) => ({
+    x: Math.max(0, Math.round((b.x - 1) * inv)),
+    y: Math.max(0, Math.round((b.y - 1) * inv)),
+    w: Math.min(frame.width, Math.round((b.w + 2) * inv)),
+    h: Math.min(frame.height, Math.round((b.h + 2) * inv)),
+    ink: b.ink,
+  }));
+}
+
+/** Connected blobs of `mask`, each measured as the tight bounds of `base`. */
+function blobs(mask: Uint8Array, base: Uint8Array, w: number, h: number): DetectedBox[] {
+  const seen = new Uint8Array(w * h);
+  const queue = new Int32Array(w * h);
+  const found: DetectedBox[] = [];
+  for (let start = 0; start < w * h; start++) {
+    if (!mask[start] || seen[start]) continue;
+    let head = 0;
+    let tail = 0;
+    queue[tail++] = start;
+    seen[start] = 1;
+    let x0 = w;
+    let x1 = 0;
+    let y0 = h;
+    let y1 = 0;
+    let count = 0;
+    while (head < tail) {
+      const p = queue[head++];
+      const px = p % w;
+      const py = (p / w) | 0;
+      if (base[p]) {
+        count++;
+        if (px < x0) x0 = px;
+        if (px > x1) x1 = px;
+        if (py < y0) y0 = py;
+        if (py > y1) y1 = py;
+      }
+      if (px > 0 && mask[p - 1] && !seen[p - 1]) {
+        seen[p - 1] = 1;
+        queue[tail++] = p - 1;
+      }
+      if (px < w - 1 && mask[p + 1] && !seen[p + 1]) {
+        seen[p + 1] = 1;
+        queue[tail++] = p + 1;
+      }
+      if (py > 0 && mask[p - w] && !seen[p - w]) {
+        seen[p - w] = 1;
+        queue[tail++] = p - w;
+      }
+      if (py < h - 1 && mask[p + w] && !seen[p + w]) {
+        seen[p + w] = 1;
+        queue[tail++] = p + w;
+      }
+    }
+    if (count > 0) found.push({ x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1, ink: count });
+  }
+  return found;
+}
+
+/** Box dilation by radius `r`, one sliding-window pass per axis. */
+function dilate(src: Uint8Array, w: number, h: number, r: number): Uint8Array {
+  const mid = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    const row = y * w;
+    let count = 0;
+    for (let x = 0; x < Math.min(r, w); x++) if (src[row + x]) count++;
+    for (let x = 0; x < w; x++) {
+      const add = x + r;
+      if (add < w && src[row + add]) count++;
+      mid[row + x] = count > 0 ? 1 : 0;
+      const sub = x - r;
+      if (sub >= 0 && src[row + sub]) count--;
+    }
+  }
+  const out = new Uint8Array(w * h);
+  for (let x = 0; x < w; x++) {
+    let count = 0;
+    for (let y = 0; y < Math.min(r, h); y++) if (mid[y * w + x]) count++;
+    for (let y = 0; y < h; y++) {
+      const add = y + r;
+      if (add < h && mid[add * w + x]) count++;
+      out[y * w + x] = count > 0 ? 1 : 0;
+      const sub = y - r;
+      if (sub >= 0 && mid[sub * w + x]) count--;
+    }
+  }
+  return out;
 }
 
 // ---------------- snapping boxes to the page's ink ----------------

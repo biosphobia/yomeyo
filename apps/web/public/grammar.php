@@ -90,19 +90,38 @@ $translate = ($mode === "translate");
 $explain = ($mode === "explain");
 $ocr = ($mode === "ocr");
 
-// The OCR image rides the request as base64; only real image types, and
-// small enough for the API's own limits.
+// OCR arrives one of two ways. The good way: `images`, an array of small
+// crops the app cut out itself, one per detected text block — Claude only
+// transcribes, all the positions stay the app's. The fallback: `image`,
+// one whole page, where Claude also has to estimate boxes.
 $ocrImage = "";
+$ocrImages = [];
 $ocrMedia = "";
 if ($ocr) {
-  $ocrImage = is_string($req["image"] ?? null) ? $req["image"] : "";
   $ocrMedia = is_string($req["media"] ?? null) ? $req["media"] : "";
-  if ($ocrImage === "" || strlen($ocrImage) > 7000000
-      || !in_array($ocrMedia, ["image/jpeg", "image/png", "image/webp"], true)) {
+  if (!in_array($ocrMedia, ["image/jpeg", "image/png", "image/webp"], true)) {
     http_response_code(400);
     exit;
   }
+  if (isset($req["images"]) && is_array($req["images"])) {
+    foreach ($req["images"] as $img) {
+      if (is_string($img) && $img !== "" && strlen($img) <= 3000000) {
+        $ocrImages[] = $img;
+      }
+    }
+    if (count($ocrImages) === 0 || count($ocrImages) > 40) {
+      http_response_code(400);
+      exit;
+    }
+  } else {
+    $ocrImage = is_string($req["image"] ?? null) ? $req["image"] : "";
+    if ($ocrImage === "" || strlen($ocrImage) > 7000000) {
+      http_response_code(400);
+      exit;
+    }
+  }
 }
+$ocrCrops = count($ocrImages) > 0;
 
 // Taking a real sentence apart adds kanji, a reading per piece, and the
 // whole-sentence translations; writing practice sentences does not.
@@ -147,6 +166,28 @@ $explainSchema = [
   "additionalProperties" => false,
 ];
 
+// Numbered crops read back as text: one entry per crop, nothing spatial —
+// the app already knows exactly where every crop came from.
+$ocrCropSchema = [
+  "type" => "object",
+  "properties" => [
+    "blocks" => [
+      "type" => "array",
+      "items" => [
+        "type" => "object",
+        "properties" => [
+          "i" => ["type" => "integer"],
+          "text" => ["type" => "string"],
+        ],
+        "required" => ["i", "text"],
+        "additionalProperties" => false,
+      ],
+    ],
+  ],
+  "required" => ["blocks"],
+  "additionalProperties" => false,
+];
+
 // A page read into text blocks: the text exactly as printed, and a tight
 // box per block in thousandths of the image, so the overlay lands true.
 $ocrSchema = [
@@ -173,7 +214,7 @@ $ocrSchema = [
 ];
 
 $schema = $ocr
-  ? $ocrSchema
+  ? ($ocrCrops ? $ocrCropSchema : $ocrSchema)
   : ($explain
   ? $explainSchema
   : ($translate
@@ -229,7 +270,16 @@ $body = [
         "effort" => $parse ? "high" : ($translate || $ocr ? "low" : "medium"),
         "format" => ["type" => "json_schema", "schema" => $schema],
       ],
-  "system" => $ocr
+  "system" => ($ocr && $ocrCrops)
+    ? "You transcribe Japanese print from small numbered crops of a page, " .
+      "usually manga. Each crop is one block: a speech bubble, a caption, " .
+      "a sign, a title. Return exactly one entry per crop with i set to " .
+      "its number and text set to what it prints, EXACTLY as printed, " .
+      "including っ and small kana. Vertical text reads top to bottom, " .
+      "columns right to left. A crop that holds no readable printed " .
+      "Japanese (artwork, screentone, an empty scrap) gets an empty " .
+      "string. Never translate, never invent, never describe a picture."
+    : ($ocr
     ? "You read Japanese text off a page image, usually manga or a scan. " .
       "Return every distinct block of printed Japanese (a speech bubble, a " .
       "caption, a sign) as its own entry, in natural reading order (manga: " .
@@ -267,10 +317,22 @@ $body = [
       "Follow the model and the wording rules in the request exactly."
     : "You write practice sentences for a beginner Japanese course. " .
       "Follow the rules in the request exactly; every sentence is shown to a " .
-      "learner as fact, so a wrong label teaches something wrong.")))),
+      "learner as fact, so a wrong label teaches something wrong."))))),
   "messages" => [[
     "role" => "user",
-    "content" => $ocr
+    "content" => $ocrCrops
+      ? (function () use ($ocrImages, $ocrMedia) {
+          $content = [];
+          foreach ($ocrImages as $at => $img) {
+            $content[] = ["type" => "text", "text" => "Crop " . ($at + 1) . ":"];
+            $content[] = ["type" => "image", "source" => ["type" => "base64", "media_type" => $ocrMedia, "data" => $img]];
+          }
+          $content[] = ["type" => "text", "text" =>
+            "Transcribe each numbered crop. One blocks entry per crop, i matching its number, " .
+            "empty text for a crop with no readable printed Japanese."];
+          return $content;
+        })()
+      : ($ocr
       ? [
           ["type" => "image", "source" => ["type" => "base64", "media_type" => $ocrMedia, "data" => $ocrImage]],
           ["type" => "text", "text" =>
@@ -279,7 +341,7 @@ $body = [
             "y downward from the TOP edge, and x, y, w, h are all thousandths (0-1000) of the image's " .
             "width and height. Take a moment per block to check its box really sits on the text."],
         ]
-      : $prompt,
+      : $prompt),
   ]],
 ];
 

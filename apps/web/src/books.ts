@@ -169,7 +169,7 @@ export async function forgetBook(id: string): Promise<void> {
   // The file blob is overwritten rather than deleted (the media store has
   // no delete-by-key here); the OCR cache goes properly.
   await saveMedia(bookFileKey(id), new Blob([]));
-  await deleteMetaByPrefix(`bookOcr:${id}:`).catch(() => 0);
+  await deleteMetaByPrefix(`bookOcr2:${id}:`).catch(() => 0);
 }
 
 export async function renameBook(id: string, name: string): Promise<void> {
@@ -398,11 +398,16 @@ export async function shelfAccount(): Promise<AccountInfo | null> {
  * `books/{id}/ocr/{page}`, and everyone after that gets the boxes for a
  * single small read instead of a whole OCR run. Signed-in readers may
  * contribute — the shelf is shared work, not just shared files.
+ *
+ * The doc id carries a pipeline version, so results written by an older,
+ * worse OCR simply stop being found rather than poisoning every reader.
  */
+const ocrDocId = (page: number): string => `v2-${page}`;
+
 export async function fetchSharedOcr(sharedId: string, page: number): Promise<unknown | null> {
   try {
     const { db, storeApi } = await firestoreApi();
-    const snapshot = await storeApi.getDoc(storeApi.doc(db, "books", sharedId, "ocr", String(page)));
+    const snapshot = await storeApi.getDoc(storeApi.doc(db, "books", sharedId, "ocr", ocrDocId(page)));
     const data = snapshot.exists?.() ? snapshot.data?.() : null;
     return Array.isArray(data?.words) ? data.words : null;
   } catch {
@@ -414,7 +419,7 @@ export async function fetchSharedOcr(sharedId: string, page: number): Promise<un
 export async function deleteSharedOcr(sharedId: string, page: number): Promise<void> {
   try {
     const { db, storeApi } = await firestoreApi();
-    await storeApi.deleteDoc(storeApi.doc(db, "books", sharedId, "ocr", String(page)));
+    await storeApi.deleteDoc(storeApi.doc(db, "books", sharedId, "ocr", ocrDocId(page)));
   } catch {
     /* somebody else's book and not the admin: the local clear stands */
   }
@@ -425,7 +430,7 @@ export async function publishOcr(sharedId: string, page: number, words: unknown)
   try {
     if (!(await currentAccount().catch(() => null))) return;
     const { db, storeApi } = await firestoreApi();
-    await storeApi.setDoc(storeApi.doc(db, "books", sharedId, "ocr", String(page)), { words });
+    await storeApi.setDoc(storeApi.doc(db, "books", sharedId, "ocr", ocrDocId(page)), { words });
   } catch {
     /* the local cache still stands; somebody else can contribute it */
   }
@@ -433,7 +438,7 @@ export async function publishOcr(sharedId: string, page: number, words: unknown)
 
 /** Every page of this book OCR'd on this device, uploaded to its share. */
 export async function publishAllOcr(bookId: string, sharedId: string): Promise<void> {
-  const pages = await getMetaByPrefix(`bookOcr:${bookId}:`).catch((): [string, unknown][] => []);
+  const pages = await getMetaByPrefix(`bookOcr2:${bookId}:`).catch((): [string, unknown][] => []);
   for (const [key, words] of pages) {
     const page = Number(key.slice(key.lastIndexOf(":") + 1));
     if (Number.isFinite(page) && Array.isArray(words) && words.length > 0) {
