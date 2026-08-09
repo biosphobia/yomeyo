@@ -64,7 +64,14 @@ export type DrillKind =
   | "swap"
   | "translate"
   | "real"
-  | "listen";
+  | "listen"
+  /**
+   * Never listed in a unit's own drills: generated in their place when a
+   * sentence is too short for find-engine or real to be a question at all.
+   * One piece that can stand alone as a sentence, against sticker-wearing
+   * fragments from around the unit.
+   */
+  | "complete";
 
 /**
  * Two sentences built from the same words, where only the little connecting

@@ -46,8 +46,34 @@ interface Task {
   pair?: SwapPair;
 }
 
+/** Can the "which stands alone" task even be asked in this unit? */
+function completeDistractors(unit: GrammarUnit, engine: Chunk): Chunk[] {
+  const seen = new Set<string>([engine.t]);
+  const out: Chunk[] = [];
+  for (const sentence of unit.sentences) {
+    for (const chunk of sentence.chunks) {
+      if (chunk.role === "ghost" || chunk.role === "engine" || !chunk.p) continue;
+      if (seen.has(chunk.t)) continue;
+      seen.add(chunk.t);
+      out.push(chunk);
+    }
+  }
+  return out;
+}
+
 function tasksFor(unit: GrammarUnit): Task[] {
   const tasks: Task[] = [];
+  // Sentences too short for the jumble tasks get the stand-alone task
+  // instead — once each, however many jumble kinds passed them over.
+  const completed = new Set<Sentence>();
+  const completeInstead = (sentence: Sentence): void => {
+    if (completed.has(sentence)) return;
+    const visible = sentence.chunks.filter((c) => c.role !== "ghost");
+    const engine = visible.find((c) => c.role === "engine") ?? visible[visible.length - 1];
+    if (!engine || completeDistractors(unit, engine).length === 0) return;
+    completed.add(sentence);
+    tasks.push({ kind: "complete", sentence });
+  };
   for (const kind of unit.drills) {
     for (const sentence of unit.sentences) {
       if (kind === "find-doer" && !sentence.chunks.some((c) => c.role === "doer" || c.role === "ghost")) continue;
@@ -63,8 +89,17 @@ function tasksFor(unit: GrammarUnit): Task[] {
       if (kind === "swap") continue;
       // Three sentences to choose between, or it is not a choice.
       if ((kind === "translate" || kind === "listen") && unit.sentences.length < 3) continue;
-      // Moving the ending needs something for it to move past.
-      if (kind === "real" && sentence.chunks.filter((c) => c.role !== "ghost").length < 2) continue;
+      // The jumble questions collapse on short sentences: one card is no
+      // jumble, and two orders is a coin flip. Those sentences drill the
+      // same rule through the stand-alone task instead.
+      if (kind === "find-engine" && sentence.chunks.filter((c) => c.role !== "ghost").length < 3) {
+        completeInstead(sentence);
+        continue;
+      }
+      if (kind === "real" && sentence.chunks.filter((c) => c.role !== "ghost").length < 3) {
+        completeInstead(sentence);
+        continue;
+      }
       if (kind === "build") {
         // Particles count as pieces of their own, so even さくら｜が｜あるく
         // is a three-piece build.
@@ -90,8 +125,11 @@ function tasksFor(unit: GrammarUnit): Task[] {
   }
   // A few of each, not every sentence through every drill: a unit that runs
   // to forty questions gets abandoned halfway whatever is in it.
+  // Stand-alone tasks lead when there are any: they carry the rule the
+  // jumble tasks would have drilled, so they belong where those sat.
   const PER_KIND = 4;
-  return unit.drills.flatMap((kind) => shuffle(byKind.get(kind) ?? []).slice(0, PER_KIND));
+  const order: DrillKind[] = byKind.has("complete") ? ["complete", ...unit.drills] : [...unit.drills];
+  return order.flatMap((kind) => shuffle(byKind.get(kind) ?? []).slice(0, PER_KIND));
 }
 
 /**
@@ -173,6 +211,8 @@ function promptFor(task: Task): string {
       return "Nobody said who. Who does it mean here?";
     case "swap":
       return "Same words, different little words. Which one means this?";
+    case "complete":
+      return "Only one of these can stand alone as a sentence. Which?";
     default:
       return "Build this sentence.";
   }
@@ -252,7 +292,9 @@ export async function runUnit(
           // A swap task carries its own target sentence, shown with the
           // choices; the placeholder sentence must not appear above them.
           // The others are questions the English would answer outright.
-          task.kind === "swap" || task.kind === "meaning" || task.kind === "listen"
+          // "complete" hides it too: with the English up there the answer is
+          // the one that matches it, and the point is to judge the shape.
+          task.kind === "swap" || task.kind === "meaning" || task.kind === "listen" || task.kind === "complete"
             ? ""
             : `<div class="gram-en glosses">“${escapeHtml(task.sentence.en)}”</div>`
         }
@@ -476,6 +518,50 @@ export async function runUnit(
             wrong(
               `${name(ending)} says ${escapeHtml(ending.label)}, so it has to come last.`,
               { answer: ending },
+            );
+          }
+        });
+      }
+      return;
+    }
+
+    /**
+     * Which of these is a whole sentence on its own?
+     *
+     * The short sentences used to get "which comes last" with one card on
+     * screen, or "which is real" between two orders of two words — a coin
+     * flip either way. The same rule asked properly: an ending can stand
+     * alone (がくせいだ is a sentence), a word wearing a sticker cannot
+     * (とりが is a word still waiting for its ending). The choices are real
+     * pieces from this unit, so nothing here is a word they have not met.
+     */
+    if (task.kind === "complete") {
+      const visible = task.sentence.chunks.filter((c) => c.role !== "ghost");
+      const answer = visible.find((c) => c.role === "engine") ?? visible[visible.length - 1];
+      const options = shuffle([answer, ...shuffle(completeDistractors(unit, answer)).slice(0, 3)]);
+      train.innerHTML = `<div class="gram-swap">${options
+        .map(
+          (chunk, i) =>
+            `<button class="gram-swap-line" data-i="${i}">
+               <span lang="ja">${escapeHtml(chunk.t)}</span>
+             </button>`,
+        )
+        .join("")}</div>`;
+      for (const button of train.querySelectorAll<HTMLButtonElement>(".gram-swap-line")) {
+        button.addEventListener("click", () => {
+          if (settled) return;
+          const chunk = options[Number(button.dataset.i)];
+          if (chunk === answer) {
+            reveal(
+              false,
+              `<span class="ok-text">✓ ${name(answer)} says what happens, so it stands on its own.</span>`,
+              { answer },
+            );
+          } else {
+            wrong(
+              `${name(chunk)} is ${escapeHtml(chunk.label)} — a word wearing a sticker, still waiting ` +
+                `for an ending. ${name(answer)} is the one that can stand alone.`,
+              { answer, mistake: chunk },
             );
           }
         });
