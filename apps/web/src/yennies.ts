@@ -44,6 +44,26 @@ onAccountChange(() => {
   cached = null;
 });
 
+/**
+ * Balance-change listeners, so a badge drawn anywhere can stay live while
+ * the casino (or anything else) moves money without re-rendering the screen.
+ */
+const listeners = new Set<(balance: number) => void>();
+
+export function onYenniesChange(listener: (balance: number) => void): void {
+  listeners.add(listener);
+}
+
+function announce(balance: number): void {
+  for (const listener of listeners) {
+    try {
+      listener(balance);
+    } catch {
+      /* one broken badge must not stop the rest */
+    }
+  }
+}
+
 export async function yennies(): Promise<number> {
   cached ??= (await getMeta<number>(KEY)) ?? 0;
   return cached;
@@ -55,6 +75,7 @@ export async function earnYennies(amount: number): Promise<number> {
   const next = (await yennies()) + add;
   cached = next;
   await setMeta(KEY, next);
+  announce(next);
   return next;
 }
 
@@ -68,6 +89,7 @@ export async function spendYennies(amount: number): Promise<boolean> {
   if (have < cost) return false;
   cached = have - cost;
   await setMeta(KEY, cached);
+  announce(cached);
   return true;
 }
 

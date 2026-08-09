@@ -1,4 +1,12 @@
-import { formatYennies } from "./yennies.js";
+import { formatYennies, onYenniesChange } from "./yennies.js";
+
+// Every yen chip on screen follows the purse live: a casino win or a spent
+// bet updates the header the moment it happens, no re-render required.
+onYenniesChange((balance) => {
+  for (const chip of document.querySelectorAll<HTMLElement>(".yen-chip")) {
+    chip.textContent = formatYennies(balance);
+  }
+});
 
 /**
  * The heading a screen wears.

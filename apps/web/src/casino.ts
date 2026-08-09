@@ -461,13 +461,15 @@ function buildRoom(THREE: any, scene: any): Room {
     boardPaint.fillRect(sx, sy, 3, 3);
   }
   boardPaint.shadowBlur = 0;
-  // The pockets, marked where the fins will stand.
-  boardPaint.font = "bold 26px 'Hiragino Sans', sans-serif";
+  // The pockets, marked under the fins. Small: the fins stand at ±9, ±40
+  // and ±80 of centre on this 256-wide canvas, so anything wider than a
+  // pocket smears the three labels into one another.
+  boardPaint.font = "bold 15px 'Hiragino Sans', sans-serif";
   boardPaint.fillStyle = "#ffd97a";
-  boardPaint.fillText("×8", 128, 356);
+  boardPaint.fillText("×8", 128, 376);
   boardPaint.fillStyle = "#b8a8d8";
-  boardPaint.fillText("×2", 100, 356);
-  boardPaint.fillText("×2", 156, 356);
+  boardPaint.fillText("×2", 103, 376);
+  boardPaint.fillText("×2", 153, 376);
   const board = new THREE.Mesh(
     new THREE.PlaneGeometry(0.96, 1.44),
     new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(boardCanvas) }),
@@ -1739,18 +1741,18 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
     cup.position.set(x, CUP_REST + lift, CUP_Z);
   };
 
-  /** Two cups trade places, one arcing over the other. */
-  const swapCups = (a: any, b: any): Promise<void> =>
+  /** Two cups trade places, one arcing over the other, at the given tempo. */
+  const swapCups = (a: any, b: any, duration = 240): Promise<void> =>
     new Promise((resolve) => {
       const start = performance.now();
-      const DUR = 240;
       const ax = a.position.x;
       const bx = b.position.x;
+      const arcHeight = 0.1 + Math.random() * 0.1;
       sfx.whoosh();
       const tick = (): void => {
         if (mySeq !== seq) return resolve();
-        const p = Math.min(1, (performance.now() - start) / DUR);
-        const arc = Math.sin(p * Math.PI) * 0.16;
+        const p = Math.min(1, (performance.now() - start) / duration);
+        const arc = Math.sin(p * Math.PI) * arcHeight;
         a.position.set(ax + (bx - ax) * p, CUP_REST + arc, CUP_Z);
         b.position.set(bx + (ax - bx) * p, CUP_REST - arc * 0.4, CUP_Z);
         if (p >= 1) resolve();
@@ -1811,17 +1813,26 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
       await new Promise((r) => setTimeout(r, 650));
       await liftCup(room.cups[atSpot[fishAt]], false);
       room.cupFish.visible = false;
-      // The dance: eight trades, the fish riding its cup.
-      for (let n = 0; n < 8; n++) {
+      // The dance, and Chito is not being fair about it: a different number
+      // of trades every game, each at its own tempo — some almost lazy,
+      // some too fast to follow, with the cruellest bursts saved for the
+      // end when your eyes are already tired.
+      const trades = 13 + Math.floor(Math.random() * 6);
+      for (let n = 0; n < trades; n++) {
         const s1 = Math.floor(Math.random() * 3);
         let s2 = Math.floor(Math.random() * 3);
         while (s2 === s1) s2 = Math.floor(Math.random() * 3);
-        await swapCups(room.cups[atSpot[s1]], room.cups[atSpot[s2]]);
+        const lateGame = n / trades;
+        const tempo = 90 + Math.random() * (220 - lateGame * 120);
+        await swapCups(room.cups[atSpot[s1]], room.cups[atSpot[s2]], tempo);
         const held = atSpot[s1];
         atSpot[s1] = atSpot[s2];
         atSpot[s2] = held;
         if (fishAt === s1) fishAt = s2;
         else if (fishAt === s2) fishAt = s1;
+        // An occasional breath between trades, so the speed never settles
+        // into a rhythm you can ride.
+        if (Math.random() < 0.2) await new Promise((r) => setTimeout(r, 120 + Math.random() * 240));
       }
       result.textContent = "Which cup?";
       actions.innerHTML = ["left", "middle", "right"]
