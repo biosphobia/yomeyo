@@ -97,6 +97,8 @@ const CUTSCENE_TITLES: Record<string, string> = {
   soak: "Something in the water",
   tank: "Feeding time",
   kaiju: "Special effects budget",
+  guugu: "Vocabulary, poached",
+  allin: "Table stakes",
 };
 
 /** The caption for a scenario: whatever the file says, or the default. */

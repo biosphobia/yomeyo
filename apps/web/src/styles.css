@@ -5396,3 +5396,22 @@ button.gram-swap-line:hover {
   padding: 6px 0;
   border-top: 1px solid var(--border);
 }
+
+/* Multi-pull results: every crate's contents in one grid. */
+.won-multi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+.won-multi-cell {
+  border: 2px solid var(--rarity, var(--border));
+  border-radius: 12px;
+  padding: 10px 8px;
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  text-align: center;
+}
+.won-multi-cell .won-face { font-size: 1.6rem; }
+.won-multi-cell .won-name { font-size: 0.9rem; font-weight: 600; }

@@ -59,6 +59,12 @@ export async function renderGacha(main: HTMLElement, isCurrent: () => boolean = 
         <button id="gacha-open" ${affordable && table.prizes.length > 0 ? "" : "disabled"}>
           Open a crate · ${free ? "free" : `${table.cost.toLocaleString()} ¥`}
         </button>
+        <button id="gacha-open3" class="secondary" ${(free || balance >= table.cost * 3) && table.prizes.length > 0 ? "" : "disabled"}>
+          ×3${free ? "" : ` · ${(table.cost * 3).toLocaleString()} ¥`}
+        </button>
+        <button id="gacha-open5" class="secondary" ${(free || balance >= table.cost * 5) && table.prizes.length > 0 ? "" : "disabled"}>
+          ×5${free ? "" : ` · ${(table.cost * 5).toLocaleString()} ¥`}
+        </button>
       </div>
       ${
         table.prizes.length === 0
@@ -136,12 +142,17 @@ export async function renderGacha(main: HTMLElement, isCurrent: () => boolean = 
 
   drawCollection(main, table, have, wearing, () => void renderGacha(main, isCurrent));
   await drawInventory(main, table, have);
-  const open = main.querySelector<HTMLButtonElement>("#gacha-open");
-  if (open) {
+  for (const [id, count] of [
+    ["gacha-open", 1],
+    ["gacha-open3", 3],
+    ["gacha-open5", 5],
+  ] as [string, number][]) {
+    const open = main.querySelector<HTMLButtonElement>(`#${id}`);
+    if (!open) continue;
     open.disabled = open.disabled || opening;
     open.addEventListener("click", () => {
       if (opening) return;
-      void pull(main, table, isCurrent);
+      void pull(main, table, isCurrent, count);
     });
   }
 }
@@ -477,43 +488,62 @@ function prizeFace(prize: Prize): string {
 
 // ---------------- opening one ----------------
 
-async function pull(main: HTMLElement, table: PrizeTable, isCurrent: () => boolean): Promise<void> {
+async function pull(main: HTMLElement, table: PrizeTable, isCurrent: () => boolean, count = 1): Promise<void> {
   if (opening) return;
   opening = true;
   const openButton = main.querySelector<HTMLButtonElement>("#gacha-open");
   if (openButton) openButton.disabled = true;
   try {
-    await openCrate(main, table, isCurrent);
+    await openCrate(main, table, isCurrent, count);
   } finally {
     opening = false;
   }
 }
 
-async function openCrate(main: HTMLElement, table: PrizeTable, isCurrent: () => boolean): Promise<void> {
+interface PullResult {
+  prize: Prize;
+  isNew: boolean;
+  refund: number;
+}
+
+async function openCrate(
+  main: HTMLElement,
+  table: PrizeTable,
+  isCurrent: () => boolean,
+  count = 1,
+): Promise<void> {
   const free = unlockAllNow();
-  if (!free && !(await spendYennies(table.cost))) {
+  const totalCost = table.cost * count;
+  if (!free && !(await spendYennies(totalCost))) {
     toast("Not enough yennies.", "error");
     return;
   }
   // Decided here, before anything is drawn. Nothing below can change it.
-  const prize = drawPrize(table);
-  if (!prize) {
-    if (!free) await earnYennies(table.cost);
+  // One film plays whatever the count; the rolls all land at its end.
+  const results: PullResult[] = [];
+  for (let n = 0; n < count; n++) {
+    const prize = drawPrize(table);
+    if (!prize) break;
+    let isNew = await addOwned(prize.id);
+    // A stackable item is only a dupe once the stack is full: a second bag
+    // of food is another bag, a sixth is a refund.
+    if (prize.type === "item") {
+      isNew = (await addItem(prize.id)) !== null;
+    }
+    // A won gif joins the drills' pool. Told now, so the next question can
+    // show it rather than the one after the app is next opened.
+    if (isNew && prize.type === "gif") forgetReactions();
+    // A free pull refunds nothing, because it took nothing.
+    const refund = isNew || free ? 0 : Math.round(table.cost * table.duplicateRefund);
+    if (refund > 0) await earnYennies(refund);
+    results.push({ prize, isNew, refund });
+  }
+  if (results.length === 0) {
+    if (!free) await earnYennies(totalCost);
     toast("No prizes are configured.", "error");
     return;
   }
-  let isNew = await addOwned(prize.id);
-  // A stackable item is only a dupe once the stack is full: a second bag
-  // of food is another bag, a sixth is a refund.
-  if (prize.type === "item") {
-    isNew = (await addItem(prize.id)) !== null;
-  }
-  // A won gif joins the drills' pool. Told now, so the next question can
-  // show it rather than the one after the app is next opened.
-  if (isNew && prize.type === "gif") forgetReactions();
-  // A free pull refunds nothing, because it took nothing.
-  const refund = isNew || free ? 0 : Math.round(table.cost * table.duplicateRefund);
-  if (refund > 0) await earnYennies(refund);
+  const { prize, isNew, refund } = results[0];
 
   const stage = main.querySelector<HTMLDivElement>("#gacha-stage")!;
   stage.innerHTML = `
@@ -558,42 +588,71 @@ async function openCrate(main: HTMLElement, table: PrizeTable, isCurrent: () => 
   cutscene.stop();
   if (!isCurrent() || !stage.isConnected) return;
 
+  const statusOf = (r: PullResult): string =>
+    r.isNew
+      ? r.prize.type === "skin"
+        ? "A new skin. Tap it in your collection to wear it."
+        : r.prize.type === "item"
+          ? "Into the inventory."
+          : "A new reaction. It will turn up in the drills from now on."
+      : r.prize.type === "item"
+        ? `You can only carry ${ITEM_LIMIT} — ${r.refund.toLocaleString()} ¥ back.`
+        : `Already yours — ${r.refund.toLocaleString()} ¥ back.`;
+
   const rarity = table.rarities[prize.rarity];
-  stage.innerHTML = `
-    <div class="card-panel gacha-won" style="--rarity:${escapeAttr(rarity?.color ?? "#94a3b8")}">
-      <div class="won-rarity">${
-        table.draw === "uniform" ? "New reaction" : escapeHtml(rarity?.label ?? "")
-      }</div>
-      <div class="won-face">${prizeFace(prize)}</div>
-      <div class="won-name">${escapeHtml(prize.name)}</div>
-      ${prize.note ? `<div class="glosses">${escapeHtml(prize.note)}</div>` : ""}
-      <div class="msg">${
-        isNew
-          ? prize.type === "skin"
-            ? "A new skin. Tap it in your collection to wear it."
-            : prize.type === "item"
-              ? "Into the inventory."
-              : "A new reaction. It will turn up in the drills from now on."
-          : prize.type === "item"
-            ? `You can only carry ${ITEM_LIMIT} — ${refund.toLocaleString()} ¥ back.`
-            : `Already yours — ${refund.toLocaleString()} ¥ back.`
-      }</div>
-      <div class="row-actions" style="justify-content:center;margin-top:12px">
-        <button id="gacha-again">Open another</button>
-        <button id="gacha-done" class="secondary">Done</button>
+  if (results.length === 1) {
+    stage.innerHTML = `
+      <div class="card-panel gacha-won" style="--rarity:${escapeAttr(rarity?.color ?? "#94a3b8")}">
+        <div class="won-rarity">${
+          table.draw === "uniform" ? "New reaction" : escapeHtml(rarity?.label ?? "")
+        }</div>
+        <div class="won-face">${prizeFace(prize)}</div>
+        <div class="won-name">${escapeHtml(prize.name)}</div>
+        ${prize.note ? `<div class="glosses">${escapeHtml(prize.note)}</div>` : ""}
+        <div class="msg">${statusOf(results[0])}</div>
+        <div class="row-actions" style="justify-content:center;margin-top:12px">
+          <button id="gacha-again">Open another</button>
+          <button id="gacha-done" class="secondary">Done</button>
+        </div>
       </div>
-    </div>
-  `;
+    `;
+  } else {
+    // The multi-pull: every crate's contents at once, the first of which is
+    // the one the film's roll already showed.
+    const refundTotal = results.reduce((sum, r) => sum + r.refund, 0);
+    stage.innerHTML = `
+      <div class="card-panel gacha-won gacha-won-multi">
+        <div class="won-rarity">${results.length} crates</div>
+        <div class="won-multi-grid">
+          ${results
+            .map((r) => {
+              const info = table.rarities[r.prize.rarity];
+              return `<div class="won-multi-cell" style="--rarity:${escapeAttr(info?.color ?? "#94a3b8")}">
+                <div class="won-face">${prizeFace(r.prize)}</div>
+                <div class="won-name">${escapeHtml(r.prize.name)}</div>
+                <div class="glosses">${r.isNew ? "new" : r.prize.type === "item" && r.refund === 0 ? "another one" : `dupe · +${r.refund.toLocaleString()} ¥`}</div>
+              </div>`;
+            })
+            .join("")}
+        </div>
+        ${refundTotal > 0 ? `<div class="msg">${refundTotal.toLocaleString()} ¥ back for duplicates.</div>` : ""}
+        <div class="row-actions" style="justify-content:center;margin-top:12px">
+          <button id="gacha-again">Open ×${results.length} again</button>
+          <button id="gacha-done" class="secondary">Done</button>
+        </div>
+      </div>
+    `;
+  }
   const again = stage.querySelector<HTMLButtonElement>("#gacha-again")!;
   again.addEventListener("click", async () => {
     if (opening) return;
     const balance = await yennies();
-    if (!unlockAllNow() && balance < table.cost) {
+    if (!unlockAllNow() && balance < table.cost * results.length) {
       toast("Not enough yennies.", "error");
       return;
     }
     again.disabled = true;
-    void pull(main, table, isCurrent);
+    void pull(main, table, isCurrent, results.length);
   });
   stage.querySelector("#gacha-done")!.addEventListener("click", () => void renderGacha(main, isCurrent));
 }

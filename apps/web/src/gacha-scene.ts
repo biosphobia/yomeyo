@@ -1407,6 +1407,245 @@ export const SCENARIOS: Scenario[] = [
       popLid(s, (t - 15.2) / 0.8);
     },
   },
+
+  /**
+   * The guugu. Two people in hot water, and the word ぐうぐ comes swimming
+   * across the bath because from a distance it looks like a fish. It is not
+   * a fish. It was never even a word. It glows anyway.
+   */
+  {
+    id: "guugu",
+    location: "bath",
+    seconds: 19,
+    opensAt: 16.6,
+    reveal: () => [0, 0.65, -1.15],
+    shots: [
+      // The bath at rest, steam doing the work.
+      { at: 0, from: [0, 1.6, 4.4], look: [0, 0.5, -1], fov: 36, to: [0, 1.3, 3.7] },
+      // Water level, where something is making a wake.
+      { at: 3.0, from: [-2.4, 0.5, 1.3], look: [-1.4, 0.42, -2.2], fov: 32 },
+      // Tracking it in to the bath's edge.
+      { at: 5.4, from: [-0.8, 0.5, 1.8], look: [0, 0.42, -1.2], fov: 34, shake: 0.02 },
+      // The optimist.
+      {
+        at: 7.4,
+        from: (s) => {
+          const p = s.cast[0]?.root.position;
+          return [(p?.x ?? 0) + 0.2, (p?.y ?? 0) + 1.3, (p?.z ?? 0) + 1.1];
+        },
+        look: (s) => posOf(s.cast[0], 1.12),
+        fov: 30,
+      },
+      // The reader of dead words.
+      { at: 9.6, from: [1.5, 0.9, 0.6], look: (s) => posOf(s.cast[1], 1.05), fov: 28 },
+      // Two-shot over the thing bobbing between them.
+      { at: 12.0, from: [0, 1.15, 2.6], look: [0, 0.55, -1.1] },
+      // In on the glow.
+      { at: 15.6, from: [0.5, 0.9, 1.2], look: [0, 0.55, -1.15], to: [0.2, 0.75, 0.4] },
+    ],
+    lines: [
+      { at: 1.2, seconds: 2.0, who: "Yuuri", text: "the water is doing its job" },
+      { at: 3.4, seconds: 2.0, who: "Chito", text: "Yuuri. Something is swimming at us" },
+      { at: 5.6, seconds: 1.8, who: "Yuuri", text: "a fish!! we eat like queens", loud: true },
+      { at: 7.7, seconds: 2.2, who: "Chito", text: "that's not a fish. it's the word ぐうぐ" },
+      { at: 10.0, seconds: 2.0, who: "Yuuri", text: "what did guugu mean? before" },
+      { at: 12.2, seconds: 2.0, who: "Chito", text: "nothing. it was never a word" },
+      { at: 14.3, seconds: 1.9, who: "Yuuri", text: "then nobody will miss it. we eat it" },
+      { at: 16.4, seconds: 1.8, who: "", text: "(the word would rather be a prize)" },
+    ],
+    run(t, _dt, s) {
+      const [yuuri, chito] = s.cast;
+      place(
+        s,
+        [
+          [-0.9, -1],
+          [0.9, -1],
+        ],
+        -0.15,
+        -0.62,
+      );
+      pose(yuuri, "soak", 1, t);
+      pose(chito, "soak", 1, t + 1.4);
+      if (t >= 5.4 && t < 8.6) pose(yuuri, "point", 1);
+      if (t >= 7.4 && t < 12.6) pose(chito, "gaze", 0.6);
+
+      // The word itself: three glyphs on planes, built the first frame they
+      // are needed and swimming nose-first like the fish they are not.
+      type Guugu = { group: any; glyphs: { mesh: any; material: any }[]; light: any };
+      let guugu = (s as unknown as { guugu?: Guugu }).guugu;
+      if (!guugu) {
+        const THREE = s.THREE;
+        const group = new THREE.Group();
+        const glyphs = ["ぐ", "う", "ぐ"].map((glyph, i) => {
+          const canvas = document.createElement("canvas");
+          canvas.width = 128;
+          canvas.height = 128;
+          const paint = canvas.getContext("2d")!;
+          paint.font = "bold 104px 'Hiragino Sans', 'Noto Sans JP', sans-serif";
+          paint.textAlign = "center";
+          paint.textBaseline = "middle";
+          paint.fillStyle = "#ffffff";
+          paint.fillText(glyph, 64, 70);
+          const material = new THREE.MeshBasicMaterial({
+            map: new THREE.CanvasTexture(canvas),
+            transparent: true,
+            color: 0x2a3440,
+          });
+          const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.34), material);
+          mesh.position.x = -i * 0.3;
+          group.add(mesh);
+          return { mesh, material };
+        });
+        const light = new THREE.PointLight(0xffd97a, 0, 4, 1.8);
+        group.add(light);
+        s.crate.parent.add(group);
+        guugu = { group, glyphs, light };
+        (s as unknown as { guugu?: Guugu }).guugu = guugu;
+      }
+
+      // The swim: in from the far corner, arriving at the bath's edge, then
+      // treading water between them. Each glyph trails the one before.
+      const arrive = smooth(clamp01((t - 2.5) / 5));
+      const bob = (phase: number): number => 0.42 + Math.sin(t * 2.4 + phase) * 0.03;
+      guugu.group.position.set(mix(-4.4, 0, arrive), 0, mix(-4.2, -1.15, arrive) + 0);
+      guugu.glyphs.forEach(({ mesh }, i) => {
+        const wig = t * 3.2 - i * 0.9;
+        mesh.position.x = -i * 0.3 + Math.sin(wig) * 0.05;
+        mesh.position.y = bob(i * 1.3);
+        mesh.position.z = Math.sin(wig * 0.7) * 0.06;
+        mesh.rotation.z = Math.sin(wig) * 0.18;
+      });
+      for (let n = 0; n < 6; n++) {
+        s.once(`swim${n}`, 2.8 + n, () => s.sfx.splash());
+      }
+
+      // The glow: ink to gold, and its own light coming up with the hum.
+      const glow = smooth(clamp01((t - 15.5) / 1.6));
+      for (const { material } of guugu.glyphs) {
+        material.color.setRGB(mix(0.16, 1.0, glow), mix(0.2, 0.85, glow), mix(0.25, 0.48, glow));
+      }
+      guugu.light.intensity = glow * 8;
+      guugu.light.position.set(0, 0.7, 0.1);
+      s.once("hum", 15.5, () => s.sfx.menace(1.4));
+      s.once("pop", 16.6, () => s.sfx.open());
+    },
+  },
+
+  /**
+   * Table stakes. The house has taken everything else, so Yuuri, with the
+   * unshakeable confidence of somebody holding no cards worth holding,
+   * puts her last asset on the felt. The asset files a complaint.
+   */
+  {
+    id: "allin",
+    location: "den",
+    seconds: 17.5,
+    opensAt: 15.4,
+    shots: [
+      // The game, from behind the players, lamp swinging.
+      { at: 0, from: [0, 1.5, 2.6], look: [0, 1.0, -1.6], to: [0, 1.35, 2.0] },
+      // The face of somebody about to have an idea. She faces the table,
+      // so the camera sits on the felt side, looking back at her.
+      {
+        at: 4.2,
+        from: (s) => {
+          const p = s.cast[0]?.root.position;
+          return [(p?.x ?? 0) + 0.15, (p?.y ?? 0) + 1.35, (p?.z ?? 0) - 1.15];
+        },
+        look: (s) => posOf(s.cast[0], 1.15),
+        fov: 30,
+      },
+      // Wide for the transaction.
+      { at: 7.0, from: [-2.4, 1.5, 1.6], look: [0, 0.9, -1.4], shake: 0.04 },
+      // Table level: the merchandise, displayed.
+      { at: 9.8, from: [1.6, 1.15, 0.2], look: [-0.3, 1.2, -1.5], fov: 30 },
+      // Two-shot for the consequences.
+      { at: 11.6, from: [-1.8, 1.3, 0.6], look: [-0.1, 1.1, -1.2] },
+      // The dark across the table, where the house is not sitting.
+      { at: 13.9, from: [0.8, 1.0, 0.4], look: [0, 1.0, -3.0] },
+      // In on the pot.
+      { at: 15.2, from: [0.6, 1.4, 0.6], look: [0.45, 1.25, -1.6], to: [0.4, 1.3, 0.0] },
+    ],
+    lines: [
+      { at: 0.9, seconds: 2.2, who: "Chito", text: "You bet the blanket. And the torch" },
+      { at: 3.1, seconds: 1.6, who: "Yuuri", text: "the house cheats" },
+      { at: 4.9, seconds: 1.4, who: "Yuuri", text: "…I'm all in", loud: true },
+      { at: 6.4, seconds: 1.6, who: "Chito", text: "you have nothing left" },
+      { at: 8.1, seconds: 1.5, who: "Yuuri", text: "I have one Chito", loud: true },
+      { at: 9.7, seconds: 1.2, who: "", text: "(the merchandise objects)" },
+      { at: 10.9, seconds: 1.6, who: "Chito", text: "I am NOT a bet!!", loud: true },
+      { at: 12.9, seconds: 1.5, who: "Yuuri", text: "ow. deal's off" },
+      { at: 14.4, seconds: 1.6, who: "", text: "(the house folds anyway)" },
+    ],
+    run(t, _dt, s) {
+      const [yuuri, chito] = s.cast;
+
+      // The players, on their crates, facing the felt — until commerce.
+      if (t < 7.2 && yuuri) {
+        yuuri.root.position.set(0.9, 0.05, -0.1);
+        face(yuuri, Math.PI);
+        pose(yuuri, "sit", 1);
+        if (t >= 4.5) pose(yuuri, "reach", 0.4);
+      }
+      if (chito) {
+        if (t < 8.4) {
+          chito.root.position.set(-0.9, 0.05, -0.1);
+          face(chito, Math.PI);
+          pose(chito, "sit", 1);
+        } else if (t < 9.4) {
+          // Airborne, against her clearly stated position on the matter.
+          const p = smooth(clamp01((t - 8.4) / 1.0));
+          chito.root.position.set(
+            mix(-0.9, -0.3, p),
+            mix(0.05, 0.23, p) + Math.sin(p * Math.PI) * 0.55,
+            mix(-0.1, -1.5, p),
+          );
+          face(chito, p * Math.PI * 2);
+          pose(chito, "panic", 1, t);
+        } else {
+          // Displayed on the felt, item one of one.
+          chito.root.position.set(-0.3, 0.23, -1.5);
+          face(chito);
+          pose(chito, "sit", 1);
+          if (t < 11.6) pose(chito, "panic", 0.7, t);
+        }
+      }
+
+      // The seller: up from her crate, around the table, hands on the goods.
+      if (yuuri && t >= 7.2) {
+        const walk = smooth(clamp01((t - 7.2) / 1.2));
+        s.walking = walk < 1 && t < 8.4;
+        yuuri.root.position.set(mix(0.9, -0.75, walk), 0, mix(-0.1, -0.55, walk));
+        face(yuuri, Math.PI * (1 - walk * 0.5));
+        pose(yuuri, "clear", 1);
+        if (t < 9.6) pose(yuuri, "reach", clamp01((t - 7.9) / 0.5));
+      }
+      s.once("hoist", 8.4, () => s.sfx.whoosh());
+      s.once("landed", 9.35, () => s.sfx.thud());
+
+      // The complaint, delivered flat-handed from on top of the table.
+      if (t >= 11.6 && t < 13.4) {
+        smackGag(s, chito, yuuri, clamp01((t - 11.6) / 1.8));
+        if (chito) pose(chito, "sit", 1);
+      }
+      s.once("smack", 12.25, () => s.sfx.smack());
+      if (t >= 13.4 && yuuri) pose(yuuri, "hurt", 0.7);
+
+      // The house's answer: the lamp dips, and the pot slides out of the
+      // dark to the felt's edge on its own.
+      s.once("verdict", 14.2, () => s.sfx.menace(1.5));
+      if (t >= 14.6) {
+        const slide = smooth(clamp01((t - 14.6) / 0.8));
+        showCrate(s, 0.45, 1.28, mix(-3.2, -1.6, slide));
+      }
+      s.once("arrive", 15.35, () => s.sfx.thud());
+      s.once("pop", 15.5, () => s.sfx.open());
+      if (t >= 15.5) popLid(s, (t - 15.5) / 1.0);
+
+      // Chips going over in the scuffle.
+      s.once("chips", 9.4, () => s.sfx.clatter());
+    },
+  },
 ];
 
 /** Where somebody is, plus a height — used by the shot definitions. */

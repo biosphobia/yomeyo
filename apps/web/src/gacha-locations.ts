@@ -20,7 +20,8 @@ export type LocationId =
   | "stairwell"
   | "rooftop"
   | "campfire"
-  | "library";
+  | "library"
+  | "den";
 
 export interface Location {
   /** Called every frame with the frame delta and the clock. */
@@ -762,6 +763,87 @@ function library(ctx: Ctx): Location {
   return { ambient: (dt) => dust(dt), focusY: 1.0 };
 }
 
+// ---------------- the back-room card den ----------------
+
+/**
+ * One round table of green felt under one low lamp, and darkness with a
+ * high-backed empty chair where the house sits. Nobody has ever seen the
+ * house arrive or leave.
+ */
+function den(ctx: Ctx): Location {
+  const { THREE, scene } = ctx;
+  const NIGHT = 0x14101c;
+  scene.background = new THREE.Color(NIGHT);
+  scene.fog = new THREE.FogExp2(0x1a1424, 0.085);
+  lights(ctx, 0x8a7aa8, 0x14101c, 0.55);
+
+  const lamp = new THREE.PointLight(0xffc477, 30, 12, 2);
+  lamp.position.set(0, 2.6, -1.6);
+  lamp.castShadow = true;
+  scene.add(lamp);
+  const shade = slab(ctx, box(THREE, 0x1b1410), 0.8, 0.22, 0.8, 0, 2.86, -1.6);
+
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), box(THREE, 0x2c2030, 0.95));
+  floor.rotation.x = -Math.PI / 2;
+  floor.receiveShadow = true;
+  scene.add(floor);
+  const wall = box(THREE, 0x241a2c, 1);
+  slab(ctx, wall, 20, 6, 0.4, 0, 3, -8);
+  slab(ctx, wall, 0.4, 6, 18, -8, 3, -1);
+  slab(ctx, wall, 0.4, 6, 18, 8, 3, -1);
+
+  // The table: round felt on a heavy base, chips in loose stacks, a hand
+  // of cards someone stopped pretending to look at.
+  slab(ctx, box(THREE, 0x3a2a20, 0.8), 1.1, 0.8, 1.1, 0, 0.4, -1.6);
+  const felt = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 0.12, 28), box(THREE, 0x2a6a44, 0.85));
+  felt.position.set(0, 0.86, -1.6);
+  felt.castShadow = true;
+  felt.receiveShadow = true;
+  scene.add(felt);
+  const CHIP_COLOURS = [0xc23b4e, 0x3a68b0, 0xe8e2d2];
+  for (let i = 0; i < 9; i++) {
+    const chip = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.055, 0.055, 0.02 + (i % 3) * 0.02, 12),
+      box(THREE, CHIP_COLOURS[i % 3], 0.4),
+    );
+    chip.position.set(-1.0 + (i % 3) * 0.15 + Math.floor(i / 3) * 0.55, 0.95, -1.1 - Math.floor(i / 3) * 0.45);
+    chip.castShadow = true;
+    scene.add(chip);
+  }
+  for (let i = 0; i < 6; i++) {
+    const card = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.006, 0.23), box(THREE, 0xf2ede0, 0.5));
+    card.position.set(-0.55 + i * 0.24, 0.93, -2.0 + (i % 2) * 0.28);
+    card.rotation.y = i * 0.7;
+    scene.add(card);
+  }
+  // Crates for the players' chairs; the house's chair is taller, and empty.
+  slab(ctx, box(THREE, 0x51392a), 0.55, 0.5, 0.55, -0.9, 0.25, -0.1);
+  slab(ctx, box(THREE, 0x51392a), 0.55, 0.5, 0.55, 0.9, 0.25, -0.1);
+  slab(ctx, box(THREE, 0x201625, 0.7), 0.7, 0.55, 0.7, 0, 0.28, -3.3);
+  slab(ctx, box(THREE, 0x201625, 0.7), 0.7, 1.6, 0.16, 0, 1.1, -3.62);
+
+  const dust = drift(ctx, {
+    count: 160,
+    spread: 10,
+    height: 4,
+    speed: 0.05,
+    size: 0.045,
+    colour: 0xb8a888,
+    opacity: 0.3,
+    up: false,
+    z: [-6, 2],
+  });
+  return {
+    ambient: (dt, t) => {
+      dust(dt);
+      // The lamp swings, slightly, the way it does in every film like this.
+      lamp.position.x = Math.sin(t * 0.55) * 0.14;
+      shade.position.x = lamp.position.x;
+    },
+    focusY: 1.0,
+  };
+}
+
 const BUILDERS: Record<LocationId, (ctx: Ctx) => Location> = {
   city,
   cafe,
@@ -772,6 +854,7 @@ const BUILDERS: Record<LocationId, (ctx: Ctx) => Location> = {
   rooftop,
   campfire,
   library,
+  den,
 };
 
 export function buildLocation(id: LocationId, THREE: any, scene: any): Location {
