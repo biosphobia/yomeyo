@@ -93,9 +93,11 @@ export function gradeCard(
       next.due = now + steps[card.stepIndex + 1] * 1000;
       return next;
     }
-    // "good" on the last step, or "easy" at any point, graduates the card and
-    // FSRS decides the first real interval from the state built up above.
-    return graduate(next, memory, config, now);
+    // "good" on the last step, or "easy" at any point, graduates the card.
+    // FSRS decides the first real interval from the state built up above —
+    // but an "easy" graduation is capped at the deck's easy interval: raw
+    // FSRS hands a brand-new card a month off, which nobody asked for.
+    return graduate(next, memory, config, now, grade === "easy" ? config.easyIntervalDays : undefined);
   }
 
   // A review card.
@@ -115,9 +117,9 @@ export function gradeCard(
   return graduate(next, memory, config, now);
 }
 
-function graduate(card: Card, memory: MemoryState, config: DeckConfig, now: number): Card {
+function graduate(card: Card, memory: MemoryState, config: DeckConfig, now: number, capDays?: number): Card {
   const days = intervalFor(memory.stability, config.desiredRetention, config.fsrsWeights);
-  const clamped = Math.min(Math.max(Math.round(days), 1), config.maxIntervalDays);
+  const clamped = Math.min(Math.max(Math.round(days), 1), config.maxIntervalDays, capDays ?? Infinity);
   return {
     ...card,
     state: "review",

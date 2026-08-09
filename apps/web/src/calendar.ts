@@ -241,6 +241,64 @@ async function renderDay(
           ? `<div class="row-actions" style="margin-top:12px"><a href="#kana"><button class="secondary">To the Kana game →</button></a></div>`
           : ""
       }
+      <div id="cal-study" class="cal-study"></div>
     </div>
+  `;
+
+  // What was actually studied that day: flashcards by button, kana by
+  // answer. Filled in after the panel stands, absent when nothing happened.
+  if (!future) void drawDayStudy(box.querySelector<HTMLDivElement>("#cal-study"), key);
+}
+
+/** The day's study record: flashcard grades and kana answers. */
+async function drawDayStudy(box: HTMLDivElement | null, key: string): Promise<void> {
+  if (!box) return;
+  const [reviewStats, kanaGames] = await Promise.all([
+    import("./review-stats.js").then((m) => m.dayReviewStats(key)),
+    import("./kana-stats.js").then((m) => m.kanaGameLog()),
+  ]);
+  if (!box.isConnected) return;
+
+  const cardTotal = reviewStats.again + reviewStats.hard + reviewStats.good + reviewStats.easy;
+
+  // Kana runs whose start fell on this local day.
+  const sameDay = (at: number): boolean => {
+    const d = new Date(at);
+    return (
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}` === key
+    );
+  };
+  const runs = kanaGames.filter((game) => sameDay(game.startedAt));
+  const kana = runs.reduce(
+    (sum, game) => ({
+      questions: sum.questions + (game.questions ?? 0),
+      correct: sum.correct + (game.correct ?? 0),
+      wrong: sum.wrong + (game.wrong ?? 0),
+    }),
+    { questions: 0, correct: 0, wrong: 0 },
+  );
+
+  if (cardTotal === 0 && kana.questions === 0) return;
+  box.innerHTML = `
+    ${
+      cardTotal > 0
+        ? `<div class="cal-study-row">
+            <span>🗂 <b>${cardTotal.toLocaleString()}</b> card review${cardTotal === 1 ? "" : "s"}${
+              reviewStats.introduced > 0 ? ` · ${reviewStats.introduced} new` : ""
+            }</span>
+            <span class="glosses">again ${reviewStats.again} · hard ${reviewStats.hard} · good ${reviewStats.good} · easy ${reviewStats.easy}</span>
+          </div>`
+        : ""
+    }
+    ${
+      kana.questions > 0
+        ? `<div class="cal-study-row">
+            <span>あ <b>${kana.questions.toLocaleString()}</b> kana answer${kana.questions === 1 ? "" : "s"}</span>
+            <span class="glosses">${kana.correct} right · ${kana.wrong} wrong${
+              kana.questions > 0 ? ` · ${Math.round((kana.correct / Math.max(1, kana.correct + kana.wrong)) * 100)}%` : ""
+            }</span>
+          </div>`
+        : ""
+    }
   `;
 }

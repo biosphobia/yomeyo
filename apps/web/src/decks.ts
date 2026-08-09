@@ -228,6 +228,7 @@ async function renderPremade(
         }${isMine ? " · yours" : ""}</div>
         ${deck.description ? `<div class="glosses">${escapeHtml(deck.description)}</div>` : ""}
       </div>
+      <button class="secondary preview-btn">Browse</button>
       <button class="add-btn${held.has(deck.id) ? " secondary" : ""}">${held.has(deck.id) ? "Added" : "Add"}</button>
       ${
         // Everyone who may delete this deck gets the button right here: its
@@ -256,6 +257,21 @@ async function renderPremade(
         button.disabled = false;
         toast(err instanceof Error ? err.message : "Could not delete that deck.", "error");
       }
+    });
+
+    // Browse without adding: the whole word list, read-only, nothing
+    // imported and nothing scheduled — window shopping.
+    row.querySelector<HTMLButtonElement>(".preview-btn")!.addEventListener("click", async (ev) => {
+      const previewButton = ev.currentTarget as HTMLButtonElement;
+      previewButton.disabled = true;
+      try {
+        const shared = await (await loadLibrary()).downloadDeck(deck);
+        const cards = fromSharedCards(shared, deck.id, Date.now());
+        openDeckPreview(body, deck.name, cards, held.has(deck.id) ? null : () => button.click());
+      } catch (err) {
+        toast(err instanceof Error ? err.message : "Could not open that deck.", "error");
+      }
+      previewButton.disabled = false;
     });
 
     const button = row.querySelector<HTMLButtonElement>(".add-btn")!;
@@ -364,12 +380,54 @@ async function renderMine(
         ${deck.description ? `<div class="glosses">${escapeHtml(deck.description)}</div>` : ""}
         <div class="row-actions" style="margin-top:6px">
           <button class="secondary edit-deck-btn">Edit words</button>
+          <button class="secondary opts-btn">Options</button>
           ${shareable ? `<button class="secondary share-btn">Share with everyone</button>` : ""}
           ${publishedByMe ? `<button class="secondary unshare-btn">Stop sharing</button>` : ""}
+        </div>
+        <div class="deck-options" hidden>
+          <label class="deck-own-toggle"><input type="checkbox" class="own-toggle" /> This deck has its own settings</label>
+          <div class="deck-options-grid">
+            <label>New cards/day <input type="number" class="opt-new" min="0" /></label>
+            <label>Max reviews/day <input type="number" class="opt-max" min="1" /></label>
+          </div>
+          <div class="row-actions">
+            <button class="secondary save-opts">Save options</button>
+            <span class="glosses opts-msg"></span>
+          </div>
         </div>
       </div>
       ${deck.kind === "premade" ? `<button class="ghost remove-btn" title="Remove this deck">✕</button>` : ""}
     `;
+
+    // The deck's own scheduling: a partial override laid over the global
+    // settings, exactly like an Anki preset. Off, it follows Settings.
+    const optsPanel = row.querySelector<HTMLDivElement>(".deck-options")!;
+    row.querySelector<HTMLButtonElement>(".opts-btn")!.addEventListener("click", async () => {
+      if (!optsPanel.hidden) {
+        optsPanel.hidden = true;
+        return;
+      }
+      const { getDeckConfig, getDeckOverride } = await import("./deck.js");
+      const own = await getDeckOverride(deck.id);
+      const effective = await getDeckConfig(deck.id);
+      optsPanel.querySelector<HTMLInputElement>(".own-toggle")!.checked = own !== null;
+      optsPanel.querySelector<HTMLInputElement>(".opt-new")!.value = String(effective.newPerDay);
+      optsPanel.querySelector<HTMLInputElement>(".opt-max")!.value = String(effective.maxReviewsPerDay);
+      optsPanel.hidden = false;
+    });
+    optsPanel.querySelector<HTMLButtonElement>(".save-opts")!.addEventListener("click", async () => {
+      const { saveDeckOverride } = await import("./deck.js");
+      const message = optsPanel.querySelector<HTMLElement>(".opts-msg")!;
+      if (!optsPanel.querySelector<HTMLInputElement>(".own-toggle")!.checked) {
+        await saveDeckOverride(deck.id, null);
+        message.textContent = "Follows the global settings.";
+        return;
+      }
+      const newPerDay = Math.max(0, Math.floor(Number(optsPanel.querySelector<HTMLInputElement>(".opt-new")!.value) || 0));
+      const maxReviews = Math.max(1, Math.floor(Number(optsPanel.querySelector<HTMLInputElement>(".opt-max")!.value) || 1));
+      await saveDeckOverride(deck.id, { newPerDay, maxReviewsPerDay: maxReviews });
+      message.textContent = `Saved: ${newPerDay} new/day, ${maxReviews} reviews/day for this deck.`;
+    });
 
     // Every deck on the device opens: rename it, fix a card, reorder the
     // words, add more. However it arrived — Anki, the library, or typed here.
@@ -435,6 +493,54 @@ async function renderMine(
     list.innerHTML = `<div class="empty-state"><div class="big">📚</div>
       Nothing here yet.<br/>Tap words while reading, or add a premade deck.</div>`;
   }
+}
+
+/**
+ * A read-only look inside a library deck: every word, its reading and its
+ * meanings, scrollable, with Add at the bottom for when browsing convinces.
+ */
+function openDeckPreview(
+  body: HTMLElement,
+  name: string,
+  cards: { term: string; reading?: string; glosses?: string[] }[],
+  onAdd: (() => void) | null,
+): void {
+  body.querySelector(".rc-scrim")?.remove();
+  const scrim = document.createElement("div");
+  scrim.className = "rc-scrim";
+  const SHOWN = 200;
+  scrim.innerHTML = `
+    <div class="rc-pop card-panel deck-preview" role="dialog" aria-modal="true">
+      <div class="rc-pop-head">
+        <b>${escapeHtml(name)}</b>
+        <button class="rc-close ghost" aria-label="Close">✕</button>
+      </div>
+      <div class="glosses">${cards.length.toLocaleString()} words. Just looking — nothing is added.</div>
+      <div class="deck-preview-list">
+        ${cards
+          .slice(0, SHOWN)
+          .map(
+            (card) => `<div class="deck-preview-row">
+              <b lang="ja">${escapeHtml(card.term)}</b>
+              ${card.reading && card.reading !== card.term ? `<span lang="ja" class="glosses">${escapeHtml(card.reading)}</span>` : ""}
+              <span class="glosses">${escapeHtml((card.glosses ?? []).slice(0, 3).join(" · "))}</span>
+            </div>`,
+          )
+          .join("")}
+        ${cards.length > SHOWN ? `<div class="glosses" style="padding:8px 0">…and ${(cards.length - SHOWN).toLocaleString()} more.</div>` : ""}
+      </div>
+      ${onAdd ? `<div class="row-actions" style="margin-top:10px"><button class="preview-add">Add this deck</button></div>` : ""}
+    </div>`;
+  body.appendChild(scrim);
+  const close = (): void => scrim.remove();
+  scrim.addEventListener("click", (ev) => {
+    if (ev.target === scrim) close();
+  });
+  scrim.querySelector(".rc-close")!.addEventListener("click", close);
+  scrim.querySelector(".preview-add")?.addEventListener("click", () => {
+    close();
+    onAdd?.();
+  });
 }
 
 /** The publisher's avatar, or a lettered placeholder without a picture. */

@@ -186,6 +186,9 @@ const KEYS: { key: string; merge: Merge }[] = [
   { key: "doorKeys", merge: unionStrings },
   { key: "doorKeysInserted", merge: unionStrings },
   { key: "questStart", merge: earliestDay },
+  // The flashcard review log shares the quest log's shape: per day, per
+  // counter, the larger count wins.
+  { key: "reviewLog", merge: questLogMerge },
   { key: "questXpAwarded", merge: paidUnion },
   { key: "casinoGateSeen", merge: seenMerge },
 ];

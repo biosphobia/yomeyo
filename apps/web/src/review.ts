@@ -1,6 +1,7 @@
 import { screenHeader } from "./screen.js";
 import {
   buildQueue,
+  deckOf,
   deckStats,
   dropAfter,
   furiganaSegments,
@@ -30,14 +31,35 @@ export async function renderReview(main: HTMLElement, isCurrent: () => boolean =
   if (!isCurrent()) return; // a newer render has taken over
   const now = Date.now();
   const config = await getDeckConfig();
-  const counts = await getDailyCounts(now);
   const stats = deckStats(cards, now);
-  const queue = buildQueue(cards, now, config, {
-    introducedToday: counts.introduced,
-    reviewedToday: counts.reviewed,
-  });
 
-  const newLeft = Math.max(0, config.newPerDay - counts.introduced);
+  // Each deck schedules by its own options and spends its own daily
+  // allowance, exactly as Anki's presets do; the queues then run in turn,
+  // with everything mid-learning gathered to the front regardless of deck.
+  const deckIds = [...new Set(cards.map((card) => deckOf(card)))];
+  const configOfDeck = new Map<string, DeckConfig>();
+  let queue: Card[] = [];
+  let newLeft = 0;
+  for (const deckId of deckIds) {
+    const deckConfig = await getDeckConfig(deckId);
+    configOfDeck.set(deckId, deckConfig);
+    const deckCounts = await getDailyCounts(now, deckId);
+    queue = queue.concat(
+      buildQueue(
+        cards.filter((card) => deckOf(card) === deckId),
+        now,
+        deckConfig,
+        { introducedToday: deckCounts.introduced, reviewedToday: deckCounts.reviewed },
+      ),
+    );
+    newLeft += Math.max(0, deckConfig.newPerDay - deckCounts.introduced);
+  }
+  const inFlight = queue.filter((c) => c.state === "learning" || c.state === "relearning");
+  queue = [
+    ...inFlight.sort((a, b) => a.due - b.due),
+    ...queue.filter((c) => c.state !== "learning" && c.state !== "relearning"),
+  ];
+  const configOf = (card: Card): DeckConfig => configOfDeck.get(deckOf(card)) ?? config;
 
   main.innerHTML = `
     ${screenHeader("Review")}
@@ -57,7 +79,24 @@ export async function renderReview(main: HTMLElement, isCurrent: () => boolean =
       <div class="stat"><div class="num">${stats.review}</div><div class="lbl">known</div></div>
     </div>
     <div id="review-area"></div>
+    <div class="glosses" id="review-lifetime" style="text-align:center;margin-top:10px"></div>
   `;
+
+  // The lifetime line, quietly under everything: today's count and the
+  // total ever, from the permanent record.
+  void import("./review-stats.js")
+    .then(async (m) => {
+      const line = main.querySelector<HTMLDivElement>("#review-lifetime");
+      if (!line) return;
+      const [todayStats, lifetime] = await Promise.all([
+        m.dayReviewStats(m.reviewDateKey()),
+        m.lifetimeReviewStats(),
+      ]);
+      const total = m.reviewsOf(lifetime);
+      if (total === 0) return;
+      line.textContent = `${m.reviewsOf(todayStats)} reviews today · ${total.toLocaleString()} lifetime across ${lifetime.days} day${lifetime.days === 1 ? "" : "s"}`;
+    })
+    .catch(() => undefined);
 
   main
     .querySelector<HTMLDivElement>("#deck-choice-row")!
@@ -69,21 +108,25 @@ export async function renderReview(main: HTMLElement, isCurrent: () => boolean =
   /** Keep all four counters honest while reviewing, not just on entry. */
   const refreshStats = async (remaining: number): Promise<void> => {
     const at = Date.now();
-    const live = await getDailyCounts(at);
+    let freshLeft = 0;
+    for (const deckId of deckIds) {
+      const deckCounts = await getDailyCounts(at, deckId);
+      freshLeft += Math.max(0, (configOfDeck.get(deckId) ?? config).newPerDay - deckCounts.introduced);
+    }
     const fresh = deckStats((await liveCards()).filter((card) => cardInDeck(card, deckChoice)), at);
     numbers[0].textContent = String(remaining);
-    numbers[1].textContent = String(Math.max(0, config.newPerDay - live.introduced));
+    numbers[1].textContent = String(freshLeft);
     numbers[2].textContent = String(fresh.learning);
     numbers[3].textContent = String(fresh.review);
   };
 
-  showNext(area, queue, config, stats.due, refreshStats);
+  showNext(area, queue, configOf, stats.due, refreshStats);
 }
 
 function showNext(
   area: HTMLElement,
   queue: Card[],
-  config: DeckConfig,
+  configOf: (card: Card) => DeckConfig,
   totalDue: number,
   refreshStats: (remaining: number) => Promise<void>,
 ): void {
@@ -97,12 +140,15 @@ function showNext(
             ? "Daily limit reached. More tomorrow."
             : "All caught up!"
         }</div>
+        <div class="row-actions" style="justify-content:center;margin-top:12px">
+          <a href="#decks"><button class="secondary">Browse decks</button></a>
+        </div>
       </div>
     `;
     return;
   }
 
-  const preview = gradePreview(card, Date.now(), config);
+  const preview = gradePreview(card, Date.now(), configOf(card));
 
   area.innerHTML = `
     <div class="card-panel review-card">
@@ -181,9 +227,13 @@ function showNext(
       const grade = btn.dataset.grade as Grade;
       const now = Date.now();
       const wasNew = card.state === "new";
-      const updated = gradeCard(card, grade, now, config);
+      const updated = gradeCard(card, grade, now, configOf(card));
       await saveCard(updated);
-      await recordReview(wasNew, now);
+      await recordReview(wasNew, now, deckOf(card));
+      // The permanent record: how each button fell, per day, for ever.
+      void import("./review-stats.js")
+        .then((m) => m.recordGradedReview(grade, wasNew, now))
+        .catch(() => undefined);
 
       // Cards still due within this session (short learning steps) rejoin the
       // queue so they come round again, as they would in Anki.
@@ -191,7 +241,7 @@ function showNext(
         queue.push(updated);
       }
       await refreshStats(queue.length);
-      showNext(area, queue, config, totalDue, refreshStats);
+      showNext(area, queue, configOf, totalDue, refreshStats);
     });
   });
 }

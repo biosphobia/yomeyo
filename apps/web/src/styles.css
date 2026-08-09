@@ -5339,3 +5339,60 @@ button.gram-swap-line:hover {
   from { opacity: 0; transform: translateY(3px); }
   to { opacity: 1; transform: none; }
 }
+
+/* The day's study record on the calendar. */
+.cal-study { margin-top: 10px; display: grid; gap: 6px; }
+.cal-study-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+
+/* Per-deck options panel. */
+.deck-options {
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  display: grid;
+  gap: 8px;
+}
+.deck-own-toggle { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; }
+.deck-options-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.deck-options-grid label { display: grid; gap: 4px; }
+.deck-options-grid input {
+  width: 110px;
+  background: var(--panel-2, var(--panel));
+  color: inherit;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px;
+}
+
+/* Browsing a library deck without adding it. */
+.deck-preview { max-width: 480px; }
+.deck-preview-list {
+  max-height: 55vh;
+  overflow-y: auto;
+  margin-top: 8px;
+  display: grid;
+  gap: 2px;
+}
+.deck-preview-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+}

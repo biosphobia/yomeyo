@@ -33,8 +33,12 @@ export interface DeckConfig {
   leechThreshold: number;
   leechAction: "tag" | "suspend";
 
-  // --- SM-2 only (ignored when FSRS is on) ---
+  // --- SM-2, plus the one FSRS borrows ---
   graduatingIntervalDays: number;
+  /**
+   * The interval an "easy" graduation from learning gets. Under FSRS it is
+   * a cap: raw FSRS would hand a brand-new card a month off.
+   */
   easyIntervalDays: number;
   startingEase: number;
   maxIntervalDays: number;
@@ -67,7 +71,7 @@ export const DEFAULT_DECK_CONFIG: DeckConfig = {
   leechAction: "tag",
 
   graduatingIntervalDays: 1,
-  easyIntervalDays: 4,
+  easyIntervalDays: 5,
   startingEase: 2.5,
   maxIntervalDays: 365 * 10,
 };
