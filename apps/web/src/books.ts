@@ -41,10 +41,21 @@ export interface LibraryBook {
 }
 
 const SHELF_KEY = "readerBooks";
+/** Mirrors ocr-jobs' own key: pages already pushed to a shared copy. */
+const SHARED_PAGES_KEY = "ocrShared:";
 /** Firestore documents cap at 1MB; these chunks leave generous headroom. */
 const BLOCK_BYTES = 480_000;
-/** The share cap. Firestore is a card catalogue, not a warehouse. */
-export const SHARE_LIMIT_BYTES = 25 * 1024 * 1024;
+/**
+ * The share cap.
+ *
+ * It was 25MB, which sounded generous until the first real book: a volume
+ * of manga scanned at reading quality is comfortably twice that, so the
+ * one thing anybody actually wanted to share was the one thing that could
+ * not be. A book goes up in blocks of half a megabyte, so the ceiling is
+ * really about how many documents a publish is willing to write — a few
+ * hundred is fine, and that is where this now sits.
+ */
+export const SHARE_LIMIT_BYTES = 120 * 1024 * 1024;
 
 let shelfCache: BookInfo[] | null = null;
 onAccountChange(() => {
@@ -291,7 +302,12 @@ function base64ToBytes(data: string): Uint8Array {
  * Put a book in the shared library. The id begins with the publisher's uid,
  * which is what the security rules read ownership from.
  */
-export async function publishBook(account: AccountInfo, book: BookInfo, ownerName: string): Promise<string> {
+export async function publishBook(
+  account: AccountInfo,
+  book: BookInfo,
+  ownerName: string,
+  onProgress?: (done: number, total: number) => void,
+): Promise<string> {
   if (book.size > SHARE_LIMIT_BYTES) {
     throw new Error(`Too big to share — the cap is ${Math.round(SHARE_LIMIT_BYTES / 1024 / 1024)}MB.`);
   }
@@ -307,6 +323,9 @@ export async function publishBook(account: AccountInfo, book: BookInfo, ownerNam
     await storeApi.setDoc(storeApi.doc(db, "books", sharedId, "blocks", String(i)), {
       data: bytesToBase64(bytes.subarray(i * BLOCK_BYTES, (i + 1) * BLOCK_BYTES)),
     });
+    // A big book is hundreds of blocks over whatever connection is to
+    // hand, so the wait is worth narrating.
+    onProgress?.(i + 1, blockCount);
   }
   await storeApi.setDoc(storeApi.doc(db, "books", sharedId), {
     name: book.name,
@@ -384,6 +403,27 @@ export async function unpublishBook(sharedId: string, blockCount: number): Promi
   for (let i = 0; i < blockCount; i++) {
     await storeApi.deleteDoc(storeApi.doc(db, "books", sharedId, "blocks", String(i))).catch(() => undefined);
   }
+}
+
+/**
+ * Take a book back out of the shared library, and off this shelf's
+ * record of it — the local copy stays exactly where it is.
+ */
+export async function unshareBook(id: string): Promise<void> {
+  const books = await listBooks();
+  const book = books.find((b) => b.id === id);
+  if (!book?.sharedId) return;
+  await unpublishBook(book.sharedId, Math.ceil(book.size / BLOCK_BYTES)).catch(() => undefined);
+  await saveShelf(
+    books.map((b) => {
+      if (b.id !== id) return b;
+      const { sharedId: _shared, ownerName: _owner, ...rest } = b;
+      return rest;
+    }),
+  );
+  // The record of which pages this device has already contributed goes
+  // too: a future share starts its own conversation with the library.
+  await setMeta(SHARED_PAGES_KEY + id, []);
 }
 
 /** Whoever is signed in, for the share buttons. Null quietly. */

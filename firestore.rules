@@ -186,8 +186,8 @@ service cloud.firestore {
       && book.ownerUid == request.auth.uid
       && book.name is string && book.name.size() > 0 && book.name.size() <= 160
       && book.kind in ['text', 'epub', 'pdf', 'cbz', 'image']
-      && book.size is number && book.size <= 26 * 1024 * 1024
-      && book.blockCount is number && book.blockCount >= 1 && book.blockCount <= 80;
+      && book.size is number && book.size <= 130 * 1024 * 1024
+      && book.blockCount is number && book.blockCount >= 1 && book.blockCount <= 300;
   }
 
   function isValidBlock() {

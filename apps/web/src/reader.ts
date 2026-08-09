@@ -2,6 +2,7 @@ import { isJapaneseChar, lookup } from "@yomeyo/core";
 import { screenHeader } from "./screen.js";
 import { activeDictionary } from "./store.js";
 import { closePopup, showLookupPopup } from "./popup.js";
+import { SHARE_LIMIT_BYTES } from "./books.js";
 
 /**
  * Reader page: paste (or share) Japanese text, tap any word to look it up
@@ -75,7 +76,7 @@ async function openShelfBook(main: HTMLElement, body: HTMLElement, id: string): 
 // ---------------- my books ----------------
 
 async function renderShelf(main: HTMLElement, body: HTMLElement): Promise<void> {
-  const { listBooks, addBookFromFiles, forgetBook, publishBook, unpublishBook, renameBook, shelfAccount, SHARE_LIMIT_BYTES } =
+  const { listBooks, addBookFromFiles, forgetBook, publishBook, unpublishBook, unshareBook, renameBook, shelfAccount } =
     await import("./books.js");
   const books = await listBooks();
   const account = await shelfAccount();
@@ -129,11 +130,7 @@ async function renderShelf(main: HTMLElement, body: HTMLElement): Promise<void> 
         <div class="row-actions" style="margin-top:6px">
           <button class="bk-open">Read</button>
           <button class="secondary bk-rename">✎ Rename</button>
-          ${
-            account && !book.sharedId && book.size <= SHARE_LIMIT_BYTES
-              ? `<button class="secondary bk-share">Share with everyone</button>`
-              : ""
-          }
+          ${shareButton(book, account)}
         </div>
       </div>
       <button class="ghost bk-remove" title="Remove">✕</button>
@@ -155,7 +152,11 @@ async function renderShelf(main: HTMLElement, body: HTMLElement): Promise<void> 
       try {
         const { ensureProfile } = await import("./profile.js");
         const ownerName = (await ensureProfile()).name;
-        await publishBook(account!, book, ownerName);
+        // Hundreds of blocks for a big book: say how far along it is, or a
+        // three-minute upload looks like a hung button.
+        await publishBook(account!, book, ownerName, (done, total) => {
+          button.textContent = `Sharing… ${Math.round((done / total) * 100)}%`;
+        });
         renderReader(main);
       } catch (err) {
         button.disabled = false;
@@ -165,6 +166,14 @@ async function renderShelf(main: HTMLElement, body: HTMLElement): Promise<void> 
         status.textContent = err instanceof Error ? err.message : String(err);
         row.appendChild(status);
       }
+    });
+    row.querySelector(".bk-unshare")?.addEventListener("click", async (ev) => {
+      if (!confirm(`Take “${book.name}” out of the shared library? Your own copy stays here.`)) return;
+      const button = ev.currentTarget as HTMLButtonElement;
+      button.disabled = true;
+      button.textContent = "Removing…";
+      await unshareBook(book.id).catch(() => undefined);
+      renderReader(main);
     });
     row.querySelector(".bk-remove")!.addEventListener("click", async () => {
       if (!confirm(`Remove “${book.name}” from this device?`)) return;
@@ -179,6 +188,30 @@ async function renderShelf(main: HTMLElement, body: HTMLElement): Promise<void> 
     });
     list.appendChild(row);
   }
+}
+
+/**
+ * The share control for one book — always present, and honest when it
+ * cannot be used.
+ *
+ * It used to be rendered only when every condition was met, which meant
+ * the commonest case (a book over the size cap) showed nothing at all:
+ * no button, no reason, nothing to act on. A control that explains itself
+ * beats a control that disappears.
+ */
+function shareButton(book: { name: string; size: number; sharedId?: string }, account: unknown): string {
+  if (book.sharedId) {
+    return `<button class="secondary bk-unshare">Stop sharing</button>`;
+  }
+  if (!account) {
+    return `<button class="secondary" disabled title="Sign in under Settings to share">Share (sign in first)</button>`;
+  }
+  if (book.size > SHARE_LIMIT_BYTES) {
+    const cap = Math.round(SHARE_LIMIT_BYTES / 1024 / 1024);
+    return `<button class="secondary" disabled title="This book is ${formatSize(book.size)}; the cap is ${cap}MB">
+      Too big to share (${cap}MB cap)</button>`;
+  }
+  return `<button class="secondary bk-share">Share with everyone</button>`;
 }
 
 /** Where a book's whole-book OCR has got to, if it was ever started. */
