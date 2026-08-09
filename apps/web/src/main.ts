@@ -207,3 +207,7 @@ if ("serviceWorker" in navigator && import.meta.env.PROD) {
     /* offline support is progressive enhancement */
   });
 }
+
+// A book left half-read by "OCR all pages" carries on where it stopped —
+// here while the app is open, and in the service worker once it is not.
+void import("./ocr-resume.js").then((m) => m.resumeOcrJobs());

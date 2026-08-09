@@ -113,6 +113,9 @@ async function renderShelf(main: HTMLElement, body: HTMLElement): Promise<void> 
     }
   });
 
+  const { allJobs } = await import("./ocr-jobs.js");
+  const jobs = await allJobs();
+
   const list = body.querySelector<HTMLDivElement>("#bk-list")!;
   const KIND_ICON: Record<string, string> = { pdf: "📄", epub: "📕", cbz: "📚", image: "🖼", text: "📝" };
   for (const book of books) {
@@ -122,6 +125,7 @@ async function renderShelf(main: HTMLElement, body: HTMLElement): Promise<void> 
       <div class="word">
         <div><b>${escapeHtml(book.name)}</b>${book.sharedId ? ` <span class="glosses">· shared</span>` : ""}</div>
         <div class="glosses">${KIND_ICON[book.kind] ?? "📄"} ${book.kind} · ${formatSize(book.size)}</div>
+        ${ocrLine(jobs[book.id])}
         <div class="row-actions" style="margin-top:6px">
           <button class="bk-open">Read</button>
           <button class="secondary bk-rename">✎ Rename</button>
@@ -175,6 +179,19 @@ async function renderShelf(main: HTMLElement, body: HTMLElement): Promise<void> 
     });
     list.appendChild(row);
   }
+}
+
+/** Where a book's whole-book OCR has got to, if it was ever started. */
+function ocrLine(job: { done: unknown[]; total: number; state: string } | undefined): string {
+  if (!job) return "";
+  const done = job.done.length;
+  if (job.state === "done") {
+    return `<div class="glosses">🔍 read: ${done} of ${job.total} pages</div>`;
+  }
+  const percent = job.total > 0 ? Math.round((done / job.total) * 100) : 0;
+  const label = job.state === "running" ? "reading" : "paused";
+  return `<div class="glosses bk-row-ocr">🔍 ${label}: ${done} / ${job.total}
+    <span class="bk-ocr-progress mini"><span class="bk-ocr-progress-fill" style="width:${percent}%"></span></span></div>`;
 }
 
 // ---------------- the shared shelf ----------------

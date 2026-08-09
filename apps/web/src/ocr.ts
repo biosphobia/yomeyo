@@ -18,6 +18,52 @@ import { assetUrl } from "./store.js";
  * text blocks with boxes as FRACTIONS of the page, valid at any zoom.
  */
 
+/**
+ * A drawing surface, whichever kind this context has. The page has real
+ * canvases; the service worker that keeps a batch running after the tab
+ * closes has OffscreenCanvas, which does everything needed here.
+ */
+export type AnyCanvas = HTMLCanvasElement | OffscreenCanvas;
+
+export function newCanvas(width: number, height: number): AnyCanvas {
+  if (typeof document !== "undefined") {
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    return canvas;
+  }
+  return new OffscreenCanvas(width, height);
+}
+
+function context2d(canvas: AnyCanvas): CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D {
+  return canvas.getContext("2d", { willReadFrequently: true }) as
+    | CanvasRenderingContext2D
+    | OffscreenCanvasRenderingContext2D;
+}
+
+/** Is this a drawing surface (either kind), rather than a blob or a URL? */
+function isCanvas(value: unknown): value is AnyCanvas {
+  return (
+    (typeof HTMLCanvasElement !== "undefined" && value instanceof HTMLCanvasElement) ||
+    (typeof OffscreenCanvas !== "undefined" && value instanceof OffscreenCanvas)
+  );
+}
+
+/** The canvas as base64 JPEG, by whichever route this context provides. */
+async function jpegBase64(canvas: AnyCanvas, quality: number): Promise<string> {
+  if (typeof HTMLCanvasElement !== "undefined" && canvas instanceof HTMLCanvasElement) {
+    const url = canvas.toDataURL("image/jpeg", quality);
+    return url.slice(url.indexOf(",") + 1);
+  }
+  const blob = await (canvas as OffscreenCanvas).convertToBlob({ type: "image/jpeg", quality });
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(binary);
+}
+
 export interface OcrWord {
   text: string;
   /** Box as fractions of the page, 0..1. */
@@ -49,8 +95,9 @@ export async function cachedOcr(cacheKey: string, shared?: SharedOcrRef): Promis
   const held = await getMeta<OcrWord[]>(CACHE_PREFIX + cacheKey);
   if (Array.isArray(held)) return held;
   if (!shared) return null;
-  const { fetchSharedOcr } = await import("./books.js");
-  const remote = await fetchSharedOcr(shared.id, shared.page);
+  const books = await bookCloud();
+  if (!books) return null;
+  const remote = await books.fetchSharedOcr(shared.id, shared.page);
   if (!Array.isArray(remote)) return null;
   const words = (remote as OcrWord[]).filter(
     (w) => w && typeof w.text === "string" && w.text.trim() !== "" && Number.isFinite(w.x) && Number.isFinite(w.y),
@@ -58,6 +105,21 @@ export async function cachedOcr(cacheKey: string, shared?: SharedOcrRef): Promis
   if (words.length === 0) return null;
   await setMeta(CACHE_PREFIX + cacheKey, words);
   return words;
+}
+
+/**
+ * The shared-bookshelf half of a book, when it is reachable at all.
+ *
+ * The service worker that finishes a batch after the tab closes has no
+ * sign-in and no cloud library bundled into it, so every one of these
+ * calls has to be allowed to come back empty rather than throw.
+ */
+async function bookCloud(): Promise<typeof import("./books.js") | null> {
+  try {
+    return await import("./books.js");
+  } catch {
+    return null;
+  }
 }
 
 let workerPromise: Promise<any> | null = null;
@@ -99,17 +161,15 @@ function claudeAvailable(): Promise<boolean> {
  * takes the page — it is a worse reader, but its boxes are its own too.
  * Nothing here ever asks a model where something is.
  */
-async function claudeOcr(canvas: HTMLCanvasElement, onStatus?: (line: string) => void): Promise<OcrWord[] | null> {
+async function claudeOcr(canvas: AnyCanvas, onStatus?: (line: string) => void): Promise<OcrWord[] | null> {
   if (!(await claudeAvailable())) return null;
 
   const MAX_SIDE = 1500;
   const scale = Math.min(1, MAX_SIDE / Math.max(canvas.width, canvas.height));
   let frame = canvas;
   if (scale < 1) {
-    frame = document.createElement("canvas");
-    frame.width = Math.round(canvas.width * scale);
-    frame.height = Math.round(canvas.height * scale);
-    frame.getContext("2d")!.drawImage(canvas, 0, 0, frame.width, frame.height);
+    frame = newCanvas(Math.round(canvas.width * scale), Math.round(canvas.height * scale));
+    context2d(frame).drawImage(canvas as CanvasImageSource, 0, 0, frame.width, frame.height);
   }
 
   const found = detectTextBlocks(frame);
@@ -119,7 +179,7 @@ async function claudeOcr(canvas: HTMLCanvasElement, onStatus?: (line: string) =>
 }
 
 /** Each detected block, cropped and sent for transcription only. */
-async function transcribeBlocks(frame: HTMLCanvasElement, boxes: DetectedBox[]): Promise<OcrWord[] | null> {
+async function transcribeBlocks(frame: AnyCanvas, boxes: DetectedBox[]): Promise<OcrWord[] | null> {
   const images: string[] = [];
   for (const box of boxes) {
     const pad = 6;
@@ -127,14 +187,11 @@ async function transcribeBlocks(frame: HTMLCanvasElement, boxes: DetectedBox[]):
     const y = Math.max(0, box.y - pad);
     const cw = Math.min(frame.width - x, box.w + pad * 2);
     const ch = Math.min(frame.height - y, box.h + pad * 2);
-    const crop = document.createElement("canvas");
     // Tiny crops read badly; double them so the strokes survive JPEG.
     const up = Math.max(cw, ch) < 120 ? 2 : 1;
-    crop.width = Math.max(1, cw * up);
-    crop.height = Math.max(1, ch * up);
-    crop.getContext("2d")!.drawImage(frame, x, y, cw, ch, 0, 0, crop.width, crop.height);
-    const dataUrl = crop.toDataURL("image/jpeg", 0.85);
-    images.push(dataUrl.slice(dataUrl.indexOf(",") + 1));
+    const crop = newCanvas(Math.max(1, cw * up), Math.max(1, ch * up));
+    context2d(crop).drawImage(frame as CanvasImageSource, x, y, cw, ch, 0, 0, crop.width, crop.height);
+    images.push(await jpegBase64(crop, 0.85));
   }
 
   const res = await fetch(assetUrl("grammar.php"), {
@@ -216,16 +273,14 @@ interface Mark {
  * Both polarities run: black on white, and the white-on-black lettering
  * manga puts inside title pills.
  */
-function detectTextBlocks(frame: HTMLCanvasElement): DetectedBox[] {
+function detectTextBlocks(frame: AnyCanvas): DetectedBox[] {
   const DETECT = 1100;
   const s = Math.min(1, DETECT / Math.max(frame.width, frame.height));
   const w = Math.max(16, Math.round(frame.width * s));
   const h = Math.max(16, Math.round(frame.height * s));
-  const small = document.createElement("canvas");
-  small.width = w;
-  small.height = h;
-  const ctx = small.getContext("2d", { willReadFrequently: true })!;
-  ctx.drawImage(frame, 0, 0, w, h);
+  const small = newCanvas(w, h);
+  const ctx = context2d(small);
+  ctx.drawImage(frame as CanvasImageSource, 0, 0, w, h);
   const { data } = ctx.getImageData(0, 0, w, h);
 
   const luma = new Uint8Array(w * h);
@@ -539,7 +594,7 @@ function dilate(src: Uint8Array, w: number, h: number, r: number): Uint8Array {
  * an object URL. `cacheKey` is `${bookId}:${page}`.
  */
 export async function ocrPage(
-  image: HTMLCanvasElement | Blob | string,
+  image: AnyCanvas | Blob | string,
   cacheKey: string,
   size: { width: number; height: number },
   onStatus?: (line: string) => void,
@@ -557,8 +612,8 @@ export async function ocrPage(
   /** A fresh result also joins the shared book, for everyone after. */
   const contribute = (words: OcrWord[]): void => {
     if (!shared || words.length === 0) return;
-    void import("./books.js")
-      .then((m) => m.publishOcr(shared.id, shared.page, words))
+    void bookCloud()
+      .then((books) => books?.publishOcr(shared.id, shared.page, words))
       .catch(() => undefined);
   };
 
@@ -567,7 +622,7 @@ export async function ocrPage(
   // host has no key, the network is down, or nothing on the page looked
   // like print. A page Claude did read and found no words on is finished:
   // it is artwork, and saying so once saves reading it again.
-  if (image instanceof HTMLCanvasElement) {
+  if (isCanvas(image)) {
     const viaClaude = await claudeOcr(image, onStatus).catch(() => null);
     if (viaClaude) {
       await setMeta(CACHE_PREFIX + cacheKey, viaClaude);
@@ -603,8 +658,8 @@ export async function clearOcr(cacheKey: string, shared?: SharedOcrRef): Promise
   const { deleteMeta } = await import("./db.js");
   await deleteMeta(CACHE_PREFIX + cacheKey).catch(() => undefined);
   if (shared) {
-    void import("./books.js")
-      .then((m) => m.deleteSharedOcr(shared.id, shared.page))
+    void bookCloud()
+      .then((books) => books?.deleteSharedOcr(shared.id, shared.page))
       .catch(() => undefined);
   }
 }

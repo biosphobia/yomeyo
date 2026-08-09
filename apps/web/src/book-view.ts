@@ -4,6 +4,7 @@ import { closePopup, showLookupPopup } from "./popup.js";
 import { getBookFile, type BookInfo } from "./books.js";
 import { getMeta, setMeta } from "./db.js";
 import { cachedOcr, clearOcr, ocrPage, type OcrWord, type SharedOcrRef } from "./ocr.js";
+import { jobFor, onOcrJobs, pauseJob, runJobs, startJob } from "./ocr-jobs.js";
 
 /**
  * Reading one book, whatever it is made of.
@@ -334,38 +335,15 @@ async function openPdf(blob: Blob, ui: Ui): Promise<Closeable> {
     zoom = next;
     void draw();
   });
+  let stopWatching: (() => void) | null = null;
   if (doc.numPages > 1) {
-    offerBatchOcr(ui, {
-      total: doc.numPages,
-      keyOf: (i) => `${ui.book.id}:${i + 1}`,
-      sharedOf: (i) => (ui.book.sharedId ? { id: ui.book.sharedId, page: i + 1 } : undefined),
-      // A page that already carries real text needs no OCR.
-      needed: async (i) => {
-        const pdfPage = await doc.getPage(i + 1);
-        const content = await pdfPage.getTextContent();
-        let japanese = 0;
-        for (const item of content.items as { str: string }[]) {
-          for (const ch of item.str ?? "") if (isJapaneseChar(ch)) japanese++;
-        }
-        return japanese < 4;
-      },
-      render: async (i) => {
-        const pdfPage = await doc.getPage(i + 1);
-        const base = pdfPage.getViewport({ scale: 1 });
-        const viewport = pdfPage.getViewport({ scale: 1300 / base.width });
-        const off = document.createElement("canvas");
-        off.width = Math.round(viewport.width);
-        off.height = Math.round(viewport.height);
-        await pdfPage.render({ canvasContext: off.getContext("2d")!, viewport } as never).promise;
-        return off;
-      },
-      refresh: () => void draw(),
-    });
+    stopWatching = offerBatchOcr(ui, doc.numPages, () => void draw());
   }
   await draw();
   return {
     close: () => {
       closed = true;
+      stopWatching?.();
       void doc.destroy();
     },
   };
@@ -440,36 +418,14 @@ async function openPictures(blob: Blob, ui: Ui): Promise<Closeable> {
     zoom = next;
     void draw();
   });
+  let stopWatching: (() => void) | null = null;
   if (pages.length > 1) {
-    offerBatchOcr(ui, {
-      total: pages.length,
-      keyOf: (i) => `${ui.book.id}:${i}`,
-      sharedOf: (i) => (ui.book.sharedId ? { id: ui.book.sharedId, page: i } : undefined),
-      render: async (i) => {
-        const bytes = await pages[i].bytes();
-        const pageUrl = URL.createObjectURL(new Blob([bytes as unknown as BlobPart]));
-        try {
-          const picture = new Image();
-          await new Promise<void>((resolve, reject) => {
-            picture.onload = () => resolve();
-            picture.onerror = () => reject(new Error("unreadable image"));
-            picture.src = pageUrl;
-          });
-          const off = document.createElement("canvas");
-          off.width = picture.naturalWidth || 1;
-          off.height = picture.naturalHeight || 1;
-          off.getContext("2d")!.drawImage(picture, 0, 0);
-          return off;
-        } finally {
-          URL.revokeObjectURL(pageUrl);
-        }
-      },
-      refresh: () => void draw(),
-    });
+    stopWatching = offerBatchOcr(ui, pages.length, () => void draw());
   }
   await draw();
   return {
     close: () => {
+      stopWatching?.();
       if (url) URL.revokeObjectURL(url);
     },
   };
@@ -628,72 +584,92 @@ function offerOcr(
 }
 
 /** What a whole-book OCR run needs to know about its pages. */
-interface BatchOcrSpec {
-  /** How many pages, iterated 0..total-1. */
-  total: number;
-  keyOf: (page: number) => string;
-  sharedOf: (page: number) => SharedOcrRef | undefined;
-  /** Does this page even need OCR? Text PDF pages do not. */
-  needed?: (page: number) => Promise<boolean>;
-  /** The page's pixels, rendered offscreen at reading size. */
-  render: (page: number) => Promise<HTMLCanvasElement>;
-  /** Redraw the page on screen, so a fresh overlay appears at once. */
-  refresh: () => void;
-}
-
 /**
- * One button that reads the whole book: every page not already read goes
- * through OCR in order, and the button becomes a stop while it runs.
- * Already-read pages cost nothing, so the run resumes wherever it left off.
+ * The whole book, read in the background.
+ *
+ * This used to be a loop living inside the open book: leaving the page
+ * ended it. It is a job now (see ocr-jobs.ts) — it keeps going while you
+ * read something else, picks itself up when the app is opened again, and
+ * carries on in the service worker after the tab is closed. All this
+ * button does is start it, stop it, and show where it has got to.
  */
-function offerBatchOcr(ui: Ui, spec: BatchOcrSpec): void {
+function offerBatchOcr(ui: Ui, total: number, refresh: () => void): () => void {
   ui.controls.querySelector("#bk-ocr-all")?.remove();
+  ui.controls.querySelector("#bk-ocr-progress")?.remove();
   const button = document.createElement("button");
   button.id = "bk-ocr-all";
   button.className = "secondary";
   button.textContent = "📚 OCR all";
   ui.controls.appendChild(button);
 
-  let running = false;
-  button.addEventListener("click", () => {
-    if (running) {
-      running = false;
-      button.textContent = "Stopping…";
-      return;
-    }
-    running = true;
-    void (async () => {
-      let read = 0;
-      let failed = 0;
-      for (let page = 0; page < spec.total; page++) {
-        if (!running) break;
-        button.textContent = `⏹ ${page + 1} / ${spec.total}`;
-        const key = spec.keyOf(page);
-        const shared = spec.sharedOf(page);
-        try {
-          if (await cachedOcr(key, shared)) continue;
-          if (spec.needed && !(await spec.needed(page))) continue;
-          ui.status.textContent = `Reading page ${page + 1} of ${spec.total}…`;
-          const canvas = await spec.render(page);
-          await ocrPage(canvas, key, { width: canvas.width, height: canvas.height }, undefined, shared);
-          read++;
-        } catch {
-          failed++;
+  const bar = document.createElement("div");
+  bar.id = "bk-ocr-progress";
+  bar.className = "bk-ocr-progress";
+  bar.style.display = "none";
+  bar.innerHTML = `<div class="bk-ocr-progress-fill"></div><span class="bk-ocr-progress-text"></span>`;
+  ui.controls.insertAdjacentElement("afterend", bar);
+  const fill = bar.querySelector<HTMLDivElement>(".bk-ocr-progress-fill")!;
+  const text = bar.querySelector<HTMLSpanElement>(".bk-ocr-progress-text")!;
+
+  let seen = -1;
+  const paint = async (): Promise<void> => {
+    const job = await jobFor(ui.book.id);
+    if (!bar.isConnected) return;
+    if (!job || job.state === "done") {
+      bar.style.display = job?.state === "done" ? "" : "none";
+      button.textContent = "📚 OCR all";
+      if (job?.state === "done") {
+        const missed = job.failed.length;
+        fill.style.width = "100%";
+        text.textContent = missed
+          ? `Read ${job.done.length} of ${job.total} pages. ${missed} would not read — run it again to retry.`
+          : `All ${job.total} pages read.`;
+        // A page finished while this one was open deserves its boxes now.
+        if (seen !== job.done.length) {
+          seen = job.done.length;
+          refresh();
         }
       }
-      const stopped = !running;
-      running = false;
-      button.textContent = "📚 OCR all";
-      ui.status.textContent = stopped
-        ? `Stopped. ${read} page${read === 1 ? "" : "s"} read this run.`
-        : failed > 0
-          ? `Done: ${read} read, ${failed} failed. Run again to retry the failed ones.`
-          : read > 0
-            ? `Done: every page is read. (${read} new)`
-            : "Every page was already read.";
-      spec.refresh();
+      return;
+    }
+    bar.style.display = "";
+    const percent = job.total > 0 ? Math.round((job.done.length / job.total) * 100) : 0;
+    fill.style.width = `${percent}%`;
+    const running = job.state === "running";
+    button.textContent = running ? "⏸ Pause OCR" : "▶ Resume OCR";
+    text.textContent = job.note
+      ? job.note
+      : running
+        ? `Reading page ${Math.min(job.total, job.done.length + 1)} of ${job.total}. This keeps going if you leave.`
+        : `Paused at ${job.done.length} of ${job.total}.`;
+    if (seen !== job.done.length) {
+      seen = job.done.length;
+      refresh();
+    }
+  };
+
+  button.addEventListener("click", () => {
+    void (async () => {
+      const job = await jobFor(ui.book.id);
+      if (job && job.state === "running") {
+        await pauseJob(ui.book.id);
+      } else {
+        await startJob({ id: ui.book.id, name: ui.book.name }, total);
+        void runJobs().catch(() => undefined);
+      }
+      void paint();
     })();
   });
+
+  // Progress can come from anywhere: this tab, another tab, or the worker
+  // that carried on after this one was closed. Watch the record itself.
+  const stopListening = onOcrJobs(() => void paint());
+  const timer = window.setInterval(() => void paint(), 2000);
+  void paint();
+  return () => {
+    stopListening();
+    window.clearInterval(timer);
+  };
 }
 
 /**
