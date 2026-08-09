@@ -497,6 +497,13 @@ function offerOcr(
   button.textContent = "🔍 Read this page (OCR)";
   ui.controls.appendChild(button);
 
+  // The boxes are invisible by default so the page looks untouched; a
+  // remembered toggle draws the outlines for anyone who wants to see
+  // exactly what was recognised where.
+  void getMeta<boolean>("ocrShowBoxes").then((held) => {
+    layer.classList.toggle("show-boxes", held === true);
+  });
+
   // Once a page has boxes, its OCR can be redone (a bad read replaced,
   // everywhere) or cleared outright.
   const showManage = (): void => {
@@ -505,9 +512,21 @@ function offerOcr(
     manage.id = "bk-ocr-manage";
     manage.className = "row-actions bk-ocr-manage";
     manage.innerHTML = `
+      <button class="secondary" id="bk-ocr-boxes"></button>
       <button class="secondary" id="bk-ocr-redo">↻ Re-OCR page</button>
       <button class="secondary" id="bk-ocr-clear">✕ Clear OCR</button>
     `;
+    const boxesButton = manage.querySelector<HTMLButtonElement>("#bk-ocr-boxes")!;
+    const labelBoxes = (): void => {
+      boxesButton.textContent = layer.classList.contains("show-boxes") ? "◼ Hide boxes" : "◻ Show boxes";
+    };
+    labelBoxes();
+    boxesButton.addEventListener("click", () => {
+      const on = !layer.classList.contains("show-boxes");
+      layer.classList.toggle("show-boxes", on);
+      labelBoxes();
+      void setMeta("ocrShowBoxes", on);
+    });
     manage.querySelector("#bk-ocr-redo")!.addEventListener("click", () => void run(true));
     manage.querySelector("#bk-ocr-clear")!.addEventListener("click", () => {
       void clearOcr(cacheKey, shared).then(() => {
