@@ -1,4 +1,4 @@
-import { getMeta, setMeta } from "./db.js";
+import { getMeta, onAccountChange, setMeta } from "./db.js";
 import { addXp } from "./levels.js";
 import { toast } from "./toast.js";
 
@@ -69,6 +69,9 @@ const KEY = "achievements";
 type Unlocks = Record<string, number>;
 
 let cached: Unlocks | null = null;
+onAccountChange(() => {
+  cached = null;
+});
 
 async function unlocks(): Promise<Unlocks> {
   cached ??= (await getMeta<Unlocks>(KEY)) ?? {};

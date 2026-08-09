@@ -1,4 +1,4 @@
-import { getMeta, setMeta } from "./db.js";
+import { getMeta, onAccountChange, setMeta } from "./db.js";
 import { KANA_GROUPS, type KanaGroup } from "./kana-data.js";
 import { XP_DAY_BONUS, XP_PER_QUEST, addXp } from "./levels.js";
 import { toast } from "./toast.js";
@@ -275,6 +275,9 @@ const LOG_KEY = "questLog";
 type QuestLog = Record<string, Record<string, number>>;
 
 let cached: QuestLog | null = null;
+onAccountChange(() => {
+  cached = null;
+});
 
 async function log(): Promise<QuestLog> {
   cached ??= (await getMeta<QuestLog>(LOG_KEY)) ?? {};

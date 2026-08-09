@@ -95,6 +95,15 @@ export function onAccountChange(listener: () => void): void {
 }
 
 /**
+ * Ring the same bell without an account change: the progress sync writes
+ * new numbers under modules' feet, and their caches must be dropped the
+ * same way they are on a switch.
+ */
+export function notifyAccountData(): void {
+  for (const listener of profileListeners) listener();
+}
+
+/**
  * Open connections, one per database name.
  *
  * Kept rather than closed on a switch: signing out and back in is common, and

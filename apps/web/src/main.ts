@@ -140,6 +140,14 @@ await routeWithHandoff();
 // front of you, so whatever is on screen is about to be wrong.
 onAccountChange(() => route());
 
+// The level, the purse and the achievements travel with the account, not
+// the browser. Whenever an account lands — start-up or sign-in — fetch
+// them quietly; the account-change bell above redraws when they arrive.
+onAccountChange(() => {
+  if (!activeAccount()) return;
+  void import("./progress-sync.js").then((m) => m.syncProgress()).catch(() => undefined);
+});
+
 /**
  * Check the remembered account against the real session, once, in the
  * background.
@@ -152,7 +160,11 @@ onAccountChange(() => route());
  */
 if (activeAccount()) {
   void (async () => {
-    if (await getFirebaseConfig()) await currentAccount().catch(() => null);
+    if (await getFirebaseConfig()) {
+      await currentAccount().catch(() => null);
+      // The session stands: bring over any progress made elsewhere.
+      await import("./progress-sync.js").then((m) => m.syncProgress()).catch(() => undefined);
+    }
   })();
 }
 

@@ -315,9 +315,11 @@ export async function syncNow(): Promise<SyncOutcome> {
 
   await putCards([...appliedStored, ...cleared]);
   await setMeta(cursorKey, result.cursor);
-  // The cards are only half of it: which decks they belong to travels too.
+  // The cards are only half of it: which decks they belong to travels too,
+  // and so do the level, the purse, and the rest of the account's progress.
   if (mode === "firebase") {
     await import("./deck-sync.js").then((mod) => mod.syncDecks()).catch(() => undefined);
+    await import("./progress-sync.js").then((mod) => mod.syncProgress()).catch(() => undefined);
   }
   return { pushed: result.pushed, pulled: result.pulled };
 }
