@@ -42,7 +42,7 @@ export interface LibraryBook {
 
 const SHELF_KEY = "readerBooks";
 /** Mirrors ocr-jobs' own key: pages already pushed to a shared copy. */
-const SHARED_PAGES_KEY = "ocrShared:";
+const SHARED_PAGES_KEY = "ocrShared2:";
 /** Firestore documents cap at 1MB; these chunks leave generous headroom. */
 const BLOCK_BYTES = 480_000;
 /**
@@ -308,6 +308,7 @@ export async function publishBook(
   ownerName: string,
   onProgress?: (done: number, total: number, bytesSent: number) => void,
   signal?: { stopped: boolean },
+  onStatus?: (text: string) => void,
 ): Promise<string> {
   if (book.size > SHARE_LIMIT_BYTES) {
     throw new Error(`Too big to share — the cap is ${Math.round(SHARE_LIMIT_BYTES / 1024 / 1024)}MB.`);
@@ -381,9 +382,11 @@ export async function publishBook(
   await saveShelf(
     (await listBooks()).map((b) => (b.id === book.id ? { ...b, sharedId, ownerName } : b)),
   );
-  // Pages already OCR'd on this device travel with the book, so nobody
-  // downstream pays for a page that has been read once.
-  await publishAllOcr(book.id, sharedId).catch(() => undefined);
+  // Pages already read on this device travel with the book, so nobody
+  // downstream pays to read a page twice.
+  onStatus?.("Sharing the pages already read…");
+  const readPages = await publishAllOcr(book.id, sharedId).catch(() => 0);
+  onStatus?.(readPages > 0 ? `Shared, with ${readPages} pages of reading.` : "Shared.");
   return sharedId;
 }
 
@@ -575,23 +578,48 @@ export async function deleteSharedOcr(sharedId: string, page: number): Promise<v
 }
 
 /** Contribute one page's OCR. Quiet about every possible failure. */
-export async function publishOcr(sharedId: string, page: number, words: unknown): Promise<void> {
+/**
+ * Contribute one page's OCR. Says whether it actually went.
+ *
+ * It used to swallow every failure and tell the caller nothing, which is
+ * how a whole book's worth of reading could be marked as shared without a
+ * single page of it arriving.
+ */
+export async function publishOcr(sharedId: string, page: number, words: unknown): Promise<boolean> {
   try {
-    if (!(await currentAccount().catch(() => null))) return;
+    if (!(await currentAccount().catch(() => null))) return false;
     const { db, storeApi } = await firestoreApi();
     await storeApi.setDoc(storeApi.doc(db, "books", sharedId, "ocr", ocrDocId(page)), { words });
+    return true;
   } catch {
-    /* the local cache still stands; somebody else can contribute it */
+    /* the local cache still stands; the next sweep tries again */
+    return false;
   }
 }
 
-/** Every page of this book OCR'd on this device, uploaded to its share. */
-export async function publishAllOcr(bookId: string, sharedId: string): Promise<void> {
+/**
+ * Every page of this book read on this device, uploaded to its share.
+ * Returns how many pages of reading travelled, so it can be said out loud.
+ */
+export async function publishAllOcr(bookId: string, sharedId: string): Promise<number> {
   const pages = await getMetaByPrefix(`bookOcr4:${bookId}:`).catch((): [string, unknown][] => []);
-  for (const [key, words] of pages) {
+  let sent = 0;
+  // Several at a time: a book read cover to cover is hundreds of little
+  // documents, and one round trip each makes sharing it feel broken.
+  const queue = pages.filter(([key, words]) => {
     const page = Number(key.slice(key.lastIndexOf(":") + 1));
-    if (Number.isFinite(page) && Array.isArray(words) && words.length > 0) {
-      await publishOcr(sharedId, page, words);
+    return Number.isFinite(page) && Array.isArray(words) && words.length > 0;
+  });
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const at = next++;
+      if (at >= queue.length) return;
+      const [key, words] = queue[at];
+      const page = Number(key.slice(key.lastIndexOf(":") + 1));
+      if (await publishOcr(sharedId, page, words)) sent++;
     }
-  }
+  };
+  await Promise.all(Array.from({ length: Math.min(6, queue.length) }, worker));
+  return sent;
 }

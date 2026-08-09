@@ -175,6 +175,12 @@ async function renderShelf(main: HTMLElement, body: HTMLElement): Promise<void> 
             )}%`;
           },
           signal,
+          // The pages already read go up after the book itself, and there
+          // can be hundreds of them, so that phase says so rather than
+          // looking like a finished upload that has not finished.
+          (text) => {
+            button.textContent = text;
+          },
         );
         renderReader(main);
       } catch (err) {

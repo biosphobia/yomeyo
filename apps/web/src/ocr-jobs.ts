@@ -41,7 +41,7 @@ export interface OcrJob {
 
 const JOBS_KEY = "ocrJobs";
 /** Pages already pushed to a book's shared copy, so the sweep is cheap. */
-const SHARED_KEY = "ocrShared:";
+const SHARED_KEY = "ocrShared2:";
 
 type Jobs = Record<string, OcrJob>;
 
@@ -360,7 +360,7 @@ async function runOne(job: OcrJob, deadline: number, signal?: { stopped: boolean
 export async function sweepShares(): Promise<void> {
   const books = (await shelf()).filter((book) => book.sharedId);
   if (books.length === 0) return;
-  let publishOcr: (id: string, page: number, words: unknown) => Promise<void>;
+  let publishOcr: (id: string, page: number, words: unknown) => Promise<boolean>;
   try {
     ({ publishOcr } = await import("./books.js"));
   } catch {
@@ -376,7 +376,10 @@ export async function sweepShares(): Promise<void> {
       const page = Number(key.slice(key.lastIndexOf(":") + 1));
       if (!Number.isFinite(page) || sent.has(page)) continue;
       if (Array.isArray(words) && words.length > 0) {
-        await publishOcr(book.sharedId!, page, words).catch(() => undefined);
+        // Only a page that actually arrived counts as sent. Marking it
+        // either way meant one failed round — offline, a stale session —
+        // stranded a whole book's reading for good.
+        if (!(await publishOcr(book.sharedId!, page, words).catch(() => false))) continue;
       }
       sent.add(page);
       changed = true;
