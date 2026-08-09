@@ -222,7 +222,7 @@ async function claudeOcr(canvas: AnyCanvas, onStatus?: (line: string) => void): 
 async function transcribeBlocks(frame: AnyCanvas, boxes: DetectedLine[]): Promise<OcrWord[] | null> {
   const images: string[] = [];
   for (const box of boxes) {
-    const pad = 6;
+    const pad = 4;
     const x = Math.max(0, box.x - pad);
     const y = Math.max(0, box.y - pad);
     const cw = Math.min(frame.width - x, box.w + pad * 2);
@@ -230,7 +230,37 @@ async function transcribeBlocks(frame: AnyCanvas, boxes: DetectedLine[]): Promis
     // Tiny crops read badly; double them so the strokes survive JPEG.
     const up = Math.max(cw, ch) < 120 ? 2 : 1;
     const crop = newCanvas(Math.max(1, cw * up), Math.max(1, ch * up));
-    context2d(crop).drawImage(frame as CanvasImageSource, x, y, cw, ch, 0, 0, crop.width, crop.height);
+    const ctx = context2d(crop);
+    ctx.drawImage(frame as CanvasImageSource, x, y, cw, ch, 0, 0, crop.width, crop.height);
+
+    // Paint out every OTHER line that reaches into this crop.
+    //
+    // Furigana sits a hair away from the column it belongs to, so even a
+    // few pixels of margin catch it — and a crop holding two columns is
+    // read as one, which is where 「ここ家が」 came back as 「ここ家がしえ」.
+    // The neighbours go white and this line's own pixels are then drawn
+    // back on top, so nothing of its own is lost to the erasing.
+    ctx.fillStyle = "#ffffff";
+    for (const other of boxes) {
+      if (other === box) continue;
+      const ox = Math.max(x, other.x);
+      const oy = Math.max(y, other.y);
+      const ow = Math.min(x + cw, other.x + other.w) - ox;
+      const oh = Math.min(y + ch, other.y + other.h) - oy;
+      if (ow <= 0 || oh <= 0) continue;
+      ctx.fillRect((ox - x) * up, (oy - y) * up, ow * up, oh * up);
+    }
+    ctx.drawImage(
+      frame as CanvasImageSource,
+      box.x,
+      box.y,
+      box.w,
+      box.h,
+      (box.x - x) * up,
+      (box.y - y) * up,
+      box.w * up,
+      box.h * up,
+    );
     images.push(await jpegBase64(crop, 0.85));
   }
 
@@ -786,7 +816,7 @@ function measure(members: Mark[], vertical: boolean, maxSide: number, inRoom = f
 
   // Everything below is about keeping drawings out, which is not a
   // question that arises inside a balloon.
-  if (inRoom) return { ...box, vertical, ink };
+  if (inRoom) return { ...box, vertical: readsDown(box, vertical), ink };
 
   // The short runs are where false lines come from, so they have to earn
   // it. Two marks must be the same size as each other and of ordinary
@@ -807,7 +837,23 @@ function measure(members: Mark[], vertical: boolean, maxSide: number, inRoom = f
     const squareness = Math.max(only.w, only.h) / Math.max(1, Math.min(only.w, only.h));
     if (em < maxSide * 0.025 || squareness > 1.6) return null;
   }
-  return { ...box, vertical, ink };
+  return { ...box, vertical: readsDown(box, vertical), ink };
+}
+
+/**
+ * Which way a line reads, decided by the shape of the box the model will
+ * actually be shown rather than by which axis its marks were joined on.
+ *
+ * A crop that is plainly tall is read downwards and a plainly wide one
+ * across, whatever the grouping thought — telling the model otherwise
+ * invites it to read a column as a row and hand back a jumble. Only a
+ * near-square box, which is one character and reads the same either way,
+ * falls back to how it was found.
+ */
+function readsDown(box: { w: number; h: number }, joinedVertically: boolean): boolean {
+  if (box.h >= box.w * 1.15) return true;
+  if (box.w >= box.h * 1.15) return false;
+  return joinedVertically;
 }
 
 /** Does this line stand largely within lines already found? */
