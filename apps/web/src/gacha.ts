@@ -364,6 +364,10 @@ async function openPrizeEditor(
             </label>`
           : ""
       }
+      <label class="pe-field pe-check">
+        <input type="checkbox" id="pe-restricted" ${prize.restricted ? "checked" : ""} />
+        Admin only: hidden from everyone until an account is granted it in the admin panel
+      </label>
       <label class="pe-field">Rarity
         <select id="pe-rarity">
           ${Object.entries(table.rarities)
@@ -394,16 +398,26 @@ async function openPrizeEditor(
   });
   scrim.querySelector(".rc-close")!.addEventListener("click", close);
 
-  const patchFromForm = (): { name?: string; text?: string; rarity?: string; on?: "correct" | "wrong" } => {
+  const patchFromForm = (): {
+    name?: string;
+    text?: string;
+    rarity?: string;
+    on?: "correct" | "wrong";
+    restricted?: boolean;
+  } => {
     const name = scrim.querySelector<HTMLInputElement>("#pe-name")?.value.trim();
     const text = scrim.querySelector<HTMLTextAreaElement>("#pe-text")?.value.trim();
     const rarity = scrim.querySelector<HTMLSelectElement>("#pe-rarity")?.value;
     const on = scrim.querySelector<HTMLSelectElement>("#pe-on")?.value;
+    const restricted = scrim.querySelector<HTMLInputElement>("#pe-restricted")?.checked;
     return {
       ...(name ? { name } : {}),
       ...(text && (prize.type === "gif" || prize.type === "item") ? { text } : {}),
       ...(rarity ? { rarity } : {}),
       ...(prize.type === "gif" && (on === "correct" || on === "wrong") ? { on } : {}),
+      // Only carried while on: an absent flag is what un-restricts, since
+      // a publish replaces the prize's override entry wholesale.
+      ...(restricted ? { restricted: true } : {}),
     };
   };
 

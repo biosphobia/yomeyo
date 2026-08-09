@@ -1,5 +1,6 @@
 import { assetUrl } from "./store.js";
 import { getMeta, onAccountChange, setMeta } from "./db.js";
+import { unlockAll } from "./unlock.js";
 
 /**
  * What the gacha can give out, and how likely each is.
@@ -23,6 +24,12 @@ interface BasePrize {
   name: string;
   rarity: Rarity;
   note?: string;
+  /**
+   * Admin-only: hidden from every account's table unless that account has
+   * been explicitly granted it in the admin panel. The admin's own device
+   * (unlock-everything mode) always sees it, or nobody could edit it.
+   */
+  restricted?: boolean;
 }
 
 /** A palette applied to the whole site. */
@@ -176,9 +183,51 @@ export interface PrizeOverride {
   rarity?: string;
   /** For gifs: which answers it reacts to. */
   on?: "correct" | "wrong";
+  /** Hidden from everyone until granted per account in the admin panel. */
+  restricted?: boolean;
 }
 
 const OVERRIDES_KEY = "prizeOverrides";
+
+/** One prize with one edit laid over it. */
+function applyOverride(
+  prize: Prize,
+  edit: PrizeOverride | undefined,
+  rarities: Record<string, RarityInfo>,
+): Prize {
+  if (!edit || typeof edit !== "object") return prize;
+  const merged = { ...prize };
+  if (typeof edit.name === "string" && edit.name.trim()) merged.name = edit.name.trim();
+  if (typeof edit.rarity === "string" && edit.rarity in rarities) merged.rarity = edit.rarity;
+  if ((merged.type === "gif" || merged.type === "item") && typeof edit.text === "string" && edit.text.trim())
+    merged.text = edit.text.trim();
+  if (merged.type === "gif" && (edit.on === "correct" || edit.on === "wrong")) merged.on = edit.on;
+  if (typeof edit.restricted === "boolean") merged.restricted = edit.restricted;
+  return merged;
+}
+
+/**
+ * Every prize with the published overrides applied and nothing filtered:
+ * restricted ones included, nobody's hidden list honoured. This is what the
+ * admin panel grants from; every player surface uses prizeTable() instead.
+ */
+export async function fullPrizeList(): Promise<Prize[]> {
+  const raw = (await fetch(assetUrl("gacha/prizes.json"))
+    .then((res) => (res.ok ? res.json() : {}))
+    .catch(() => ({}))) as Partial<PrizeTable>;
+  const rarities =
+    raw.rarities && typeof raw.rarities === "object" && Object.keys(raw.rarities).length > 0
+      ? raw.rarities
+      : FALLBACK.rarities;
+  const global = (await fetch(assetUrl("gacha/prizes-overrides.json"), { cache: "no-store" })
+    .then((res) => (res.ok ? res.json() : {}))
+    .catch((): Record<string, PrizeOverride> => ({}))) as Record<string, PrizeOverride>;
+  return (
+    Array.isArray(raw.prizes)
+      ? raw.prizes.map((p) => cleanPrize(p, rarities)).filter((p): p is Prize => p !== null)
+      : []
+  ).map((prize) => applyOverride(prize, global[prize.id], rarities));
+}
 
 export async function setPrizeOverride(id: string, patch: PrizeOverride | null): Promise<void> {
   const all = (await getMeta<Record<string, PrizeOverride>>(OVERRIDES_KEY)) ?? {};
@@ -248,16 +297,6 @@ export function prizeTable(): Promise<PrizeTable> {
         (await getMeta<Record<string, PrizeOverride>>(OVERRIDES_KEY).catch(
           (): Record<string, PrizeOverride> => ({}),
         )) ?? {};
-      const apply = (prize: Prize, edit: PrizeOverride | undefined): Prize => {
-        if (!edit || typeof edit !== "object") return prize;
-        const merged = { ...prize };
-        if (typeof edit.name === "string" && edit.name.trim()) merged.name = edit.name.trim();
-        if (typeof edit.rarity === "string" && edit.rarity in rarities) merged.rarity = edit.rarity;
-        if ((merged.type === "gif" || merged.type === "item") && typeof edit.text === "string" && edit.text.trim())
-          merged.text = edit.text.trim();
-        if (merged.type === "gif" && (edit.on === "correct" || edit.on === "wrong")) merged.on = edit.on;
-        return merged;
-      };
       // Prizes the admin has hidden for this account: not shown, not
       // drawable, not in the reaction pool — as if the table never had them.
       const hidden = new Set(
@@ -265,13 +304,24 @@ export function prizeTable(): Promise<PrizeTable> {
           (id): id is string => typeof id === "string",
         ),
       );
+      // Restricted prizes are the other way round: hidden from everyone,
+      // shown only where granted (or on the admin's own device).
+      const granted = new Set(
+        ((await getMeta<string[]>("grantedPrizes").catch((): string[] => [])) ?? []).filter(
+          (id): id is string => typeof id === "string",
+        ),
+      );
+      const adminHere = await unlockAll().catch(() => false);
       const prizes = (
         Array.isArray(raw.prizes)
           ? raw.prizes.map((p) => cleanPrize(p, rarities)).filter((p): p is Prize => p !== null)
           : []
       )
+        .map((prize) =>
+          applyOverride(applyOverride(prize, (global as Record<string, PrizeOverride>)[prize.id], rarities), local[prize.id], rarities),
+        )
         .filter((prize) => !hidden.has(prize.id))
-        .map((prize) => apply(apply(prize, (global as Record<string, PrizeOverride>)[prize.id]), local[prize.id]));
+        .filter((prize) => !prize.restricted || adminHere || granted.has(prize.id));
       return {
         cost: typeof raw.cost === "number" && raw.cost > 0 ? Math.floor(raw.cost) : FALLBACK.cost,
         draw: (raw.draw === "rarity" ? "rarity" : "uniform") as DrawMode,

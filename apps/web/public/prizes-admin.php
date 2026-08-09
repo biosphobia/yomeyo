@@ -171,6 +171,10 @@ if (!array_key_exists("patch", $body) || $body["patch"] === null) {
   if (isset($patch["on"]) && in_array($patch["on"], ["correct", "wrong"], true)) {
     $clean["on"] = $patch["on"];
   }
+  // Admin-only prizes: hidden from every account until granted one by one.
+  if (isset($patch["restricted"]) && $patch["restricted"] === true) {
+    $clean["restricted"] = true;
+  }
   if (count($clean) === 0) {
     unset($overrides[$id]);
   } else {

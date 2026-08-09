@@ -197,8 +197,12 @@ const KEYS: { key: string; merge: Merge }[] = [
  */
 const QUEST_LOG_KEY = "questLog";
 const QUEST_REV_KEY = "questLogRev";
-/** The user's own hidden-prize list; only ever written by the admin panel. */
-const HIDDEN_PRIZES_KEY = "hiddenPrizes";
+/**
+ * The prize lists only the admin panel ever writes: prizes hidden from this
+ * account, and restricted prizes granted to it. The client adopts both
+ * verbatim and never writes them back.
+ */
+const ADMIN_LIST_KEYS = ["hiddenPrizes", "grantedPrizes"];
 
 let running: Promise<boolean> | null = null;
 
@@ -261,12 +265,13 @@ async function exchange(): Promise<boolean> {
       }
     }
 
-    // The hidden-prize list is the admin's alone: whatever the cloud says
-    // stands, and the client never writes it back.
-    if (Array.isArray(remote[HIDDEN_PRIZES_KEY])) {
-      const local = await getMeta<unknown>(HIDDEN_PRIZES_KEY);
-      if (!same(remote[HIDDEN_PRIZES_KEY], local)) {
-        await setMeta(HIDDEN_PRIZES_KEY, remote[HIDDEN_PRIZES_KEY]);
+    // The admin's per-account prize lists: whatever the cloud says stands,
+    // and the client never writes them back.
+    for (const key of ADMIN_LIST_KEYS) {
+      if (!Array.isArray(remote[key])) continue;
+      const local = await getMeta<unknown>(key);
+      if (!same(remote[key], local)) {
+        await setMeta(key, remote[key]);
         localChanged = true;
       }
     }

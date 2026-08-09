@@ -1,7 +1,7 @@
 import { firestoreApi } from "./cloud.js";
 import { XP_DAY_BONUS, XP_PER_QUEST, levelFromXp } from "./levels.js";
 import { dateKey, planForDayFrom, type DayPlan } from "./quests.js";
-import { prizeTable } from "./gacha-data.js";
+import { fullPrizeList } from "./gacha-data.js";
 import { formatYennies } from "./yennies.js";
 
 /**
@@ -243,6 +243,11 @@ export async function mountAdminPanel(host: HTMLElement): Promise<void> {
         <div class="adm-section"><b>Gacha visibility</b></div>
         <div class="glosses">Unticked prizes vanish from this account's table: not shown, not drawable.</div>
         <div id="adm-prizes" class="adm-prizes"><div class="glosses">Loading prizes…</div></div>
+        <div id="adm-granted-wrap" style="display:none">
+          <div class="adm-section"><b>Admin-only prizes</b></div>
+          <div class="glosses">Hidden from every account by default. Ticked = this account has it in its pool, on all its devices.</div>
+          <div id="adm-granted" class="adm-prizes"></div>
+        </div>
         <div class="msg" id="adm-msg"></div>
       `;
 
@@ -398,14 +403,22 @@ export async function mountAdminPanel(host: HTMLElement): Promise<void> {
         void commit(logPatch(next), `${day} deleted.`);
       });
 
-      // ---- gacha visibility ----
-      void prizeTable().then((table) => {
+      // ---- gacha visibility and admin-only grants ----
+      void fullPrizeList().then((prizes) => {
         const box = userBox.querySelector<HTMLDivElement>("#adm-prizes");
-        if (!box) return;
+        const grantWrap = userBox.querySelector<HTMLDivElement>("#adm-granted-wrap");
+        const grantBox = userBox.querySelector<HTMLDivElement>("#adm-granted");
+        if (!box || !grantWrap || !grantBox) return;
         const hidden = new Set(
           Array.isArray(progress.hiddenPrizes) ? (progress.hiddenPrizes as unknown[]).map(String) : [],
         );
-        box.innerHTML = table.prizes
+        const granted = new Set(
+          Array.isArray(progress.grantedPrizes) ? (progress.grantedPrizes as unknown[]).map(String) : [],
+        );
+        const ordinary = prizes.filter((prize) => !prize.restricted);
+        const special = prizes.filter((prize) => prize.restricted);
+
+        box.innerHTML = ordinary
           .map(
             (prize) => `<label class="adm-prize">
               <input type="checkbox" data-prize="${escapeAttr(prize.id)}" ${hidden.has(prize.id) ? "" : "checked"} />
@@ -423,6 +436,36 @@ export async function mountAdminPanel(host: HTMLElement): Promise<void> {
               () => {
                 progress = { ...progress, hiddenPrizes: [...hidden].sort() };
                 say(`${id} is now ${check.checked ? "visible" : "hidden"} for @${name}.`);
+              },
+              (err) => say(err instanceof Error ? err.message : String(err)),
+            );
+          });
+        }
+
+        if (special.length === 0) return;
+        grantWrap.style.display = "";
+        grantBox.innerHTML = special
+          .map(
+            (prize) => `<label class="adm-prize">
+              <input type="checkbox" data-grant="${escapeAttr(prize.id)}" ${granted.has(prize.id) ? "checked" : ""} />
+              <span>🔒 ${escapeHtml(prize.name)}</span>
+              <span class="glosses">${escapeHtml(prize.rarity)}</span>
+            </label>`,
+          )
+          .join("");
+        for (const check of grantBox.querySelectorAll<HTMLInputElement>("[data-grant]")) {
+          check.addEventListener("change", () => {
+            const id = check.dataset.grant!;
+            if (check.checked) granted.add(id);
+            else granted.delete(id);
+            void writeProgress(uid, { grantedPrizes: [...granted].sort() }).then(
+              () => {
+                progress = { ...progress, grantedPrizes: [...granted].sort() };
+                say(
+                  check.checked
+                    ? `${id} is now in @${name}'s pool, on every device.`
+                    : `${id} taken back out of @${name}'s pool.`,
+                );
               },
               (err) => say(err instanceof Error ? err.message : String(err)),
             );
