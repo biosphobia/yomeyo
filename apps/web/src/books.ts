@@ -169,7 +169,7 @@ export async function forgetBook(id: string): Promise<void> {
   // The file blob is overwritten rather than deleted (the media store has
   // no delete-by-key here); the OCR cache goes properly.
   await saveMedia(bookFileKey(id), new Blob([]));
-  await deleteMetaByPrefix(`bookOcr2:${id}:`).catch(() => 0);
+  await deleteMetaByPrefix(`bookOcr3:${id}:`).catch(() => 0);
 }
 
 export async function renameBook(id: string, name: string): Promise<void> {
@@ -402,7 +402,7 @@ export async function shelfAccount(): Promise<AccountInfo | null> {
  * The doc id carries a pipeline version, so results written by an older,
  * worse OCR simply stop being found rather than poisoning every reader.
  */
-const ocrDocId = (page: number): string => `v2-${page}`;
+const ocrDocId = (page: number): string => `v3-${page}`;
 
 export async function fetchSharedOcr(sharedId: string, page: number): Promise<unknown | null> {
   try {
@@ -438,7 +438,7 @@ export async function publishOcr(sharedId: string, page: number, words: unknown)
 
 /** Every page of this book OCR'd on this device, uploaded to its share. */
 export async function publishAllOcr(bookId: string, sharedId: string): Promise<void> {
-  const pages = await getMetaByPrefix(`bookOcr2:${bookId}:`).catch((): [string, unknown][] => []);
+  const pages = await getMetaByPrefix(`bookOcr3:${bookId}:`).catch((): [string, unknown][] => []);
   for (const [key, words] of pages) {
     const page = Number(key.slice(key.lastIndexOf(":") + 1));
     if (Number.isFinite(page) && Array.isArray(words) && words.length > 0) {

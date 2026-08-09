@@ -29,7 +29,7 @@ export interface OcrWord {
 
 // Versioned: results from the old estimate-the-box pipeline are not worth
 // keeping, so a prefix bump quietly retires them.
-const CACHE_PREFIX = "bookOcr2:";
+const CACHE_PREFIX = "bookOcr3:";
 
 /** Where a shared book's OCR lives, when the book is shared at all. */
 export interface SharedOcrRef {
@@ -40,10 +40,14 @@ export interface SharedOcrRef {
 /**
  * A page already read — locally, or by anyone who read this shared book
  * before. A remote hit is cached locally, so it is fetched once.
+ *
+ * An empty result counts as read: a page of pure artwork has no text on
+ * it, and finding that out once is enough. Only a page never read at all
+ * comes back null.
  */
 export async function cachedOcr(cacheKey: string, shared?: SharedOcrRef): Promise<OcrWord[] | null> {
   const held = await getMeta<OcrWord[]>(CACHE_PREFIX + cacheKey);
-  if (held && held.length > 0) return held;
+  if (Array.isArray(held)) return held;
   if (!shared) return null;
   const { fetchSharedOcr } = await import("./books.js");
   const remote = await fetchSharedOcr(shared.id, shared.page);
@@ -91,12 +95,12 @@ function claudeAvailable(): Promise<boolean> {
  * says. The boxes drawn on the page are the detected ones, so they sit on
  * the ink by construction.
  *
- * When detection finds nothing to crop (low contrast, odd pages), the old
- * whole-page estimate runs as a fallback, snapped to ink after the fact.
+ * When detection finds nothing at all, this returns null and Tesseract
+ * takes the page — it is a worse reader, but its boxes are its own too.
+ * Nothing here ever asks a model where something is.
  */
 async function claudeOcr(canvas: HTMLCanvasElement, onStatus?: (line: string) => void): Promise<OcrWord[] | null> {
   if (!(await claudeAvailable())) return null;
-  onStatus?.("Claude is reading the page…");
 
   const MAX_SIDE = 1500;
   const scale = Math.min(1, MAX_SIDE / Math.max(canvas.width, canvas.height));
@@ -109,11 +113,9 @@ async function claudeOcr(canvas: HTMLCanvasElement, onStatus?: (line: string) =>
   }
 
   const found = detectTextBlocks(frame);
-  if (found.length > 0) {
-    const words = await transcribeBlocks(frame, found).catch(() => null);
-    if (words && words.length > 0) return words;
-  }
-  return estimateWholePage(frame);
+  if (found.length === 0) return null;
+  onStatus?.(`Reading ${found.length} block${found.length === 1 ? "" : "s"} of text…`);
+  return transcribeBlocks(frame, found).catch(() => null);
 }
 
 /** Each detected block, cropped and sent for transcription only. */
@@ -172,41 +174,6 @@ async function transcribeBlocks(frame: HTMLCanvasElement, boxes: DetectedBox[]):
   return words;
 }
 
-/** The old whole-page ask, kept as the fallback when nothing detects. */
-async function estimateWholePage(frame: HTMLCanvasElement): Promise<OcrWord[] | null> {
-  const dataUrl = frame.toDataURL("image/jpeg", 0.88);
-  const image = dataUrl.slice(dataUrl.indexOf(",") + 1);
-
-  const res = await fetch(assetUrl("grammar.php"), {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ mode: "ocr", image, media: "image/jpeg", width: frame.width, height: frame.height }),
-  });
-  if (!res.ok) return null;
-  const { raw } = (await res.json()) as { raw?: string };
-  if (!raw) return null;
-  let parsed: { blocks?: unknown[] };
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (!Array.isArray(parsed.blocks)) return null;
-
-  const ink = inkMap(frame);
-  const words: OcrWord[] = [];
-  for (const block of parsed.blocks as { text?: unknown; x?: unknown; y?: unknown; w?: unknown; h?: unknown }[]) {
-    const text = typeof block.text === "string" ? block.text.trim() : "";
-    if (!text || !hasJapanese(text)) continue;
-    const per = (v: unknown): number => Math.min(1000, Math.max(0, Number(v) || 0)) / 1000;
-    const w = per(block.w);
-    const h = per(block.h);
-    if (w <= 0.001 || h <= 0.001) continue;
-    words.push(snapToInk({ text, x: per(block.x), y: per(block.y), w, h }, ink));
-  }
-  return words;
-}
-
 // ---------------- finding the text blocks ourselves ----------------
 
 /** A text block found on the page, in pixels of the frame. */
@@ -218,101 +185,249 @@ interface DetectedBox {
   ink: number;
 }
 
+/** One mark on the page: a character, a speck, a stroke of a drawing. */
+interface Mark {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  ink: number;
+  /** Longest side, which is what "how big is this character" means here. */
+  size: number;
+}
+
 /**
- * Where is the text on this page? Answered from the pixels alone.
+ * Where is the text on this page? Answered from the pixels alone, so the
+ * boxes are the text by construction rather than by anyone's estimate.
  *
- * The page is binarised, long straight runs are cut (panel borders and
- * ruled lines weld everything they touch into one blob), and every
- * remaining mark is grown a little so the characters of a block join
- * hands while separate blocks stay apart — a bubble pads its text more
- * than lines pad each other. Each connected blob becomes a candidate,
- * filtered by size and ink density so page-wide artwork and stray specks
- * drop out. What survives might still include drawings; those come back
- * from transcription as empty text and vanish. The boxes are the tight
- * bounds of the real ink, so a box always sits exactly on its text.
+ * The trick is to look for what makes text text, which is not darkness —
+ * artwork is dark too — but SHAPE and COMPANY. A printed character is a
+ * compact mark of a particular size, and it never appears alone: its
+ * neighbours are the same size, evenly spaced, and lined up with it, down
+ * a column or across a row. Drawings have none of that discipline, and
+ * screentone dots and hatching fail the size test outright.
+ *
+ * So: threshold against the LOCAL average (a bubble on a grey panel is
+ * still white paper locally, and this is what makes screentone drop out),
+ * take every connected mark, keep the ones shaped like characters, and
+ * join up marks that are the same size and properly lined up. A run of two
+ * or more joined marks is a line of text, and its box is theirs.
+ *
+ * Both polarities run: black on white, and the white-on-black lettering
+ * manga puts inside title pills.
  */
 function detectTextBlocks(frame: HTMLCanvasElement): DetectedBox[] {
-  const DETECT = 700;
+  const DETECT = 1100;
   const s = Math.min(1, DETECT / Math.max(frame.width, frame.height));
-  const w = Math.max(8, Math.round(frame.width * s));
-  const h = Math.max(8, Math.round(frame.height * s));
+  const w = Math.max(16, Math.round(frame.width * s));
+  const h = Math.max(16, Math.round(frame.height * s));
   const small = document.createElement("canvas");
   small.width = w;
   small.height = h;
-  const ctx = small.getContext("2d")!;
+  const ctx = small.getContext("2d", { willReadFrequently: true })!;
   ctx.drawImage(frame, 0, 0, w, h);
   const { data } = ctx.getImageData(0, 0, w, h);
-  const ink = new Uint8Array(w * h);
-  for (let i = 0; i < ink.length; i++) {
+
+  const luma = new Uint8Array(w * h);
+  for (let i = 0; i < luma.length; i++) {
     const at = i * 4;
-    ink[i] = data[at] * 0.299 + data[at + 1] * 0.587 + data[at + 2] * 0.114 < 110 ? 1 : 0;
+    luma[i] = (data[at] * 299 + data[at + 1] * 587 + data[at + 2] * 114) / 1000;
   }
 
-  // Cut long straight runs: no character stroke is 5% of the page long.
-  const maxRun = Math.round(Math.max(w, h) * 0.05);
-  const cut = Uint8Array.from(ink);
+  // Local average over a window a few characters wide. Compared against
+  // this, ink is what stands out from its own surroundings — so grey
+  // screentone reads as background, and a dark panel's white lettering
+  // reads as ink just as well as black lettering on white paper.
+  const mean = localMean(luma, w, h, Math.max(9, Math.round(Math.max(w, h) * 0.035)));
+  const dark = new Uint8Array(w * h);
+  const light = new Uint8Array(w * h);
+  const MARGIN = 14;
+  for (let i = 0; i < luma.length; i++) {
+    if (luma[i] < mean[i] - MARGIN) dark[i] = 1;
+    else if (luma[i] > mean[i] + MARGIN) light[i] = 1;
+  }
+
+  let found = [...linesOfText(dark, w, h), ...linesOfText(light, w, h)];
+  // Nothing character-shaped anywhere: a blurred scan, or a page whose
+  // print is too small to survive the downscale. The blunt detector gets
+  // a turn rather than leaving the page unread.
+  if (found.length === 0) found = blobBlocks(dark, w, h);
+
+  found = mergeTouching(found);
+  found.sort((a, b) => b.ink - a.ink);
+  const top = found.slice(0, 24);
+  // Manga reading order: right to left, then down.
+  top.sort((a, b) => b.x + b.w - (a.x + a.w) || a.y - b.y);
+
+  const inv = 1 / s;
+  return top.map((b) => ({
+    x: Math.max(0, Math.round((b.x - 1) * inv)),
+    y: Math.max(0, Math.round((b.y - 1) * inv)),
+    w: Math.min(frame.width, Math.round((b.w + 2) * inv)),
+    h: Math.min(frame.height, Math.round((b.h + 2) * inv)),
+    ink: b.ink,
+  }));
+}
+
+/** Box average of `src`, radius `r`, via a summed-area table. */
+function localMean(src: Uint8Array, w: number, h: number, r: number): Uint8Array {
+  const sum = new Float64Array((w + 1) * (h + 1));
   for (let y = 0; y < h; y++) {
-    let run = 0;
-    for (let x = 0; x <= w; x++) {
-      if (x < w && ink[y * w + x]) run++;
-      else {
-        if (run > maxRun) for (let k = x - run; k < x; k++) cut[y * w + k] = 0;
-        run = 0;
-      }
+    let row = 0;
+    for (let x = 0; x < w; x++) {
+      row += src[y * w + x];
+      sum[(y + 1) * (w + 1) + x + 1] = sum[y * (w + 1) + x + 1] + row;
     }
   }
-  for (let x = 0; x < w; x++) {
-    let run = 0;
-    for (let y = 0; y <= h; y++) {
-      if (y < h && ink[y * w + x]) run++;
-      else {
-        if (run > maxRun) for (let k = y - run; k < y; k++) cut[k * w + x] = 0;
-        run = 0;
-      }
+  const out = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    const y0 = Math.max(0, y - r);
+    const y1 = Math.min(h, y + r + 1);
+    for (let x = 0; x < w; x++) {
+      const x0 = Math.max(0, x - r);
+      const x1 = Math.min(w, x + r + 1);
+      const total =
+        sum[y1 * (w + 1) + x1] - sum[y0 * (w + 1) + x1] - sum[y1 * (w + 1) + x0] + sum[y0 * (w + 1) + x0];
+      out[y * w + x] = total / ((x1 - x0) * (y1 - y0));
     }
   }
+  return out;
+}
 
-  const r = Math.max(2, Math.round(Math.max(w, h) * 0.009));
+/**
+ * Marks of this mask that are shaped like characters, joined into the
+ * lines they belong to. A joined pair is the same size, side by side or
+ * one under the other, and lined up on the other axis — the arrangement
+ * print has and drawings do not.
+ */
+function linesOfText(mask: Uint8Array, w: number, h: number): DetectedBox[] {
+  const maxSide = Math.max(w, h);
+  const minChar = Math.max(5, maxSide * 0.011);
+  const maxChar = maxSide * 0.17;
+  const marks: Mark[] = [];
+  for (const c of blobs(mask, mask, w, h)) {
+    const size = Math.max(c.w, c.h);
+    const thin = Math.max(1, Math.min(c.w, c.h));
+    const fill = c.ink / (c.w * c.h);
+    // A character is compact, of printed size, and neither a hairline nor
+    // a solid block. Hatching is too thin, screentone too small, a filled
+    // panel too big and too solid.
+    if (size < minChar || size > maxChar) continue;
+    if (size / thin > 4.5) continue;
+    if (fill < 0.12 || fill > 0.96) continue;
+    marks.push({ x: c.x, y: c.y, w: c.w, h: c.h, ink: c.ink, size });
+  }
+  if (marks.length < 2) return [];
+
+  // Only near neighbours can be joined, so the marks go in a coarse grid
+  // and each is tested against its own cell and the ring around it.
+  const cell = Math.max(8, Math.round(maxChar));
+  const cols = Math.ceil(w / cell);
+  const buckets = new Map<number, number[]>();
+  marks.forEach((m, i) => {
+    const key = Math.floor((m.y + m.h / 2) / cell) * cols + Math.floor((m.x + m.w / 2) / cell);
+    const held = buckets.get(key);
+    if (held) held.push(i);
+    else buckets.set(key, [i]);
+  });
+
+  const parent = new Int32Array(marks.length).map((_, i) => i);
+  const find = (i: number): number => {
+    let root = i;
+    while (parent[root] !== root) root = parent[root];
+    while (parent[i] !== root) {
+      const next = parent[i];
+      parent[i] = root;
+      i = next;
+    }
+    return root;
+  };
+  const union = (a: number, b: number): void => {
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parent[rb] = ra;
+  };
+
+  marks.forEach((a, i) => {
+    const cx = Math.floor((a.x + a.w / 2) / cell);
+    const cy = Math.floor((a.y + a.h / 2) / cell);
+    for (let gy = cy - 1; gy <= cy + 1; gy++) {
+      for (let gx = cx - 1; gx <= cx + 1; gx++) {
+        for (const j of buckets.get(gy * cols + gx) ?? []) {
+          if (j <= i) continue;
+          if (neighbours(a, marks[j])) union(i, j);
+        }
+      }
+    }
+  });
+
+  const groups = new Map<number, Mark[]>();
+  marks.forEach((m, i) => {
+    const root = find(i);
+    const held = groups.get(root);
+    if (held) held.push(m);
+    else groups.set(root, [m]);
+  });
+
   const pageArea = w * h;
-
-  // Ordinary text: blobs of the cut map, measured on the real ink.
-  const kept = blobs(dilate(cut, w, h, r), cut, w, h).filter((b) => {
-    const density = b.ink / (b.w * b.h);
-    const aspect = Math.max(b.w, b.h) / Math.max(1, Math.min(b.w, b.h));
-    return (
-      b.ink >= 30 &&
-      Math.min(b.w, b.h) >= 6 &&
-      b.w * b.h <= pageArea * 0.25 &&
-      density >= 0.06 &&
-      aspect <= 25
-    );
-  });
-
-  // The line cut erases solid shapes, and some of those are text: manga
-  // titles printed white on a black pill. A second pass over the uncut
-  // ink keeps free-standing solid blobs of plausible pill size as
-  // candidates too — the solid ones that are just art transcribe to
-  // nothing and vanish downstream.
-  const solid = blobs(dilate(ink, w, h, r), ink, w, h).filter((b) => {
-    const density = b.ink / (b.w * b.h);
-    const aspect = Math.max(b.w, b.h) / Math.max(1, Math.min(b.w, b.h));
-    return (
-      density >= 0.45 &&
-      Math.min(b.w, b.h) >= 8 &&
-      b.w * b.h <= pageArea * 0.08 &&
-      aspect <= 12
-    );
-  });
-  for (const pill of solid) {
-    const claimed = kept.some((b) => {
-      const ox = Math.max(0, Math.min(b.x + b.w, pill.x + pill.w) - Math.max(b.x, pill.x));
-      const oy = Math.max(0, Math.min(b.y + b.h, pill.y + pill.h) - Math.max(b.y, pill.y));
-      return ox * oy > pill.w * pill.h * 0.3;
-    });
-    if (!claimed) kept.push(pill);
+  const out: DetectedBox[] = [];
+  for (const members of groups.values()) {
+    // One mark alone is a speck, a stray, or an eye. Text keeps company.
+    if (members.length < 2) continue;
+    let x0 = w;
+    let y0 = h;
+    let x1 = 0;
+    let y1 = 0;
+    let ink = 0;
+    for (const m of members) {
+      if (m.x < x0) x0 = m.x;
+      if (m.y < y0) y0 = m.y;
+      if (m.x + m.w > x1) x1 = m.x + m.w;
+      if (m.y + m.h > y1) y1 = m.y + m.h;
+      ink += m.ink;
+    }
+    const box = { x: x0, y: y0, w: x1 - x0, h: y1 - y0, ink };
+    // A "line" spanning the page is a row of look-alike drawings, not print.
+    if (box.w * box.h > pageArea * 0.3) continue;
+    out.push(box);
   }
+  return out;
+}
 
-  // Blobs that ended up touching are one block.
+/** Are these two marks neighbours in the same line of print? */
+function neighbours(a: Mark, b: Mark): boolean {
+  const ratio = Math.max(a.size, b.size) / Math.max(1, Math.min(a.size, b.size));
+  // Print sets a line in one size. Furigana beside a column is half the
+  // size of the words it belongs to, and stays a line of its own.
+  if (ratio > 2.2) return false;
+  const reach = (a.size + b.size) / 2;
+  const dx = Math.abs(a.x + a.w / 2 - (b.x + b.w / 2));
+  const dy = Math.abs(a.y + a.h / 2 - (b.y + b.h / 2));
+  // Stacked (vertical writing) or side by side (horizontal writing): close
+  // along the line, and squarely lined up across it.
+  return (dx <= reach * 0.55 && dy <= reach * 1.7) || (dy <= reach * 0.55 && dx <= reach * 1.7);
+}
+
+/**
+ * The blunt detector, kept for pages whose print does not survive as
+ * separate characters: grow every mark until neighbours touch, then take
+ * the blobs of a text-like size and density.
+ */
+function blobBlocks(mask: Uint8Array, w: number, h: number): DetectedBox[] {
+  const pageArea = w * h;
+  const r = Math.max(2, Math.round(Math.max(w, h) * 0.009));
+  return blobs(dilate(mask, w, h, r), mask, w, h).filter((b) => {
+    const density = b.ink / (b.w * b.h);
+    const aspect = Math.max(b.w, b.h) / Math.max(1, Math.min(b.w, b.h));
+    return (
+      b.ink >= 30 && Math.min(b.w, b.h) >= 6 && b.w * b.h <= pageArea * 0.25 && density >= 0.06 && aspect <= 25
+    );
+  });
+}
+
+/** Boxes that overlap or sit against each other are one block. */
+function mergeTouching(boxes: DetectedBox[]): DetectedBox[] {
+  const kept = [...boxes];
   let merged = true;
   while (merged) {
     merged = false;
@@ -337,20 +452,7 @@ function detectTextBlocks(frame: HTMLCanvasElement): DetectedBox[] {
       }
     }
   }
-
-  kept.sort((a, b) => b.ink - a.ink);
-  const top = kept.slice(0, 32);
-  // Manga reading order: right to left, then down.
-  top.sort((a, b) => b.x + b.w - (a.x + a.w) || a.y - b.y);
-
-  const inv = 1 / s;
-  return top.map((b) => ({
-    x: Math.max(0, Math.round((b.x - 1) * inv)),
-    y: Math.max(0, Math.round((b.y - 1) * inv)),
-    w: Math.min(frame.width, Math.round((b.w + 2) * inv)),
-    h: Math.min(frame.height, Math.round((b.h + 2) * inv)),
-    ink: b.ink,
-  }));
+  return kept;
 }
 
 /** Connected blobs of `mask`, each measured as the tight bounds of `base`. */
@@ -432,84 +534,6 @@ function dilate(src: Uint8Array, w: number, h: number, r: number): Uint8Array {
   return out;
 }
 
-// ---------------- snapping boxes to the page's ink ----------------
-
-interface InkMap {
-  width: number;
-  height: number;
-  /** One byte per pixel: 1 where the page is dark enough to be print. */
-  dark: Uint8Array;
-}
-
-function inkMap(frame: HTMLCanvasElement): InkMap {
-  const ctx = frame.getContext("2d")!;
-  const { data } = ctx.getImageData(0, 0, frame.width, frame.height);
-  const dark = new Uint8Array(frame.width * frame.height);
-  for (let i = 0; i < dark.length; i++) {
-    const at = i * 4;
-    const luma = data[at] * 0.299 + data[at + 1] * 0.587 + data[at + 2] * 0.114;
-    dark[i] = luma < 110 ? 1 : 0;
-  }
-  return { width: frame.width, height: frame.height, dark };
-}
-
-/**
- * Tighten a claimed box onto the ink actually under it. The search window
- * is the claim grown by half its size each way; within it, the tight
- * bounds of rows and columns that carry real ink become the box. A window
- * that is mostly dark is artwork, not text on paper — left alone.
- */
-function snapToInk(word: OcrWord, ink: InkMap): OcrWord {
-  const growX = word.w * 0.5;
-  const growY = word.h * 0.5;
-  const x0 = Math.max(0, Math.floor((word.x - growX) * ink.width));
-  const x1 = Math.min(ink.width, Math.ceil((word.x + word.w + growX) * ink.width));
-  const y0 = Math.max(0, Math.floor((word.y - growY) * ink.height));
-  const y1 = Math.min(ink.height, Math.ceil((word.y + word.h + growY) * ink.height));
-  const cols = x1 - x0;
-  const rows = y1 - y0;
-  if (cols < 4 || rows < 4) return word;
-
-  const colInk = new Uint32Array(cols);
-  const rowInk = new Uint32Array(rows);
-  let total = 0;
-  for (let y = y0; y < y1; y++) {
-    const base = y * ink.width;
-    for (let x = x0; x < x1; x++) {
-      if (ink.dark[base + x]) {
-        colInk[x - x0]++;
-        rowInk[y - y0]++;
-        total++;
-      }
-    }
-  }
-  // Nothing printed here, or so much dark it is a drawing: trust the claim.
-  const coverage = total / (cols * rows);
-  if (total < 12 || coverage > 0.55) return word;
-
-  // A row or column counts when it carries more than stray specks.
-  const colBar = Math.max(2, rows * 0.02);
-  const rowBar = Math.max(2, cols * 0.02);
-  let left = 0;
-  while (left < cols && colInk[left] <= colBar) left++;
-  let right = cols - 1;
-  while (right > left && colInk[right] <= colBar) right--;
-  let top = 0;
-  while (top < rows && rowInk[top] <= rowBar) top++;
-  let bottom = rows - 1;
-  while (bottom > top && rowInk[bottom] <= rowBar) bottom--;
-  if (right - left < 3 || bottom - top < 3) return word;
-
-  const pad = 2;
-  return {
-    text: word.text,
-    x: Math.max(0, (x0 + left - pad) / ink.width),
-    y: Math.max(0, (y0 + top - pad) / ink.height),
-    w: Math.min(1, (right - left + 1 + pad * 2) / ink.width),
-    h: Math.min(1, (bottom - top + 1 + pad * 2) / ink.height),
-  };
-}
-
 /**
  * Read one page. `image` is anything tesseract accepts — a canvas, a blob,
  * an object URL. `cacheKey` is `${bookId}:${page}`.
@@ -538,11 +562,14 @@ export async function ocrPage(
       .catch(() => undefined);
   };
 
-  // Claude first: better print reading by far. Tesseract when the host
-  // has no key, the network is down, or Claude found nothing.
+  // Claude first: better print reading by far, and its boxes are this
+  // device's own. Tesseract only when that could not run at all — the
+  // host has no key, the network is down, or nothing on the page looked
+  // like print. A page Claude did read and found no words on is finished:
+  // it is artwork, and saying so once saves reading it again.
   if (image instanceof HTMLCanvasElement) {
     const viaClaude = await claudeOcr(image, onStatus).catch(() => null);
-    if (viaClaude && viaClaude.length > 0) {
+    if (viaClaude) {
       await setMeta(CACHE_PREFIX + cacheKey, viaClaude);
       contribute(viaClaude);
       return viaClaude;
