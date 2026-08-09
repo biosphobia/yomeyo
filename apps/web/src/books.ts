@@ -327,14 +327,15 @@ export async function publishBook(
   let done = 0;
   let sent = 0;
   let next = 0;
+  let usedBytes = false;
   const upload = async (): Promise<void> => {
     for (;;) {
       const i = next++;
       if (i >= blockCount || signal?.stopped) return;
       const slice = bytes.subarray(i * BLOCK_BYTES, (i + 1) * BLOCK_BYTES);
-      await storeApi.setDoc(storeApi.doc(db, "books", sharedId, "blocks", String(i)), {
-        data: blockPayload(storeApi, slice),
-      });
+      const payload = blockPayload(storeApi, slice);
+      usedBytes = typeof payload !== "string";
+      await storeApi.setDoc(storeApi.doc(db, "books", sharedId, "blocks", String(i)), { data: payload });
       done++;
       sent += slice.length;
       onProgress?.(done, blockCount, sent);
@@ -343,9 +344,22 @@ export async function publishBook(
   try {
     await Promise.all(Array.from({ length: Math.min(6, blockCount) }, upload));
   } catch (err) {
+    // Whatever did go up is now unreachable — no record will ever point at
+    // it — so it is swept away rather than left costing storage for ever.
+    await discardBlocks(storeApi, db, sharedId, done + 6).catch(() => undefined);
     throw publishError(err);
   }
-  if (signal?.stopped) throw new Error("Sharing stopped. Nothing was published.");
+  if (signal?.stopped) {
+    await discardBlocks(storeApi, db, sharedId, done + 6).catch(() => undefined);
+    throw new Error("Sharing stopped. Nothing was published.");
+  }
+  // The record is what makes a book visible, so it is written only once
+  // every block is up. A book that is short a piece must never be listed:
+  // it wastes everybody else's download to find that out.
+  if (done !== blockCount) {
+    await discardBlocks(storeApi, db, sharedId, blockCount).catch(() => undefined);
+    throw new Error(`Only ${done} of ${blockCount} pieces went up. Nothing was published; try again.`);
+  }
 
   try {
     await storeApi.setDoc(storeApi.doc(db, "books", sharedId), {
@@ -353,6 +367,9 @@ export async function publishBook(
       kind: book.kind,
       size: bytes.length,
       blockCount,
+      // Which way the blocks were written, so a reader knows before it
+      // starts whether it can read them at all.
+      encoding: usedBytes ? "bytes" : "base64",
       ownerUid: account.uid,
       ownerName: ownerName || "Someone",
       publishedAt: storeApi.serverTimestamp(),
@@ -381,6 +398,18 @@ export async function publishBook(
 function blockPayload(storeApi: typeof import("firebase/firestore"), slice: Uint8Array): unknown {
   const Bytes = (storeApi as { Bytes?: { fromUint8Array: (b: Uint8Array) => unknown } }).Bytes;
   return Bytes ? Bytes.fromUint8Array(slice) : bytesToBase64(slice);
+}
+
+/** Throw away the blocks of a publish that never finished. */
+async function discardBlocks(
+  storeApi: typeof import("firebase/firestore"),
+  db: unknown,
+  sharedId: string,
+  upTo: number,
+): Promise<void> {
+  for (let i = 0; i < upTo; i++) {
+    await storeApi.deleteDoc(storeApi.doc(db as never, "books", sharedId, "blocks", String(i))).catch(() => undefined);
+  }
 }
 
 /** A stored block, however it was written: raw bytes, or older base64. */
@@ -439,9 +468,20 @@ export async function downloadBook(
       if (i >= shared.blockCount) return;
       const snapshot = await storeApi.getDoc(storeApi.doc(db, "books", shared.id, "blocks", String(i)));
       const data = snapshot.data?.();
-      const piece = blockBytes(data?.data);
-      if (!snapshot.exists?.() || !piece) {
-        throw new Error("That book is missing a piece; ask its publisher to share it again.");
+      // "Missing a piece" covered three quite different faults and named
+      // none of them, which is no use to anybody trying to fix it.
+      if (!snapshot.exists?.() || data?.data === undefined) {
+        throw new Error(
+          `This book is incomplete in the library: piece ${i + 1} of ${shared.blockCount} was never ` +
+            `uploaded. Its publisher should share it again.`,
+        );
+      }
+      const piece = blockBytes(data.data);
+      if (!piece) {
+        throw new Error(
+          "This book was published by a newer version of Yomeyo than this one. Reload the app " +
+            "(pull down to refresh) and try again.",
+        );
       }
       parts[i] = piece;
       onProgress?.(++done, shared.blockCount);
