@@ -123,6 +123,21 @@ service cloud.firestore {
         allow delete: if publishedByCaller(deckId) || isAdmin();
       }
     }
+
+    // The shared bookshelf: reading material published for everyone, the
+    // same shape as decks — a small record, the bytes in blocks beneath.
+    // Ownership reads from the id, which begins with the publisher's uid.
+    match /books/{bookId} {
+      allow read: if true;
+      allow create, update: if publishedByCaller(bookId) && isValidBook();
+      allow delete: if publishedByCaller(bookId) || isAdmin();
+
+      match /blocks/{blockId} {
+        allow read: if true;
+        allow create, update: if publishedByCaller(bookId) && isValidBlock();
+        allow delete: if publishedByCaller(bookId) || isAdmin();
+      }
+    }
   }
 
   function isOwner(userId) {
@@ -152,6 +167,16 @@ service cloud.firestore {
       && deck.blockCount <= 200
       // Written by the server, so the ordering of the library cannot be gamed.
       && deck.publishedAt == request.time;
+  }
+
+  function isValidBook() {
+    let book = request.resource.data;
+    return book.keys().hasAll(['name', 'kind', 'size', 'blockCount', 'ownerUid', 'publishedAt'])
+      && book.ownerUid == request.auth.uid
+      && book.name is string && book.name.size() > 0 && book.name.size() <= 160
+      && book.kind in ['text', 'epub', 'pdf', 'cbz', 'image']
+      && book.size is number && book.size <= 26 * 1024 * 1024
+      && book.blockCount is number && book.blockCount >= 1 && book.blockCount <= 80;
   }
 
   function isValidBlock() {

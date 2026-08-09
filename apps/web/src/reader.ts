@@ -13,9 +13,226 @@ const DEMO_TEXT =
   "昨日、面白い本を読んだ。日本語の勉強は難しいけど、毎日少しずつ新しい言葉を覚えている。" +
   "友達と話したり、映画を見たりすると、もっと楽しくなる。";
 
+type ReaderTab = "paste" | "books" | "shared";
+let readerTab: ReaderTab = "paste";
+/** The book open right now, so a redraw returns to it. */
+let openBookId: string | null = null;
+
 export function renderReader(main: HTMLElement, sharedText?: string): void {
+  if (sharedText) {
+    readerTab = "paste";
+    openBookId = null;
+  }
   main.innerHTML = `
-    ${screenHeader("Reader")}
+    ${screenHeader("Reading")}
+    <div class="segmented" id="reader-tabs" ${openBookId ? 'style="display:none"' : ""}>
+      <button data-tab="paste" class="${readerTab === "paste" ? "on" : ""}">Paste</button>
+      <button data-tab="books" class="${readerTab === "books" ? "on" : ""}">My books</button>
+      <button data-tab="shared" class="${readerTab === "shared" ? "on" : ""}">Shared</button>
+    </div>
+    <div id="reader-body"></div>
+  `;
+  for (const button of main.querySelectorAll<HTMLButtonElement>("#reader-tabs button")) {
+    button.addEventListener("click", () => {
+      readerTab = button.dataset.tab as ReaderTab;
+      openBookId = null;
+      renderReader(main);
+    });
+  }
+  const bodyBox = main.querySelector<HTMLDivElement>("#reader-body")!;
+  if (openBookId) {
+    void openShelfBook(main, bodyBox, openBookId);
+    return;
+  }
+  if (readerTab === "books") {
+    void renderShelf(main, bodyBox);
+    return;
+  }
+  if (readerTab === "shared") {
+    void renderSharedShelf(main, bodyBox);
+    return;
+  }
+  renderPaste(bodyBox, sharedText);
+}
+
+/** A book from the shelf, opened full-width in place of the tabs. */
+async function openShelfBook(main: HTMLElement, body: HTMLElement, id: string): Promise<void> {
+  const { listBooks } = await import("./books.js");
+  const book = (await listBooks()).find((b) => b.id === id);
+  if (!book) {
+    openBookId = null;
+    renderReader(main);
+    return;
+  }
+  const { openBook } = await import("./book-view.js");
+  await openBook(body, book, () => {
+    openBookId = null;
+    readerTab = "books";
+    renderReader(main);
+  });
+}
+
+// ---------------- my books ----------------
+
+async function renderShelf(main: HTMLElement, body: HTMLElement): Promise<void> {
+  const { listBooks, addBookFromFile, forgetBook, publishBook, unpublishBook, shelfAccount, SHARE_LIMIT_BYTES } =
+    await import("./books.js");
+  const books = await listBooks();
+  const account = await shelfAccount();
+
+  body.innerHTML = `
+    <div class="card-panel">
+      <b>Add something to read</b>
+      <div class="glosses">PDF, EPUB, CBZ (manga), plain text, HTML, subtitles, or a single image.
+        Pages the computer cannot read get OCR, so even manga is tappable.</div>
+      <div class="row-actions" style="margin-top:10px">
+        <button id="bk-upload">Upload a file…</button>
+        <input type="file" id="bk-file" style="display:none"
+          accept=".pdf,.epub,.cbz,.zip,.txt,.md,.html,.htm,.srt,.ass,.png,.jpg,.jpeg,.webp,.gif" />
+      </div>
+    </div>
+    <div class="card-panel" style="padding:6px 14px" id="bk-list">
+      ${books.length === 0 ? `<div class="empty-state"><div class="big">📖</div>Nothing on the shelf yet.</div>` : ""}
+    </div>
+  `;
+  const fileInput = body.querySelector<HTMLInputElement>("#bk-file")!;
+  body.querySelector("#bk-upload")!.addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", async () => {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+    try {
+      const book = await addBookFromFile(file);
+      openBookId = book.id;
+      renderReader(main);
+    } catch (err) {
+      const status = document.createElement("div");
+      status.className = "msg error";
+      status.textContent = err instanceof Error ? err.message : String(err);
+      body.prepend(status);
+    }
+  });
+
+  const list = body.querySelector<HTMLDivElement>("#bk-list")!;
+  const KIND_ICON: Record<string, string> = { pdf: "📄", epub: "📕", cbz: "📚", image: "🖼", text: "📝" };
+  for (const book of books) {
+    const row = document.createElement("div");
+    row.className = "word-row";
+    row.innerHTML = `
+      <div class="word">
+        <div><b>${escapeHtml(book.name)}</b>${book.sharedId ? ` <span class="glosses">· shared</span>` : ""}</div>
+        <div class="glosses">${KIND_ICON[book.kind] ?? "📄"} ${book.kind} · ${formatSize(book.size)}</div>
+        <div class="row-actions" style="margin-top:6px">
+          <button class="bk-open">Read</button>
+          ${
+            account && !book.sharedId && book.size <= SHARE_LIMIT_BYTES
+              ? `<button class="secondary bk-share">Share with everyone</button>`
+              : ""
+          }
+        </div>
+      </div>
+      <button class="ghost bk-remove" title="Remove">✕</button>
+    `;
+    row.querySelector(".bk-open")!.addEventListener("click", () => {
+      openBookId = book.id;
+      renderReader(main);
+    });
+    row.querySelector(".bk-share")?.addEventListener("click", async (ev) => {
+      const button = ev.currentTarget as HTMLButtonElement;
+      button.disabled = true;
+      button.textContent = "Sharing…";
+      try {
+        const { ensureProfile } = await import("./profile.js");
+        const ownerName = (await ensureProfile()).name;
+        await publishBook(account!, book, ownerName);
+        renderReader(main);
+      } catch (err) {
+        button.disabled = false;
+        button.textContent = "Share with everyone";
+        const status = document.createElement("div");
+        status.className = "msg error";
+        status.textContent = err instanceof Error ? err.message : String(err);
+        row.appendChild(status);
+      }
+    });
+    row.querySelector(".bk-remove")!.addEventListener("click", async () => {
+      if (!confirm(`Remove “${book.name}” from this device?`)) return;
+      if (book.sharedId && account && book.sharedId.startsWith(account.uid)) {
+        if (confirm("Also take it out of the shared library?")) {
+          const blocks = Math.ceil(book.size / 480000);
+          await unpublishBook(book.sharedId, blocks).catch(() => undefined);
+        }
+      }
+      await forgetBook(book.id);
+      renderReader(main);
+    });
+    list.appendChild(row);
+  }
+}
+
+// ---------------- the shared shelf ----------------
+
+async function renderSharedShelf(main: HTMLElement, body: HTMLElement): Promise<void> {
+  body.innerHTML = `<div class="card-panel"><div class="msg">Loading the shared shelf…</div></div>`;
+  try {
+    const { browseBooks, downloadBook, listBooks } = await import("./books.js");
+    const [shared, mine] = await Promise.all([browseBooks(), listBooks()]);
+    const held = new Set(mine.map((book) => book.sharedId).filter(Boolean));
+    if (shared.length === 0) {
+      body.innerHTML = `<div class="card-panel"><div class="empty-state"><div class="big">📚</div>
+        Nothing shared yet. Share a book from My books.</div></div>`;
+      return;
+    }
+    body.innerHTML = `<div class="card-panel" style="padding:6px 14px" id="bk-shared"></div>`;
+    const list = body.querySelector<HTMLDivElement>("#bk-shared")!;
+    for (const book of shared) {
+      const row = document.createElement("div");
+      row.className = "word-row";
+      row.innerHTML = `
+        <div class="word">
+          <div><b>${escapeHtml(book.name)}</b></div>
+          <div class="glosses">${book.kind} · ${formatSize(book.size)}${
+            book.ownerName ? ` · shared by ${escapeHtml(book.ownerName)}` : ""
+          }</div>
+        </div>
+        <button class="add-btn${held.has(book.id) ? " secondary" : ""}">${held.has(book.id) ? "Added" : "Add"}</button>
+      `;
+      const button = row.querySelector<HTMLButtonElement>(".add-btn")!;
+      button.disabled = held.has(book.id);
+      button.addEventListener("click", async () => {
+        button.disabled = true;
+        button.textContent = "Adding…";
+        try {
+          const local = await downloadBook(book);
+          openBookId = local.id;
+          renderReader(main);
+        } catch (err) {
+          button.disabled = false;
+          button.textContent = "Add";
+          const status = document.createElement("div");
+          status.className = "msg error";
+          status.textContent = err instanceof Error ? err.message : String(err);
+          row.appendChild(status);
+        }
+      });
+      list.appendChild(row);
+    }
+  } catch (err) {
+    body.innerHTML = `<div class="card-panel"><div class="msg error">${escapeHtml(
+      err instanceof Error ? err.message : String(err),
+    )}</div>
+    <div class="msg">The shared shelf needs cloud sync — Settings → Account.</div></div>`;
+  }
+}
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+// ---------------- paste ----------------
+
+function renderPaste(main: HTMLElement, sharedText?: string): void {
+  main.innerHTML = `
     <div class="card-panel">
       <textarea id="reader-input" placeholder="ここに日本語のテキストを貼り付けてください…" lang="ja"></textarea>
       <div class="row-actions">
@@ -139,4 +356,8 @@ function extractSentence(text: string, offset: number): string {
   while (end < chars.length && !isBreak(chars[end])) end++;
   if (end < chars.length) end++; // include the punctuation
   return chars.slice(start, end).join("").trim();
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }

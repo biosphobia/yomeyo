@@ -38,6 +38,7 @@ export const NAV: NavGroup[] = [
     items: [
       { route: "review", label: "Review", icon: "🗂️", primary: true },
       { route: "words", label: "Words", icon: "📚", primary: true },
+      { route: "reader", label: "Reading", icon: "📖" },
       { route: "decks", label: "Decks", icon: "📦" },
     ],
   },

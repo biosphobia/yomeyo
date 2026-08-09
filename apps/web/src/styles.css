@@ -5427,3 +5427,56 @@ button.gram-swap-line:hover {
   border-bottom: 1px solid var(--border);
   margin-bottom: 4px;
 }
+
+/* ---------------- the bookshelf reader ---------------- */
+
+.bk-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.bk-head .bk-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bk-controls { margin-top: 8px; align-items: center; }
+.bk-pager, .bk-zoom { display: flex; align-items: center; gap: 6px; }
+.bk-textview { max-height: 70vh; overflow-y: auto; }
+
+/* Page stage: scrolls in both directions once zoomed past its box. */
+.bk-stage {
+  margin-top: 10px;
+  overflow: auto;
+  max-height: 76vh;
+  border-radius: 10px;
+  background: #101018;
+  touch-action: pan-x pan-y;
+}
+.bk-page { position: relative; margin: 0 auto; }
+.bk-page img { display: block; height: auto; }
+.bk-page canvas { display: block; }
+
+/* The PDF's own words, standing where the page printed them. Invisible
+   ink: transparent glyphs over the picture, selectable and tappable. */
+.bk-text-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.bk-text-layer span {
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  cursor: pointer;
+  transform-origin: 0 0;
+}
+.bk-text-layer span.hl { background: color-mix(in srgb, var(--accent) 35%, transparent); }
+
+/* OCR words: faint boxes so you can see what became tappable. */
+.bk-ocr { position: absolute; inset: 0; }
+.bk-ocr-word {
+  position: absolute;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 3px;
+  cursor: pointer;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.bk-ocr-word.hl { background: color-mix(in srgb, var(--accent) 38%, transparent); }

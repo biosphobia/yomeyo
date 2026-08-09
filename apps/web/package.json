@@ -13,6 +13,8 @@
   "dependencies": {
     "@yomeyo/core": "*",
     "firebase": "^12.16.0",
+    "pdfjs-dist": "^4.10.38",
+    "tesseract.js": "^5.1.1",
     "three": "^0.185.1"
   },
   "devDependencies": {
