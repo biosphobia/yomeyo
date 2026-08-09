@@ -427,22 +427,27 @@ function localMean(src: Uint8Array, w: number, h: number, r: number): Uint8Array
 function linesOfText(mask: Uint8Array, w: number, h: number): DetectedLine[] {
   const maxSide = Math.max(w, h);
   const minChar = Math.max(5, maxSide * 0.011);
-  const maxChar = maxSide * 0.17;
+  // Printed characters are small. Body text runs three to five percent of
+  // a page and even a shouted sound effect rarely passes nine, so this was
+  // far too generous at seventeen: it let window frames, hair and panel
+  // furniture in as "characters", and two of those in a line is a box
+  // straight through a drawing.
+  const maxChar = maxSide * 0.09;
   const marks: Mark[] = [];
   for (const c of blobs(mask, mask, w, h)) {
     const size = Math.max(c.w, c.h);
     const thin = Math.max(1, Math.min(c.w, c.h));
     const fill = c.ink / (c.w * c.h);
-    // A character is a compact mark of printed size. The tolerances are
-    // wide on purpose: a stroke like the bar of 一 or a stem of 川 fills
-    // its box almost solidly and is many times longer than it is thick,
-    // and refusing those loses whole characters — which breaks the column
-    // they stand in, because the gap left behind is what a line ends at.
-    // Hatching is still excluded (far too long and thin), and screentone
-    // (far too small), which is what these bounds are really for.
     if (size < minChar || size > maxChar) continue;
-    if (size / thin > 8) continue;
-    if (fill < 0.12) continue;
+    // Small marks are allowed to be strokes: the bar of 一 and the stems
+    // of 川 are long, thin and nearly solid, and throwing them away costs
+    // whole characters — and the column they stood in, since a line ends
+    // at a gap. A BIG mark has no such excuse. Anything approaching the
+    // size of a whole character has to be shaped like one: reasonably
+    // compact, and not a filled-in slab.
+    const big = size >= maxSide * 0.045;
+    if (size / thin > (big ? 3.5 : 8)) continue;
+    if (fill < 0.12 || (big && fill > 0.82)) continue;
     marks.push({ x: c.x, y: c.y, w: c.w, h: c.h, ink: c.ink, size });
   }
   if (marks.length === 0) return [];
@@ -569,23 +574,34 @@ function measure(members: Mark[], vertical: boolean, maxSide: number): DetectedL
   const across = vertical ? box.w : box.h;
   const along = vertical ? box.h : box.w;
 
-  // One mark on its own is a speck — unless it is big, in which case it is
-  // a lone kana in a small bubble, which is real text worth reading.
-  if (members.length < 2 && em < maxSide * 0.025) return null;
   // A line is barely wider than its characters. Anything sprawling is a
   // trail through a drawing, not print.
-  if (across > em * 2.0) return null;
+  if (across > em * 1.7) return null;
   // And a line of several characters is longer than it is thick.
   if (members.length >= 3 && along < across * 1.2) return null;
   // Print covers a knowable share of its own box: much less is a couple of
   // specks that happen to line up, much more is a solid shape.
   const density = ink / Math.max(1, box.w * box.h);
   if (density < 0.12 || density > 0.72) return null;
-  // A pair on its own is the easiest thing to find by accident, so a pair
-  // has to look the part: two marks of the same size, and not tiny.
+
+  // The short runs are where false lines come from, so they have to earn
+  // it. Two marks must be the same size as each other and of ordinary
+  // printed size; one mark on its own must additionally be square, which
+  // is what a lone kana in a small bubble looks like and what a fragment
+  // of a drawing generally does not.
+  if (members.length <= 2 && em > maxSide * 0.07) return null;
   if (members.length === 2) {
     const ratio = Math.max(members[0].size, members[1].size) / Math.max(1, Math.min(members[0].size, members[1].size));
-    if (ratio > 1.7 || em < maxSide * 0.015) return null;
+    if (ratio > 1.6) return null;
+  }
+  if (members.length === 1) {
+    // A lone kana in a small bubble is worth having, and it looks like
+    // this: printed size, and about as tall as it is wide. Density is
+    // left to the general band above — a boxy character like 回 fills
+    // most of its square, and refusing those loses real text.
+    const only = members[0];
+    const squareness = Math.max(only.w, only.h) / Math.max(1, Math.min(only.w, only.h));
+    if (em < maxSide * 0.025 || squareness > 1.6) return null;
   }
   return { ...box, vertical, ink };
 }

@@ -432,39 +432,39 @@ async function openPictures(blob: Blob, ui: Ui): Promise<Closeable> {
 }
 
 /**
- * A line of OCR text cut into words, using the dictionary itself to say
- * where one ends and the next begins.
+ * A recognised line, opened as tappable text beside its box: every
+ * character a span, exactly like the text reader, so the lookup starts
+ * from the word actually touched.
  *
- * Longest match wins, which is what makes きょうは come apart correctly:
- * きょう is a word (今日) and は is the particle riding behind it, so they
- * become two things to tap rather than one unfindable lump. Anything the
- * dictionary does not know stays a single character, which is still
- * tappable and still looks itself up.
+ * Dividing the box itself into one cell per character was tried and is
+ * not honest enough: it holds only while the transcription has exactly as
+ * many characters as the line does, and a misread or a stray mark slides
+ * every word after it along. Reading the characters out here costs one
+ * tap and is always right.
  */
-async function wordsOfLines(lines: string[]): Promise<{ text: string; start: number; length: number }[][]> {
-  let dict: Awaited<ReturnType<typeof activeDictionary>> | null = null;
-  try {
-    dict = await activeDictionary();
-  } catch {
-    dict = null;
-  }
-  return lines.map((line) => {
-    const chars = [...line];
-    const pieces: { text: string; start: number; length: number }[] = [];
-    let at = 0;
-    while (at < chars.length) {
-      let length = 1;
-      if (dict && isJapaneseChar(chars[at])) {
-        const matches = lookup(dict, line, at);
-        if (matches.length > 0 && matches[0].matchLength > 0) {
-          length = Math.min(matches[0].matchLength, chars.length - at);
-        }
-      }
-      pieces.push({ text: chars.slice(at, at + length).join(""), start: at, length });
-      at += length;
-    }
-    return pieces;
+function openOcrStrip(layer: HTMLDivElement, line: OcrWord, status: HTMLElement | null): void {
+  layer.querySelector(".bk-ocr-strip")?.remove();
+  const strip = document.createElement("div");
+  strip.className = "bk-ocr-strip";
+  // Beside the box when there is room, under it when there is not.
+  const below = line.y + line.h < 0.85;
+  strip.style.left = `${Math.min(78, line.x * 100).toFixed(2)}%`;
+  strip.style.top = below ? `${((line.y + line.h) * 100).toFixed(2)}%` : "auto";
+  if (!below) strip.style.bottom = `${((1 - line.y) * 100).toFixed(2)}%`;
+  const close = document.createElement("button");
+  close.className = "bk-strip-close";
+  close.textContent = "✕";
+  close.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    strip.remove();
   });
+  const text = document.createElement("div");
+  text.className = "bk-strip-text";
+  text.lang = "ja";
+  renderTappableText(text, line.text, status);
+  strip.append(close, text);
+  strip.addEventListener("click", (ev) => ev.stopPropagation());
+  layer.appendChild(strip);
 }
 
 // ---------------- OCR overlay ----------------
@@ -540,53 +540,35 @@ function offerOcr(
     // gets a sentence for its card rather than the whole page glued up.
     const pageText = words.map((w) => w.text).join("\n");
     let offset = 0;
-    const placed: { line: OcrWord; start: number }[] = [];
     for (const line of words) {
-      placed.push({ line, start: offset });
+      const start = offset;
       offset += [...line.text].length + 1; // the newline counts
-    }
-
-    // Each line is a run of evenly set characters, so its box divides into
-    // one cell per character — and a word is however many cells the
-    // dictionary says it spans. That is what makes single words tappable
-    // instead of a whole bubble opening as a list.
-    void wordsOfLines(placed.map((p) => p.line.text)).then((perLine) => {
-      if (!layer.isConnected) return;
-      layer.innerHTML = "";
-      placed.forEach(({ line, start }, at) => {
-        const chars = [...line.text].length;
-        if (chars === 0) return;
-        const vertical = line.vertical ?? line.h >= line.w;
-        for (const piece of perLine[at]) {
-          const el = document.createElement("span");
-          el.className = "bk-ocr-word";
-          // The cells this word covers, along the line's own direction.
-          const from = piece.start / chars;
-          const span = piece.length / chars;
-          if (vertical) {
-            el.style.left = `${(line.x * 100).toFixed(2)}%`;
-            el.style.width = `${(line.w * 100).toFixed(2)}%`;
-            el.style.top = `${((line.y + line.h * from) * 100).toFixed(2)}%`;
-            el.style.height = `${(line.h * span * 100).toFixed(2)}%`;
-          } else {
-            el.style.top = `${(line.y * 100).toFixed(2)}%`;
-            el.style.height = `${(line.h * 100).toFixed(2)}%`;
-            el.style.left = `${((line.x + line.w * from) * 100).toFixed(2)}%`;
-            el.style.width = `${(line.w * span * 100).toFixed(2)}%`;
-          }
-          el.title = piece.text;
-          el.addEventListener("click", (ev) => {
-            ev.stopPropagation();
-            layer.querySelectorAll(".hl").forEach((e) => e.classList.remove("hl"));
-            el.classList.add("hl");
-            void lookUpAt(pageText, start + piece.start, ui.status).then((match) => {
-              if (!match) el.classList.remove("hl");
-            });
+      const el = document.createElement("span");
+      el.className = "bk-ocr-word";
+      el.style.left = `${(line.x * 100).toFixed(2)}%`;
+      el.style.top = `${(line.y * 100).toFixed(2)}%`;
+      el.style.width = `${(line.w * 100).toFixed(2)}%`;
+      el.style.height = `${(line.h * 100).toFixed(2)}%`;
+      el.title = line.text;
+      el.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        layer.querySelectorAll(".hl").forEach((e) => e.classList.remove("hl"));
+        // A line of one or two characters is a word already; anything
+        // longer opens beside its box as tappable text, so the finger
+        // picks the exact word instead of the box guessing at one. The
+        // characters there are the line's own, in order, which is the
+        // only way to be sure a tap means what it looks like.
+        if ([...line.text].length <= 2) {
+          void lookUpAt(pageText, start, ui.status).then((match) => {
+            if (match) el.classList.add("hl");
           });
-          layer.appendChild(el);
+        } else {
+          el.classList.add("hl");
+          openOcrStrip(layer, line, ui.status);
         }
       });
-    });
+      layer.appendChild(el);
+    }
     if (!quiet) ui.status.textContent = words.length === 0 ? "OCR found no Japanese on this page." : "";
   };
 
