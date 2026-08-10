@@ -1,4 +1,4 @@
-import { DEFAULT_DECK_CONFIG, type DeckConfig } from "@yomeyo/core";
+import { DEFAULT_DECK_CONFIG, dayKey, type DeckConfig } from "@yomeyo/core";
 import { getMeta, setMeta, onAccountChange } from "./db.js";
 
 /**
@@ -83,16 +83,20 @@ interface DailyCounts {
   perDeck: Record<string, DeckCounts>;
 }
 
-/** Local calendar day, so the limits roll over at local midnight. */
-function today(now: number): string {
-  const d = new Date(now);
-  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+/**
+ * The study day, which is not the calendar day: it begins at the hour the
+ * deck options say it does (4am by default, as Anki has it), so a session
+ * that runs past midnight spends the same day's allowance it started on.
+ */
+async function today(now: number): Promise<string> {
+  return dayKey(now, (await globalConfig()).rolloverHour);
 }
 
 async function todaysCounts(now: number): Promise<DailyCounts> {
+  const day = await today(now);
   const stored = await getMeta<DailyCounts>(COUNTS_KEY);
-  if (stored && stored.day === today(now) && stored.perDeck) return stored;
-  return { day: today(now), perDeck: {} };
+  if (stored && stored.day === day && stored.perDeck) return stored;
+  return { day, perDeck: {} };
 }
 
 /**
@@ -116,5 +120,14 @@ export async function recordReview(wasNew: boolean, now = Date.now(), deckId = "
   const deck = (counts.perDeck[deckId] ??= { introduced: 0, reviewed: 0 });
   if (wasNew) deck.introduced++;
   else deck.reviewed++;
+  await setMeta(COUNTS_KEY, counts);
+}
+
+/** Take a review back out of today's count, for undo. */
+export async function unrecordReview(wasNew: boolean, now = Date.now(), deckId = "mining"): Promise<void> {
+  const counts = await todaysCounts(now);
+  const deck = (counts.perDeck[deckId] ??= { introduced: 0, reviewed: 0 });
+  if (wasNew) deck.introduced = Math.max(0, deck.introduced - 1);
+  else deck.reviewed = Math.max(0, deck.reviewed - 1);
   await setMeta(COUNTS_KEY, counts);
 }

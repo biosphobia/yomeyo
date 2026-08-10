@@ -27,6 +27,7 @@ interface DeckRecord {
   id: string;
   name: string;
   kind: string;
+  emoji?: string;
   description?: string;
   source?: string;
   ownerUid?: string;
@@ -43,6 +44,7 @@ function toRecord(deck: DeckInfo): DeckRecord {
     kind: deck.kind,
     updatedAt: deck.updatedAt ?? 0,
   };
+  if (deck.emoji) record.emoji = deck.emoji;
   if (deck.description) record.description = deck.description;
   if (deck.source) record.source = deck.source;
   if (deck.ownerUid) record.ownerUid = deck.ownerUid;

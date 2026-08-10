@@ -19,6 +19,13 @@ const DECKS_KEY = "deckList";
  */
 const GONE_KEY = "deckTombstones";
 const GONE_MAX = 60;
+/**
+ * The mining deck's emoji. Every other deck keeps its own on its record,
+ * where it travels between devices with the rest of the record; the mining
+ * deck has no record to keep it on, because it is not a deck so much as
+ * everything left over.
+ */
+const MINING_EMOJI_KEY = "miningDeckEmoji";
 
 /** What a deck is called when its record has been lost but its words survive. */
 export const UNNAMED = "Unnamed deck";
@@ -27,9 +34,11 @@ export type { DeckGone } from "@yomeyo/core";
 
 let cached: DeckInfo[] | null = null;
 let goneCache: DeckGone[] | null = null;
+let miningFace: string | null = null;
 onAccountChange(() => {
   cached = null;
   goneCache = null;
+  miningFace = null;
 });
 
 async function stored(): Promise<DeckInfo[]> {
@@ -45,6 +54,7 @@ async function write(decks: DeckInfo[]): Promise<void> {
 /** Every deck on this device, the mining deck first, each with a live count. */
 export async function listDecks(): Promise<DeckInfo[]> {
   const cards = [...(await loadCards()).values()].filter((c) => !c.deleted);
+  miningFace ??= (await getMeta<string>(MINING_EMOJI_KEY)) ?? "";
   const counts = new Map<string, number>();
   for (const card of cards) counts.set(deckOf(card), (counts.get(deckOf(card)) ?? 0) + 1);
 
@@ -77,6 +87,7 @@ export async function listDecks(): Promise<DeckInfo[]> {
       name: "Mined words",
       kind: "mining" as const,
       cardCount: counts.get(MINING_DECK_ID) ?? 0,
+      emoji: miningFace || undefined,
       description: "The words you saved yourself while reading.",
     },
     ...premade,
@@ -86,6 +97,33 @@ export async function listDecks(): Promise<DeckInfo[]> {
 
 export async function getDeck(id: string): Promise<DeckInfo | undefined> {
   return (await listDecks()).find((deck) => deck.id === id);
+}
+
+/**
+ * Give a deck a face. An empty string puts it back on the default for its
+ * kind, which is how you undo a choice you did not mean to make.
+ */
+export async function setDeckEmoji(id: string, emoji: string): Promise<void> {
+  const face = [...emoji.trim()].slice(0, 2).join("");
+  if (id === MINING_DECK_ID) {
+    miningFace = face;
+    await setMeta(MINING_EMOJI_KEY, face);
+    return;
+  }
+  const deck = await getDeck(id);
+  if (!deck) return;
+  // An orphan has no record yet; remembering it here is what gives it one,
+  // which is also what lets its name be edited afterwards.
+  await rememberDeck({ ...deck, emoji: face || undefined, updatedAt: Date.now() });
+}
+
+/** Rename a deck. The mining deck is named by what it is, so it refuses. */
+export async function renameDeck(id: string, name: string): Promise<boolean> {
+  const trimmed = name.trim();
+  const deck = await getDeck(id);
+  if (!deck || !trimmed || id === MINING_DECK_ID) return false;
+  await rememberDeck({ ...deck, name: trimmed, updatedAt: Date.now() });
+  return true;
 }
 
 /** Record a premade deck, or update what is known about one. */

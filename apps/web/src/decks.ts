@@ -1,4 +1,4 @@
-import { MINING_DECK_ID, fromSharedCards, type DeckInfo } from "@yomeyo/core";
+import { MINING_DECK_ID, deckFace, fromSharedCards, type DeckInfo } from "@yomeyo/core";
 import { screenHeader } from "./screen.js";
 import { currentAccount, getFirebaseConfig, type AccountInfo } from "./cloud.js";
 import { cardsInDeck, forgetDeck, listDecks, rememberDeck } from "./my-decks.js";
@@ -373,7 +373,9 @@ async function renderMine(
     const shareable = canShare(deck, account);
     row.innerHTML = `
       <div class="word">
-        <div><b>${escapeHtml(deck.name)}</b>${deck.shared ? ` <span class="glosses">· shared</span>` : ""}</div>
+        <div><span class="deck-row-face" aria-hidden="true">${escapeHtml(deckFace(deck))}</span> <b>${escapeHtml(
+          deck.name,
+        )}</b>${deck.shared ? ` <span class="glosses">· shared</span>` : ""}</div>
         <div class="glosses">${deck.cardCount.toLocaleString()} words${
           deck.kind === "mining" ? " · saved by you" : ""
         }</div>

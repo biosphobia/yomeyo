@@ -15,10 +15,11 @@ import {
 } from "@yomeyo/core";
 import { liveCards, saveCard } from "./store.js";
 import { clipSpeakerButton, playStoredAudio, playWord, speakerButton } from "./audio.js";
-import { cardInDeck, deckPicker, getDeckChoice } from "./deck-picker.js";
+import { cardInDeck, getDeckChoice } from "./deck-picker.js";
+import { deckTabs } from "./deck-tabs.js";
 import { getMedia } from "./media.js";
 import { getAdvancedMode } from "./prefs.js";
-import { getDailyCounts, getDeckConfig, recordReview } from "./deck.js";
+import { getDailyCounts, getDeckConfig, recordReview, unrecordReview } from "./deck.js";
 
 /** Review page: daily flashcards, scheduled by FSRS (or SM-2 if switched off). */
 
@@ -26,40 +27,44 @@ const DECK_CHOICE_KEY = "reviewDeck";
 
 export async function renderReview(main: HTMLElement, isCurrent: () => boolean = () => true): Promise<void> {
   const deckChoice = await getDeckChoice(DECK_CHOICE_KEY);
-  const cards = (await liveCards()).filter((card) => cardInDeck(card, deckChoice));
+  const everything = await liveCards();
+  const cards = everything.filter((card) => cardInDeck(card, deckChoice));
   const advanced = await getAdvancedMode();
   if (!isCurrent()) return; // a newer render has taken over
   const now = Date.now();
-  const config = await getDeckConfig();
+  const config = await getDeckConfig(deckChoice);
   const stats = deckStats(cards, now);
 
-  // Each deck schedules by its own options and spends its own daily
-  // allowance, exactly as Anki's presets do; the queues then run in turn,
-  // with everything mid-learning gathered to the front regardless of deck.
-  const deckIds = [...new Set(cards.map((card) => deckOf(card)))];
-  const configOfDeck = new Map<string, DeckConfig>();
-  let queue: Card[] = [];
-  let newLeft = 0;
-  for (const deckId of deckIds) {
-    const deckConfig = await getDeckConfig(deckId);
-    configOfDeck.set(deckId, deckConfig);
-    const deckCounts = await getDailyCounts(now, deckId);
-    queue = queue.concat(
+  // One deck is studied at a time, as in Anki, and it is scheduled by its
+  // own options and spends its own daily allowance.
+  const counts = await getDailyCounts(now, deckChoice);
+  const queue = buildQueue(cards, now, config, {
+    introducedToday: counts.introduced,
+    reviewedToday: counts.reviewed,
+  });
+  const newLeft = Math.max(0, config.newPerDay - counts.introduced);
+
+  // What every other deck owes, for the numbers on their tabs. A deck the
+  // reader is not in still has to be able to say "there is work here".
+  const owed = new Map<string, number>();
+  for (const deckId of new Set(everything.map((card) => deckOf(card)))) {
+    if (deckId === deckChoice) {
+      owed.set(deckId, queue.length);
+      continue;
+    }
+    const otherConfig = await getDeckConfig(deckId);
+    const otherCounts = await getDailyCounts(now, deckId);
+    owed.set(
+      deckId,
       buildQueue(
-        cards.filter((card) => deckOf(card) === deckId),
+        everything.filter((card) => deckOf(card) === deckId),
         now,
-        deckConfig,
-        { introducedToday: deckCounts.introduced, reviewedToday: deckCounts.reviewed },
-      ),
+        otherConfig,
+        { introducedToday: otherCounts.introduced, reviewedToday: otherCounts.reviewed },
+      ).length,
     );
-    newLeft += Math.max(0, deckConfig.newPerDay - deckCounts.introduced);
   }
-  const inFlight = queue.filter((c) => c.state === "learning" || c.state === "relearning");
-  queue = [
-    ...inFlight.sort((a, b) => a.due - b.due),
-    ...queue.filter((c) => c.state !== "learning" && c.state !== "relearning"),
-  ];
-  const configOf = (card: Card): DeckConfig => configOfDeck.get(deckOf(card)) ?? config;
+  if (!isCurrent()) return;
 
   main.innerHTML = `
     ${screenHeader("Review")}
@@ -98,9 +103,16 @@ export async function renderReview(main: HTMLElement, isCurrent: () => boolean =
     })
     .catch(() => undefined);
 
-  main
-    .querySelector<HTMLDivElement>("#deck-choice-row")!
-    .appendChild(await deckPicker(DECK_CHOICE_KEY, deckChoice, () => void renderReview(main, isCurrent)));
+  const redraw = (): void => void renderReview(main, isCurrent);
+  main.querySelector<HTMLDivElement>("#deck-choice-row")!.appendChild(
+    await deckTabs({
+      key: DECK_CHOICE_KEY,
+      current: deckChoice,
+      badge: (deck) => owed.get(deck.id) ?? 0,
+      onChange: redraw,
+      onEdited: redraw,
+    }),
+  );
 
   const area = main.querySelector<HTMLDivElement>("#review-area")!;
   const numbers = main.querySelectorAll<HTMLElement>(".stat .num");
@@ -108,47 +120,119 @@ export async function renderReview(main: HTMLElement, isCurrent: () => boolean =
   /** Keep all four counters honest while reviewing, not just on entry. */
   const refreshStats = async (remaining: number): Promise<void> => {
     const at = Date.now();
-    let freshLeft = 0;
-    for (const deckId of deckIds) {
-      const deckCounts = await getDailyCounts(at, deckId);
-      freshLeft += Math.max(0, (configOfDeck.get(deckId) ?? config).newPerDay - deckCounts.introduced);
-    }
+    const deckCounts = await getDailyCounts(at, deckChoice);
     const fresh = deckStats((await liveCards()).filter((card) => cardInDeck(card, deckChoice)), at);
     numbers[0].textContent = String(remaining);
-    numbers[1].textContent = String(freshLeft);
+    numbers[1].textContent = String(Math.max(0, config.newPerDay - deckCounts.introduced));
     numbers[2].textContent = String(fresh.learning);
     numbers[3].textContent = String(fresh.review);
   };
 
-  showNext(area, queue, configOf, stats.due, refreshStats);
+  const session: Session = {
+    area,
+    queue,
+    config,
+    deckId: deckChoice,
+    totalDue: stats.due,
+    emptyNote:
+      cards.length === 0
+        ? "This deck has no words yet."
+        : stats.due > 0
+          ? "Daily limit reached. More tomorrow."
+          : "All caught up!",
+    refreshStats,
+    history: [],
+  };
+  showNext(session);
+
+  // Anki undoes the last answer with Ctrl+Z, and so does this. The plain z
+  // is here too: on a phone keyboard the chord is nobody's idea of a shortcut.
+  const onKey = (ev: KeyboardEvent): void => {
+    if (!main.isConnected || !isCurrent()) {
+      document.removeEventListener("keydown", onKey);
+      return;
+    }
+    const typing = (ev.target as HTMLElement | null)?.closest("input, textarea, [contenteditable]");
+    if (typing) return;
+    if (ev.key !== "z" && ev.key !== "Z") return;
+    ev.preventDefault();
+    void undoLast(session);
+  };
+  document.addEventListener("keydown", onKey);
 }
 
-function showNext(
-  area: HTMLElement,
-  queue: Card[],
-  configOf: (card: Card) => DeckConfig,
-  totalDue: number,
-  refreshStats: (remaining: number) => Promise<void>,
-): void {
+/** One answered card, kept so it can be put back exactly as it was. */
+interface Answered {
+  before: Card;
+  grade: Grade;
+  wasNew: boolean;
+  at: number;
+  deckId: string;
+}
+
+interface Session {
+  area: HTMLElement;
+  queue: Card[];
+  config: DeckConfig;
+  deckId: string;
+  totalDue: number;
+  /** What to say when the queue runs out, which depends on why it did. */
+  emptyNote: string;
+  refreshStats: (remaining: number) => Promise<void>;
+  /** Answers given this sitting, newest last. Undo pops from the end. */
+  history: Answered[];
+}
+
+/** How many answers back you can go. Anki's own limit is about this deep. */
+const UNDO_DEPTH = 30;
+
+/**
+ * Put the last answer back.
+ *
+ * The card returns exactly as it was — its due date, its memory state, its
+ * step, its lapse count — and today's counters give back the review as
+ * well, so an undo leaves nothing behind. It comes back to the front of the
+ * queue rather than to wherever the scheduler would have put it, because
+ * the reason you undid it is that you meant to answer it differently.
+ */
+async function undoLast(session: Session): Promise<void> {
+  const last = session.history.pop();
+  if (!last) return;
+  // A fresh stamp, or the next sync would hand the graded copy straight back.
+  await saveCard({ ...last.before, updatedAt: Date.now() });
+  await unrecordReview(last.wasNew, last.at, last.deckId);
+  void import("./review-stats.js")
+    .then((m) => m.unrecordGradedReview(last.grade, last.wasNew, last.at))
+    .catch(() => undefined);
+
+  // If the answer put the card back in the queue for another step, that
+  // copy goes: the card is about to be asked again anyway.
+  const at = session.queue.findIndex((c) => c.id === last.before.id);
+  if (at >= 0) session.queue.splice(at, 1);
+  session.queue.unshift(last.before);
+  await session.refreshStats(session.queue.length);
+  showNext(session);
+}
+
+function showNext(session: Session): void {
+  const { area, queue } = session;
   const card = queue.shift();
   if (!card) {
     area.innerHTML = `
       <div class="empty-state">
         <div class="big">🎉</div>
-        <div>${
-          totalDue > 0
-            ? "Daily limit reached. More tomorrow."
-            : "All caught up!"
-        }</div>
+        <div>${session.emptyNote}</div>
         <div class="row-actions" style="justify-content:center;margin-top:12px">
+          ${session.history.length > 0 ? `<button id="undo-btn" class="ghost">↩ Undo last answer</button>` : ""}
           <a href="#decks"><button class="secondary">Browse decks</button></a>
         </div>
       </div>
     `;
+    area.querySelector<HTMLButtonElement>("#undo-btn")?.addEventListener("click", () => void undoLast(session));
     return;
   }
 
-  const preview = gradePreview(card, Date.now(), configOf(card));
+  const preview = gradePreview(card, Date.now(), session.config);
 
   area.innerHTML = `
     <div class="card-panel review-card">
@@ -176,8 +260,15 @@ function showNext(
         ${gradeButton("good", "Good", preview.good)}
         ${gradeButton("easy", "Easy", preview.easy)}
       </div>
+      ${
+        session.history.length > 0
+          ? `<div class="undo-row"><button id="undo-btn" class="ghost">↩ Undo</button></div>`
+          : ""
+      }
     </div>
   `;
+
+  area.querySelector<HTMLButtonElement>("#undo-btn")?.addEventListener("click", () => void undoLast(session));
 
   // A picture the card brought with it is part of the answer: shown once it
   // is decoded, and simply absent on a device that does not hold the file.
@@ -227,9 +318,12 @@ function showNext(
       const grade = btn.dataset.grade as Grade;
       const now = Date.now();
       const wasNew = card.state === "new";
-      const updated = gradeCard(card, grade, now, configOf(card));
+      const updated = gradeCard(card, grade, now, session.config);
       await saveCard(updated);
       await recordReview(wasNew, now, deckOf(card));
+      // Everything undo needs to put this back, before anything changed it.
+      session.history.push({ before: card, grade, wasNew, at: now, deckId: deckOf(card) });
+      if (session.history.length > UNDO_DEPTH) session.history.shift();
       // The permanent record: how each button fell, per day, for ever.
       void import("./review-stats.js")
         .then((m) => m.recordGradedReview(grade, wasNew, now))
@@ -240,8 +334,8 @@ function showNext(
       if (updated.state !== "review" && updated.due <= now + 20 * 60 * 1000) {
         queue.push(updated);
       }
-      await refreshStats(queue.length);
-      showNext(area, queue, configOf, totalDue, refreshStats);
+      await session.refreshStats(queue.length);
+      showNext(session);
     });
   });
 }

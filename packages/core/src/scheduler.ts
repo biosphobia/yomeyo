@@ -1,4 +1,4 @@
-import { DEFAULT_DECK_CONFIG, type DeckConfig } from "./deck-config.js";
+import { DEFAULT_DECK_CONFIG, dayStart, type DeckConfig } from "./deck-config.js";
 import { orderOf } from "./deck-library.js";
 import { RATING, intervalFor, nextMemoryState, type FsrsRating, type MemoryState } from "./fsrs.js";
 import { DEFAULT_SRS_CONFIG, gradeCard as gradeSm2 } from "./srs.js";
@@ -246,7 +246,7 @@ export function buildQueue(
   const queue = [
     // Learning cards are never limited: they are already in flight.
     ...learning.sort((a, b) => a.due - b.due),
-    ...byDueThenRandom(due, now).slice(0, reviewRoom),
+    ...byDueThenRandom(due, now, config.rolloverHour).slice(0, reviewRoom),
     ...ordered
       // The order the words arrived in, unless the deck has been
       // rearranged, in which case the order somebody chose.
@@ -282,9 +282,12 @@ const LEARN_AHEAD_MS = 20 * 60 * 1000;
  * therefore shuffled among themselves, while an older day still comes
  * first. The shuffle is drawn from the card and the date, so a redraw
  * mid-session does not reshuffle the queue under the reader.
+ *
+ * A "day" here is the deck's own day, beginning at its rollover hour, so a
+ * card answered at one in the morning belongs to the session it was part of.
  */
-function byDueThenRandom(cards: Card[], now: number): Card[] {
-  const day = (at: number): number => Math.floor(at / DAY_MS);
+function byDueThenRandom(cards: Card[], now: number, rolloverHour: number): Card[] {
+  const day = (at: number): number => dayStart(at, rolloverHour);
   const today = day(now);
   const rank = new Map<string, number>();
   for (const card of cards) rank.set(card.id, roll(seedOf(`${card.id}|${today}`)));

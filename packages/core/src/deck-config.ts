@@ -20,6 +20,13 @@ export interface DeckConfig {
   maxReviewsPerDay: number;
   /** Introduce new cards even when the review limit is reached. */
   newIgnoresReviewLimit: boolean;
+  /**
+   * The hour a new study day begins, local time. Anki calls this "next day
+   * starts at" and defaults it to 4am: a session at one in the morning is
+   * the end of the previous day's studying, not the start of the next
+   * day's, so it must not hand out a second helping of new cards.
+   */
+  rolloverHour: number;
 
   // --- new cards ---
   /** Learning steps, in seconds. Anki writes these as "20s 1m 5m". */
@@ -62,6 +69,7 @@ export const DEFAULT_DECK_CONFIG: DeckConfig = {
   newPerDay: 20,
   maxReviewsPerDay: 9999,
   newIgnoresReviewLimit: false,
+  rolloverHour: 4,
 
   learningStepsSec: [20, 60, 300],
   newCardOrder: "added",
@@ -105,4 +113,27 @@ export function formatSteps(stepsSec: number[]): string {
       return `${sec}s`;
     })
     .join(" ");
+}
+
+/**
+ * When the study day containing `at` began, in local time.
+ *
+ * Everything that counts "per day" asks this rather than dividing by 86400:
+ * a day is not a fixed slice of the epoch, it starts at the hour the deck
+ * says it does, and daylight saving moves it by an hour twice a year.
+ */
+export function dayStart(at: number, rolloverHour = DEFAULT_DECK_CONFIG.rolloverHour): number {
+  const hour = Math.min(23, Math.max(0, Math.round(rolloverHour)));
+  const here = new Date(at);
+  const boundary = (offset: number): number =>
+    new Date(here.getFullYear(), here.getMonth(), here.getDate() + offset, hour, 0, 0, 0).getTime();
+  const start = boundary(0);
+  // Before today's boundary means we are still inside yesterday's day.
+  return start <= at ? start : boundary(-1);
+}
+
+/** The study day containing `at`, as YYYY-MM-DD of the day it belongs to. */
+export function dayKey(at: number, rolloverHour = DEFAULT_DECK_CONFIG.rolloverHour): string {
+  const d = new Date(dayStart(at, rolloverHour));
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }

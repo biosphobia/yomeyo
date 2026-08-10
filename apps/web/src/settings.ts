@@ -764,6 +764,14 @@ async function renderDeckConfig(main: HTMLElement, advanced: boolean): Promise<v
 
       <label for="cfg-max">Maximum reviews/day</label>
       <input type="number" id="cfg-max" min="0" max="99999" value="${config.maxReviewsPerDay}" />
+
+      <label for="cfg-rollover">Next day starts at</label>
+      <select id="cfg-rollover">
+        ${Array.from({ length: 24 }, (_, hour) => {
+          const label = `${String(hour).padStart(2, "0")}:00`;
+          return `<option value="${hour}" ${config.rolloverHour === hour ? "selected" : ""}>${label}</option>`;
+        }).join("")}
+      </select>
       ${
         advanced
           ? `
@@ -796,6 +804,9 @@ async function renderDeckConfig(main: HTMLElement, advanced: boolean): Promise<v
           : ""
       }
     </div>
+    <div class="glosses">A study day runs from <b>next day starts at</b> to the same hour
+      the following morning, so a session that goes past midnight still spends the day's
+      allowance it began on.</div>
     ${
       advanced
         ? `
@@ -822,6 +833,7 @@ async function renderDeckConfig(main: HTMLElement, advanced: boolean): Promise<v
         ...config,
         newPerDay: Math.max(0, Number(value("#cfg-new")) || 0),
         maxReviewsPerDay: Math.max(0, Number(value("#cfg-max")) || 0),
+        rolloverHour: Math.min(23, Math.max(0, Number(box.querySelector<HTMLSelectElement>("#cfg-rollover")!.value))),
       };
       // The hidden options keep their stored values; only what is on screen
       // can change, so basic mode can never quietly reset a tuned setup.

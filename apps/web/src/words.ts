@@ -6,7 +6,8 @@ import { touchSharedDeck } from "./deck-share.js";
 import { speakerButton } from "./audio.js";
 import { extensionStatus } from "./extension-bridge.js";
 import { getAdvancedMode } from "./prefs.js";
-import { ALL_DECKS, cardInDeck, deckPicker, getDeckChoice } from "./deck-picker.js";
+import { cardInDeck, getDeckChoice } from "./deck-picker.js";
+import { deckTabs } from "./deck-tabs.js";
 import { toast } from "./toast.js";
 
 /**
@@ -43,7 +44,7 @@ export async function renderWords(main: HTMLElement, isCurrent: () => boolean = 
         <input type="checkbox" id="show-unseen" ${showUnseen ? "checked" : ""} />
         Show unseen
       </label>
-      ${deckChoice !== ALL_DECKS ? `<button id="reset-deck" class="ghost">Reset progress…</button>` : ""}
+      <button id="reset-deck" class="ghost">Reset progress…</button>
     </div>
     ${
       advanced
@@ -57,8 +58,17 @@ export async function renderWords(main: HTMLElement, isCurrent: () => boolean = 
     <div id="word-list" class="card-panel" style="padding:6px 14px"></div>
   `;
 
-  const deckBar = main.querySelector<HTMLDivElement>("#deck-bar")!;
-  deckBar.prepend(await deckPicker(DECK_CHOICE_KEY, deckChoice, () => void renderWords(main, isCurrent)));
+  const redrawWords = (): void => void renderWords(main, isCurrent);
+  main
+    .querySelector<HTMLElement>("#deck-bar")!
+    .before(
+      await deckTabs({
+        key: DECK_CHOICE_KEY,
+        current: deckChoice,
+        onChange: redrawWords,
+        onEdited: redrawWords,
+      }),
+    );
 
   main.querySelector<HTMLInputElement>("#show-unseen")!.addEventListener("change", async (ev) => {
     await setMeta(SHOW_UNSEEN_KEY, (ev.target as HTMLInputElement).checked);

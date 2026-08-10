@@ -31,6 +31,12 @@ export interface DeckInfo {
   /** How many cards it holds, for showing a list without reading every card. */
   cardCount: number;
   description?: string;
+  /**
+   * The face the deck wears on its tab. One emoji, chosen by whoever owns
+   * the deck; a deck that has never been given one falls back to a default
+   * picked from its kind.
+   */
+  emoji?: string;
   /** Where the deck came from, e.g. the .apkg it was imported from. */
   source?: string;
 
@@ -148,6 +154,11 @@ export function fromSharedCards(shared: SharedCard[], deckId: string, now: numbe
  * then withdrew: the old rule read "has a publisher" as "belongs to somebody
  * else", so withdrawing your own deck made it unshareable for ever.
  */
+/** The emoji a deck shows on its tab, falling back to one for its kind. */
+export function deckFace(deck: Pick<DeckInfo, "emoji" | "kind">): string {
+  return deck.emoji || (deck.kind === "mining" ? "⛏️" : "📦");
+}
+
 export function canShareDeck(deck: DeckInfo, uid: string | null): boolean {
   if (!uid || deck.kind !== "premade" || deck.id === MINING_DECK_ID) return false;
   if (deck.shared) return false;

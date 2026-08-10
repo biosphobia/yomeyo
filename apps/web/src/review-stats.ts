@@ -51,6 +51,23 @@ export async function recordGradedReview(grade: Grade, wasNew: boolean, now = Da
   await setMeta(LOG_KEY, all);
 }
 
+/**
+ * Take one back out again, for undo.
+ *
+ * The log merges across devices by taking the larger of two counts, so an
+ * undo can in principle be handed back by a device that already saw the
+ * higher number. That is the right trade: the alternative is a permanent
+ * record that quietly counts answers nobody kept.
+ */
+export async function unrecordGradedReview(grade: Grade, wasNew: boolean, now = Date.now()): Promise<void> {
+  const all = await log();
+  const day = all[reviewDateKey(new Date(now))];
+  if (!day) return;
+  day[grade] = Math.max(0, (day[grade] ?? 0) - 1);
+  if (wasNew) day.introduced = Math.max(0, (day.introduced ?? 0) - 1);
+  await setMeta(LOG_KEY, all);
+}
+
 const filled = (day: Partial<DayReviewStats> | undefined): DayReviewStats => ({
   again: day?.again ?? 0,
   hard: day?.hard ?? 0,

@@ -1,54 +1,28 @@
-import { deckOf, type Card } from "@yomeyo/core";
+import { MINING_DECK_ID, deckOf, type Card } from "@yomeyo/core";
 import { listDecks } from "./my-decks.js";
 import { getMeta, setMeta } from "./db.js";
 
 /**
- * Choosing which deck a screen is looking at.
+ * Which deck a screen is looking at.
  *
- * Review and Words both offer the same choice — everything, the mining
- * deck, or one premade deck — and each remembers its own, so studying one
- * deck does not narrow what the word list shows. A remembered deck that no
- * longer exists falls back to everything rather than an empty screen.
+ * Always exactly one, the way Anki works: you study a deck, you do not
+ * study everything at once. Review and Words each remember their own
+ * choice, so studying one deck does not narrow what the word list shows,
+ * and a remembered deck that has since been deleted falls back to the
+ * mining deck rather than to an empty screen.
  */
 
-export const ALL_DECKS = "all";
-
 export async function getDeckChoice(key: string): Promise<string> {
-  const stored = (await getMeta<string>(key)) ?? ALL_DECKS;
-  if (stored === ALL_DECKS) return stored;
+  const stored = await getMeta<string>(key);
   const decks = await listDecks();
-  return decks.some((deck) => deck.id === stored) ? stored : ALL_DECKS;
+  if (stored && decks.some((deck) => deck.id === stored)) return stored;
+  return decks[0]?.id ?? MINING_DECK_ID;
+}
+
+export async function setDeckChoice(key: string, id: string): Promise<void> {
+  await setMeta(key, id);
 }
 
 export function cardInDeck(card: Card, choice: string): boolean {
-  return choice === ALL_DECKS || deckOf(card) === choice;
-}
-
-/** A ready-to-insert selector; `onChange` fires after the choice is saved. */
-export async function deckPicker(
-  key: string,
-  current: string,
-  onChange: (choice: string) => void,
-): Promise<HTMLSelectElement> {
-  const decks = await listDecks();
-  const select = document.createElement("select");
-  select.className = "deck-pick";
-  select.setAttribute("aria-label", "Which deck to show");
-
-  const options = [
-    { id: ALL_DECKS, label: "All decks" },
-    ...decks.map((deck) => ({ id: deck.id, label: `${deck.name} (${deck.cardCount})` })),
-  ];
-  for (const option of options) {
-    const el = document.createElement("option");
-    el.value = option.id;
-    el.textContent = option.label;
-    el.selected = option.id === current;
-    select.appendChild(el);
-  }
-
-  select.addEventListener("change", () => {
-    void setMeta(key, select.value).then(() => onChange(select.value));
-  });
-  return select;
+  return deckOf(card) === choice;
 }
