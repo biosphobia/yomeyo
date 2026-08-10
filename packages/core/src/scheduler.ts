@@ -97,7 +97,7 @@ export function gradeCard(
     // FSRS decides the first real interval from the state built up above —
     // but an "easy" graduation is capped at the deck's easy interval: raw
     // FSRS hands a brand-new card a month off, which nobody asked for.
-    return graduate(next, memory, config, now, grade === "easy" ? config.easyIntervalDays : undefined);
+    return graduate(next, memory, config, now, grade === "easy" ? config.easyIntervalDays : undefined, grade);
   }
 
   // A review card.
@@ -114,19 +114,90 @@ export function gradeCard(
     }
   }
 
-  return graduate(next, memory, config, now);
+  return graduate(next, memory, config, now, undefined, grade);
 }
 
-function graduate(card: Card, memory: MemoryState, config: DeckConfig, now: number, capDays?: number): Card {
+function graduate(
+  card: Card,
+  memory: MemoryState,
+  config: DeckConfig,
+  now: number,
+  capDays?: number,
+  grade: Grade = "good",
+): Card {
   const days = intervalFor(memory.stability, config.desiredRetention, config.fsrsWeights);
-  const clamped = Math.min(Math.max(Math.round(days), 1), config.maxIntervalDays, capDays ?? Infinity);
+  const ceiling = Math.min(config.maxIntervalDays, capDays ?? Infinity);
+  const clamped = Math.min(Math.max(Math.round(days), 1), ceiling);
+  const fuzzed = applyFuzz(clamped, ceiling, roll(fuzzSeed(card, grade)));
   return {
     ...card,
     state: "review",
     stepIndex: 0,
-    intervalDays: clamped,
-    due: now + clamped * DAY_MS,
+    intervalDays: fuzzed,
+    due: now + fuzzed * DAY_MS,
   };
+}
+
+// ---------------- fuzz ----------------
+
+/**
+ * Anki's interval fuzz, and the reason for it.
+ *
+ * Two cards learned in the same sitting are scheduled the same number of
+ * days out, and so are their children, and so on — left alone, a deck
+ * congeals into clumps that all come due on the same handful of days. So
+ * every interval past a couple of days is nudged by a few percent, and the
+ * clumps come apart on their own.
+ *
+ * The bands are Anki's: the further out a card is, the smaller the nudge
+ * needs to be in proportion, because a day either way matters less.
+ */
+const FUZZ_BANDS: [start: number, end: number, factor: number][] = [
+  [2.5, 7.0, 0.15],
+  [7.0, 20.0, 0.1],
+  [20.0, Infinity, 0.05],
+];
+
+function applyFuzz(days: number, maxDays: number, chance: number): number {
+  // Anything inside a couple of days is left exactly where it is: there is
+  // nowhere for it to go, and moving it would undo the schedule.
+  if (days < 2.5) return days;
+  let delta = 1;
+  for (const [start, end, factor] of FUZZ_BANDS) {
+    delta += factor * Math.max(Math.min(days, end) - start, 0);
+  }
+  const high = Math.min(Math.round(days + delta), maxDays);
+  const low = Math.min(Math.max(2, Math.round(days - delta)), high);
+  return low + Math.floor(chance * (high - low + 1));
+}
+
+/**
+ * The fuzz is random but not capricious: it is drawn from the card itself,
+ * so the interval the buttons promise is the interval the card gets. Anki
+ * does exactly this — seed the generator from the card and its review
+ * count — because a preview that disagrees with the answer is a bug you
+ * cannot see until you look twice.
+ */
+function fuzzSeed(card: Card, grade: Grade): number {
+  return seedOf(`${card.id}|${card.reps}|${grade}`);
+}
+
+/** A number from a string, stably. */
+function seedOf(key: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < key.length; i++) {
+    hash ^= key.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+/** One number in [0, 1) from a seed. */
+function roll(seed: number): number {
+  let t = (seed + 0x6d2b79f5) | 0;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 }
 
 /**
@@ -159,30 +230,71 @@ export function buildQueue(
   const introduced = counts.introducedToday ?? 0;
   const reviewed = counts.reviewedToday ?? 0;
 
-  const live = cards.filter((c) => !c.deleted && c.due <= now);
+  const alive = cards.filter((c) => !c.deleted);
   const suspended = (c: Card) => c.leech && config.leechAction === "suspend";
+  const live = alive.filter((c) => !suspended(c) && c.due <= now);
 
-  const learning = live.filter(
-    (c) => !suspended(c) && (c.state === "learning" || c.state === "relearning"),
-  );
-  const due = live.filter((c) => !suspended(c) && c.state === "review");
-  const fresh = live.filter((c) => !suspended(c) && c.state === "new");
+  const learning = live.filter((c) => c.state === "learning" || c.state === "relearning");
+  const due = live.filter((c) => c.state === "review");
+  const fresh = live.filter((c) => c.state === "new");
 
   const reviewRoom = Math.max(0, config.maxReviewsPerDay - reviewed);
   const newRoom = Math.max(0, config.newPerDay - introduced);
 
   const ordered = config.newCardOrder === "random" ? shuffle(fresh, now) : [...fresh];
 
-  return [
+  const queue = [
     // Learning cards are never limited: they are already in flight.
     ...learning.sort((a, b) => a.due - b.due),
-    ...due.sort((a, b) => a.due - b.due).slice(0, reviewRoom),
+    ...byDueThenRandom(due, now).slice(0, reviewRoom),
     ...ordered
       // The order the words arrived in, unless the deck has been
       // rearranged, in which case the order somebody chose.
       .sort((a, b) => orderOf(a) - orderOf(b))
       .slice(0, config.newIgnoresReviewLimit ? newRoom : Math.min(newRoom, Math.max(0, reviewRoom))),
   ];
+  if (queue.length > 0) return queue;
+
+  // Nothing is due — but a learning card a few minutes out is worth
+  // finishing rather than closing the app for. Anki calls this the
+  // learn-ahead limit and defaults it to twenty minutes; the alternative
+  // is being told to come back at 3:04pm.
+  return alive
+    .filter(
+      (c) =>
+        !suspended(c) &&
+        (c.state === "learning" || c.state === "relearning") &&
+        c.due > now &&
+        c.due <= now + LEARN_AHEAD_MS,
+    )
+    .sort((a, b) => a.due - b.due);
+}
+
+/** Anki's learn-ahead limit: how far into the future a step may be pulled. */
+const LEARN_AHEAD_MS = 20 * 60 * 1000;
+
+/**
+ * Anki's default review order: due date, then random.
+ *
+ * Sorting purely by the timestamp brings the cards back in the order they
+ * were answered in, sitting after sitting — the same words in the same
+ * run, which becomes its own cue. Cards owed from the same DAY are
+ * therefore shuffled among themselves, while an older day still comes
+ * first. The shuffle is drawn from the card and the date, so a redraw
+ * mid-session does not reshuffle the queue under the reader.
+ */
+function byDueThenRandom(cards: Card[], now: number): Card[] {
+  const day = (at: number): number => Math.floor(at / DAY_MS);
+  const today = day(now);
+  const rank = new Map<string, number>();
+  for (const card of cards) rank.set(card.id, roll(seedOf(`${card.id}|${today}`)));
+  return [...cards].sort((a, b) => {
+    // Everything owed from before today is one bucket, oldest day first.
+    const dayA = Math.min(day(a.due), today);
+    const dayB = Math.min(day(b.due), today);
+    if (dayA !== dayB) return dayA - dayB;
+    return (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0);
+  });
 }
 
 /** Deterministic shuffle, so the same day gives the same order. */
