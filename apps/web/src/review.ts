@@ -14,7 +14,7 @@ import {
   type Grade,
 } from "@yomeyo/core";
 import { liveCards, saveCard } from "./store.js";
-import { clipSpeakerButton, playStoredAudio, playWord, speakerButton } from "./audio.js";
+import { clipSpeakerButton, playStoredAudio, playWord, prefetchAudio, speakerButton } from "./audio.js";
 import { cardInDeck, getDeckChoice } from "./deck-picker.js";
 import { deckTabs } from "./deck-tabs.js";
 import { getMedia } from "./media.js";
@@ -128,9 +128,40 @@ export async function renderReview(main: HTMLElement, isCurrent: () => boolean =
     numbers[3].textContent = String(fresh.review);
   };
 
+  /*
+   * Fetch the words you are about to be asked, before you are asked them.
+   *
+   * A clip is cached the first time it plays, which means the first play of
+   * every new word is a round trip you sit through with the answer already
+   * on screen — and offline it is not a round trip, it is the device voice
+   * instead of a recording. Pulling the queue down while the first card is
+   * still being read moves that wait somewhere it costs nothing, and a
+   * session started on the train has its recordings already.
+   *
+   * Quiet throughout: anything cached is skipped, failures are ignored, and
+   * leaving the screen stops the rest — which is what the generation token
+   * already knows, rather than a flag something has to remember to set.
+   */
+  const audioAhead = {
+    get aborted(): boolean {
+      return !isCurrent();
+    },
+  };
+  const wanted = (cards: Card[]): { term: string; reading: string }[] =>
+    cards
+      // A card that brought its own recording plays that; nothing to fetch.
+      .filter((card) => !card.audio)
+      .map((card) => ({ term: card.term, reading: card.reading }));
+  void prefetchAudio(wanted(queue.slice(0, 30)), audioAhead).catch(() => undefined);
+
   const session: Session = {
     area,
     queue,
+    audioAhead,
+    prefetchAhead: () => {
+      if (audioAhead.aborted) return;
+      void prefetchAudio(wanted(queue.slice(0, 10)), audioAhead).catch(() => undefined);
+    },
     config,
     deckId: deckChoice,
     totalDue: stats.due,
@@ -173,6 +204,10 @@ interface Answered {
 interface Session {
   area: HTMLElement;
   queue: Card[];
+  /** True once the screen is left, so the download queue stops with it. */
+  audioAhead: { readonly aborted: boolean };
+  /** Top up the clips held for the cards still to come. */
+  prefetchAhead: () => void;
   config: DeckConfig;
   deckId: string;
   totalDue: number;
@@ -238,14 +273,19 @@ function showNext(session: Session): void {
     <div class="card-panel review-card">
       ${card.leech ? `<div class="leech-tag">Leech · ${card.lapses} lapses</div>` : ""}
       <div class="review-term" lang="ja">${escapeHtml(card.term)}</div>
-      ${card.sentence ? `<div class="review-sentence" lang="ja">${escapeHtml(hideTerm(card.sentence, card.term))}</div>` : ""}
       <div id="answer" style="display:none">
-        <div id="reading-row" class="review-reading" lang="ja">${readingHtml(card)}</div>
+        <div id="reading-row" class="review-reading" lang="ja"><span>${readingHtml(card)}</span></div>
         <div class="review-glosses">${escapeHtml(card.glosses.join(" · "))}</div>
         ${
+          // The sentence the word was mined from, whole, and only once the
+          // answer is up. It used to sit on the front with the word blanked
+          // out to 〇〇, which is a hint nobody asked for and clutter for the
+          // rest of the card's life; here it is the context it was saved as.
           card.sentenceFurigana
             ? `<div class="review-sentence" lang="ja">${rubyHtml(card.sentenceFurigana)}</div>`
-            : ""
+            : card.sentence
+              ? `<div class="review-sentence" lang="ja">${escapeHtml(card.sentence)}</div>`
+              : ""
         }
         ${card.sentenceMeaning ? `<div class="review-sentence">${escapeHtml(card.sentenceMeaning)}</div>` : ""}
         ${card.notes ? `<div class="review-notes">${escapeHtml(card.notes)}</div>` : ""}
@@ -335,6 +375,7 @@ function showNext(session: Session): void {
         queue.push(updated);
       }
       await session.refreshStats(queue.length);
+      session.prefetchAhead();
       showNext(session);
     });
   });
@@ -360,10 +401,6 @@ function formatDelay(ms: number): string {
 }
 
 /** Mask the target word in its sentence so the front isn't a giveaway. */
-function hideTerm(sentence: string, term: string): string {
-  return sentence.split(term).join("〇".repeat(Math.min(term.length, 4)));
-}
-
 /**
  * The reading, drawn with its pitch when the card knows it: a line over the
  * high morae, a leg where the pitch drops, and the accent numbers after.

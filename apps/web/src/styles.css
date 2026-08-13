@@ -576,10 +576,30 @@ label {
   margin-top: 10px;
 }
 
+/*
+ * The reading, with its speaker.
+ *
+ * The button is a grid box, so appending it to a centred line of text put it
+ * on a line of its own against the left edge — the one thing on the card
+ * that was not centred. A flex row would fix the line but move the reading
+ * off centre by half a button. So the row carries an empty box the button's
+ * width on the other side: the reading sits exactly in the middle of the
+ * card, with the speaker beside it and the same air mirrored opposite.
+ */
 .review-reading {
   color: var(--accent);
   font-size: 1.3rem;
   margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.review-reading::before {
+  content: "";
+  width: 40px;
+  flex: none;
 }
 
 .review-glosses {
@@ -3059,8 +3079,10 @@ button.gram-swap-line:hover {
 }
 
 .review-reading .speaker {
-  margin-left: 10px;
-  vertical-align: middle;
+  /* Spaced by the row's own gap now, and mirrored by the box opposite. */
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
 }
 
 .toast {
