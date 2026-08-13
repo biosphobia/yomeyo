@@ -86,7 +86,8 @@ complete, switch Pages off under **Settings → Pages**.
 
 ## Install on Android
 
-1. **Open** https://biosphobia.github.io/yomeyo/ in Chrome.
+1. **Open** https://duugu.moe/yomeyo/ in Chrome (the GitHub Pages copy at
+   https://biosphobia.github.io/yomeyo/ works the same way).
 2. **Add it to your home screen** — Chrome menu (⋮) → *Add to Home screen*.
    It now opens like a normal app and keeps your deck on the device.
 3. **Open it once while online** so the dictionary caches for offline use
@@ -112,11 +113,17 @@ Download the build for your browser (both are published on every run):
 
 | Browser | Package |
 |---|---|
-| Firefox for Android | [`yomeyo-extension-firefox.zip`](https://biosphobia.github.io/yomeyo/yomeyo-extension-firefox.zip) |
-| Chrome / Edge / other Chromium | [`yomeyo-extension-chromium.zip`](https://biosphobia.github.io/yomeyo/yomeyo-extension-chromium.zip) |
+| Firefox for Android | [`yomeyo-extension-firefox.zip`](https://duugu.moe/yomeyo/yomeyo-extension-firefox.zip) |
+| Chrome / Edge / other Chromium | [`yomeyo-extension-chromium.zip`](https://duugu.moe/yomeyo/yomeyo-extension-chromium.zip) |
 
 Both are also attached to every Actions run as the `yomeyo-extension`
-artifact.
+artifact, and served from the Pages copy at the same filenames.
+
+The extension sends saved words to `https://duugu.moe/yomeyo/` out of the
+box. **Open that address once** in the same browser: the app hands the
+extension a key on its own page, and after that words cross on their own,
+with the app closed. Serving the app somewhere else means changing the
+address under *Advanced* in the toolbar menu, and opening the new one once.
 
 **Tap-to-look-up is on by default on touch devices** — no setting to find.
 On desktop it stays off and you hold **Alt/Option** and click instead, so

@@ -1,4 +1,4 @@
-import { activeTab, sendMessage, sendToTab, storageGet } from "./browser.js";
+import { activeTab, ext, sendMessage, sendToTab, storageGet } from "./browser.js";
 
 /** Toolbar popup: tap-mode toggle, deck stats, handoff to the app, sync. */
 
@@ -15,7 +15,8 @@ const tapHint = $<HTMLDivElement>("tap-hint");
 const appUrlInput = $<HTMLInputElement>("app-url");
 const urlInput = $<HTMLInputElement>("sync-url");
 const tokenInput = $<HTMLInputElement>("sync-token");
-const syncBtn = $<HTMLButtonElement>("sync-btn");
+const pushBtn = $<HTMLButtonElement>("push-btn");
+const openAppBtn = $<HTMLButtonElement>("open-app");
 const msg = $<HTMLDivElement>("msg");
 const statTotal = $<HTMLElement>("stat-total");
 const statWaiting = $<HTMLElement>("stat-waiting");
@@ -23,6 +24,9 @@ const transferHint = $<HTMLDivElement>("transfer-hint");
 const audioHint = $<HTMLDivElement>("audio-hint");
 const audioAllowBtn = $<HTMLButtonElement>("audio-allow");
 const versionLabel = $<HTMLDivElement>("version-label");
+
+/** Where the app lives, as the background has it. Filled in by refresh. */
+let appUrl = "";
 
 /** "just now" / "12 minutes ago" / "3 days ago". */
 function describeWhen(at: number): string {
@@ -34,6 +38,57 @@ function describeWhen(at: number): string {
   if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
   const days = Math.round(hours / 24);
   return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
+/** Why the last attempt to move words went the way it did. */
+type DeliveryState = "delivered" | "nothing-to-do" | "not-linked" | "no-page" | "refused" | "failed";
+
+interface Stats {
+  total: number;
+  waiting: number;
+  lastHandoffAt: number | null;
+  version: string | null;
+  appUrl?: string;
+  linked?: boolean;
+  lastDelivery?: { at: number; state: DeliveryState; delivered: number; detail?: string } | null;
+}
+
+/**
+ * The one sentence that says whether this is working.
+ *
+ * Every one of these is something the user can act on, or an assurance that
+ * nothing needs acting on. "They keep trying on their own" is only true when
+ * trying again could work.
+ */
+function explain(state: DeliveryState | undefined, where: string): string {
+  const host = (() => {
+    try {
+      return new URL(where).host;
+    } catch {
+      return where;
+    }
+  })();
+  switch (state) {
+    case "not-linked":
+      return `Open ${host} once in this browser. The app hands the extension a key on its own page, and nothing can be added without it.`;
+    case "refused":
+      return `${host} would not take them: it does not recognise this extension. Open it once and they will go across.`;
+    case "no-page":
+      return "No ordinary web page is open to send them through. Open any site and they go on their own.";
+    case "failed":
+      return "The last attempt could not get through. It tries again by itself, on every page you open.";
+    default:
+      return "";
+  }
+}
+
+function describeTransfer(stats: Stats): string {
+  if (stats.total === 0) return "Tap a Japanese word on any page to save it.";
+  if (stats.waiting === 0) {
+    return `Everything saved here is in the app${stats.lastHandoffAt ? ` (last added ${describeWhen(stats.lastHandoffAt)})` : ""}.`;
+  }
+  const why = explain(stats.lastDelivery?.state, stats.appUrl ?? "");
+  return why || "Some words have not reached the app yet. They keep trying on their own.";
 }
 
 function setMessage(text: string, kind: "" | "ok" | "error" = ""): void {
@@ -118,12 +173,7 @@ async function refresh(): Promise<void> {
   urlInput.value = settings.url ?? "";
   tokenInput.value = settings.token ?? "";
 
-  const stats = (await sendMessage<{
-    total: number;
-    waiting: number;
-    lastHandoffAt: number | null;
-    version: string | null;
-  }>({ type: "stats" }).catch(() => undefined)) ?? {
+  const stats = (await sendMessage<Stats>({ type: "stats" }).catch(() => undefined)) ?? {
     total: 0,
     waiting: 0,
     lastHandoffAt: null,
@@ -131,15 +181,14 @@ async function refresh(): Promise<void> {
   };
   statTotal.textContent = String(stats.total);
   statWaiting.textContent = String(stats.waiting);
+  appUrl = stats.appUrl ?? appUrlInput.value.trim();
   // Words travel on their own. Saying when the last transfer happened is the
   // difference between "this is working" and "nothing seems to happen",
-  // which is not otherwise visible.
-  transferHint.textContent =
-    stats.total === 0
-      ? "Tap a Japanese word on any page to save it."
-      : stats.waiting === 0
-        ? `Everything saved here is in the app${stats.lastHandoffAt ? ` (last added ${describeWhen(stats.lastHandoffAt)})` : ""}.`
-        : "Some words have not reached the app yet. They keep trying on their own.";
+  // which is not otherwise visible — and when they are not travelling, why
+  // not, since "they keep trying" is a lie if nothing can ever succeed.
+  transferHint.textContent = describeTransfer(stats);
+  openAppBtn.style.display = stats.linked === false && appUrl ? "" : "none";
+  pushBtn.style.display = stats.waiting > 0 ? "" : "none";
   if (stats.version) versionLabel.textContent = `Yomeyo ${stats.version}`;
   await refreshAudioPermission();
 }
@@ -167,17 +216,37 @@ for (const input of [appUrlInput, urlInput, tokenInput]) {
   input.addEventListener("change", () => void saveSettings());
 }
 
-syncBtn.addEventListener("click", async () => {
+pushBtn.addEventListener("click", async () => {
   await saveSettings();
-  setMessage("Syncing…");
-  const result = await sendMessage<{ pushed?: number; pulled?: number; error?: string }>({
-    type: "sync",
-  });
-  if (result?.error) {
-    setMessage(result.error, "error");
+  pushBtn.disabled = true;
+  setMessage("Sending…");
+  const result = await sendMessage<{
+    state?: DeliveryState;
+    appUrl?: string;
+    synced?: { pushed: number; pulled: number };
+    error?: string;
+  }>({ type: "pushNow" }).catch(() => undefined);
+  pushBtn.disabled = false;
+
+  if (!result || result.error) {
+    setMessage(result?.error ?? "Yomeyo's background did not answer.", "error");
+    return;
+  }
+  const extra = result.synced ? ` Sync server: pushed ${result.synced.pushed}, pulled ${result.synced.pulled}.` : "";
+  if (result.state === "delivered" || result.state === "nothing-to-do") {
+    setMessage((result.state === "delivered" ? "Sent." : "Nothing waiting.") + extra, "ok");
   } else {
-    setMessage(`Pushed ${result.pushed}, pulled ${result.pulled}.`, "ok");
-    void refresh();
+    setMessage(explain(result.state, result.appUrl ?? appUrl) + extra, "error");
+  }
+  void refresh();
+});
+
+openAppBtn.addEventListener("click", () => {
+  if (!appUrl) return;
+  try {
+    ext.tabs?.create?.({ url: appUrl });
+  } catch {
+    window.open(appUrl, "_blank");
   }
 });
 

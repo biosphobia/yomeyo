@@ -90,8 +90,10 @@
     </div>
 
     <div class="msg" id="transfer-hint"></div>
-    <div class="msg" id="version-label" style="opacity:0.55;font-size:11px"></div>
+    <button id="push-btn" class="secondary">Send words to the app now</button>
+    <button id="open-app" class="secondary" style="display:none">Open the app once to link it</button>
     <div class="msg" id="msg"></div>
+    <div class="msg" id="version-label" style="opacity:0.55;font-size:11px"></div>
 
     <div class="msg" id="audio-hint"></div>
     <button id="audio-allow" class="secondary" style="display:none">Allow audio downloads</button>
@@ -100,14 +102,18 @@
       <summary>Advanced: app location &amp; sync server</summary>
       <label for="app-url">Yomeyo app URL</label>
       <input type="url" id="app-url" placeholder="https://…/yomeyo/" />
+      <div class="hint">
+        Where your words are sent. Open that address once in this browser and
+        the app lets the extension in; after that words go across on their
+        own, with the app closed.
+      </div>
       <label for="sync-url">Sync server URL (optional)</label>
       <input type="url" id="sync-url" placeholder="https://your-server:8787" />
       <label for="sync-token">Sync token</label>
       <input type="password" id="sync-token" placeholder="shared secret" />
-      <button id="sync-btn" class="secondary">Sync now</button>
       <div class="hint">
-        A sync server keeps several devices in step automatically. On a single
-        phone you don't need one.
+        A separate thing, and almost nobody needs it: a server of your own that
+        several devices push to. Leave both blank.
       </div>
     </details>
 

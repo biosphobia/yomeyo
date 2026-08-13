@@ -111,7 +111,22 @@ window.addEventListener("message", (ev: MessageEvent) => {
   void accountReady
     .then(() => tokenMatches(data.token))
     .then((allowed) => {
-      if (!allowed) return; // not the extension; say nothing at all
+      if (!allowed) {
+        /*
+         * Not the extension, or an extension holding a secret this copy of
+         * the app never minted — which is what moving the app to a new
+         * address does, since the secret lives in the app's own storage.
+         *
+         * Saying so costs nothing: a page that got here without the secret
+         * already knew it was not getting in, and it learns no more from a
+         * refusal than from the twenty seconds of silence this used to be.
+         * What that silence did cost was the extension, which sat through
+         * the timeout on every tab in turn and never found out that opening
+         * the app once was all it needed.
+         */
+        reply("failed", { error: "not linked: open the app once so it can let the extension in" });
+        return;
+      }
       if (offered.length === 0) {
         reply("stored", { ids: [], added: 0 });
         return;

@@ -6,7 +6,7 @@
  * and additionally requires an add-on id under `browser_specific_settings`.
  */
 
-export const VERSION = "0.5.3";
+export const VERSION = "0.5.4";
 
 /** Add-on id used when signing/listing the Firefox build. */
 export const GECKO_ID = "yomeyo@yomeyo.app";
@@ -28,7 +28,11 @@ function base() {
     // exactly like one that has stopped working. The handover to the app
     // needs neither host permissions nor an offscreen document; it runs in
     // the content script that is already there.
-    permissions: ["storage", "tabs"],
+    // "alarms" carries no warning of its own, so adding it does not put the
+    // extension in the held-for-re-approval state that a host permission
+    // would — and it is what lets waiting words be retried on a phone that
+    // is simply sitting on one page.
+    permissions: ["storage", "tabs", "alarms"],
     // Optional, and asked for only when the user presses the button in the
     // toolbar menu. Optional permissions do not make a browser hold an
     // already-installed extension for re-approval, which is what a required
