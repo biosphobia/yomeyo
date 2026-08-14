@@ -114,10 +114,14 @@ nav {
   left: 0;
   right: 0;
   display: flex;
-  background: color-mix(in srgb, var(--panel) 92%, black);
-  backdrop-filter: blur(12px);
-  border-top: 1px solid #ffffff14;
-  padding-bottom: env(safe-area-inset-bottom);
+  background: color-mix(in srgb, var(--panel) 88%, black);
+  backdrop-filter: blur(18px) saturate(1.3);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  border-top: 1px solid #ffffff1a;
+  /* A hairline of light along the top edge, so the bar sits on the page
+     rather than being a darker rectangle cut out of it. */
+  box-shadow: inset 0 1px 0 #ffffff0d;
+  padding: 2px 4px env(safe-area-inset-bottom);
   /* Above the sheet it opens, so the bar never disappears under it. */
   z-index: 70;
 }
@@ -130,52 +134,89 @@ nav .brand {
   display: none;
 }
 
+/*
+ * A tab on the phone bar.
+ *
+ * The icon sits in its own capsule, and it is the capsule that lights up
+ * rather than the whole tab: a slab of colour six slots wide reads as a
+ * selected row, where a pill under one icon reads as a place. It lifts a
+ * pixel with it, which is the whole animation and is enough.
+ */
 nav a {
   flex: 1;
+  min-width: 0;
   text-align: center;
-  padding: 12px 0 10px;
+  padding: 8px 2px 8px;
   color: var(--muted);
   text-decoration: none;
-  font-size: 0.78rem;
+  font-size: 0.7rem;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: 4px;
 }
 
-nav a .icon {
-  font-size: 1.25rem;
+nav a .icon,
+.nav-more .icon {
+  font-size: 1.2rem;
   line-height: 1;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  max-width: 52px;
+  height: 28px;
+  border-radius: 999px;
+  transition:
+    background-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s cubic-bezier(0.2, 0.9, 0.3, 1);
 }
 
-nav a.active {
+nav a .lbl,
+.nav-more .lbl {
+  max-width: 100%;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+
+nav a.active,
+.nav-more.active {
   color: var(--accent);
+  font-weight: 600;
 }
 
-/* The phone bar: four destinations, then More. */
+nav a.active .icon,
+.nav-more.active .icon {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 34%, transparent);
+  transform: translateY(-1px);
+}
+
+nav a:active .icon,
+.nav-more:active .icon {
+  transform: scale(0.9);
+}
+
+/* The phone bar: five destinations, then More. */
 nav a:not([data-primary]) {
   display: none;
 }
 
 .nav-more {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 12px 0 10px;
+  gap: 4px;
+  padding: 8px 2px 8px;
   border-radius: 0;
   background: none;
   color: var(--muted);
-  font-size: 0.78rem;
-}
-
-.nav-more .icon {
-  font-size: 1.25rem;
-  line-height: 1;
-}
-
-.nav-more.active {
-  color: var(--accent);
+  font-size: 0.7rem;
 }
 
 /* The sheet: every destination, grouped as the sidebar groups them. */
@@ -212,7 +253,7 @@ body.sheet-open {
   border-radius: 20px 20px 0 0;
   /* Clear of the bar, which stays above the sheet: More opened it, so More
      is where a thumb goes to close it again. */
-  padding: 8px 14px calc(74px + env(safe-area-inset-bottom));
+  padding: 8px 14px calc(84px + env(safe-area-inset-bottom));
   animation: sheet-rise 0.2s cubic-bezier(0.2, 0.9, 0.3, 1);
 }
 
@@ -238,9 +279,11 @@ body.sheet-open {
   padding: 0 4px 8px;
 }
 
+/* One column count per group, chosen in nav.ts: four tiles go two-by-two
+   rather than three across and one stranded underneath. */
 .nav-sheet-items {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -249,25 +292,50 @@ body.sheet-open {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 14px 6px;
-  border-radius: 14px;
-  background: var(--panel-2);
-  border: 1px solid #ffffff0d;
+  gap: 8px;
+  padding: 16px 6px 14px;
+  border-radius: 16px;
+  background: linear-gradient(#ffffff0a, transparent) var(--panel-2);
+  border: 1px solid #ffffff0f;
   color: var(--text);
   text-decoration: none;
   font-size: 0.82rem;
+  font-weight: 500;
+  transition:
+    transform 0.14s ease,
+    border-color 0.14s ease;
+}
+
+.nav-sheet a.nav-sheet-item:active {
+  transform: scale(0.97);
 }
 
 .nav-sheet a.nav-sheet-item .icon {
   font-size: 1.5rem;
   line-height: 1;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: #ffffff0a;
+}
+
+.nav-sheet a.nav-sheet-item .lbl {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
 
 .nav-sheet a.nav-sheet-item.active {
   color: var(--accent);
-  border-color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
   background: var(--accent-soft);
+}
+
+.nav-sheet a.nav-sheet-item.active .icon {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
 @keyframes sheet-rise {
@@ -378,15 +446,30 @@ body.sheet-open {
     background: #ffffff0a;
   }
 
+  /* The sidebar is a list, not a bar: the whole row is the target, so the
+     row lights up and the icon goes back to being an icon. */
   nav a .icon {
     font-size: 1.15rem;
     width: 24px;
+    max-width: none;
+    height: auto;
+    border-radius: 0;
+    display: block;
     text-align: center;
+    background: none;
+    box-shadow: none;
+    transform: none;
   }
 
   nav a.active {
     color: var(--accent);
     background: var(--accent-soft);
+  }
+
+  nav a.active .icon {
+    background: none;
+    box-shadow: none;
+    transform: none;
   }
 
   main {
@@ -3187,15 +3270,16 @@ button.gram-swap-line:hover {
   color: var(--accent);
 }
 
-/* Five slots on a narrow phone: let the labels shrink rather than wrap. */
+/* Six slots on a narrow phone: let the labels shrink rather than wrap. */
 @media (max-width: 400px) {
   nav a,
   .nav-more {
-    font-size: 0.7rem;
+    font-size: 0.64rem;
   }
   nav a .icon,
   .nav-more .icon {
-    font-size: 1.15rem;
+    font-size: 1.1rem;
+    height: 26px;
   }
 }
 

@@ -6,11 +6,14 @@
  * 400-pixel bar gives each one 44 pixels, which is narrower than a fingertip
  * and reads as a wall of tiny icons.
  *
- * So the phone bar carries four destinations — the ones a study session
+ * So the phone bar carries five destinations — the ones a study session
  * actually starts from — and a More button that opens the full map as a
  * sheet, grouped exactly as the sidebar groups it. Nothing is hidden: the
- * sheet lists every destination including the four on the bar, so "where is
+ * sheet lists every destination including the five on the bar, so "where is
  * Kanji" is answered in one tap rather than remembered.
+ *
+ * Six slots on a 390-pixel phone is 65 pixels each, which is still a
+ * comfortable target; it is nine at 44 that does not work.
  *
  * The More button is not a dead end either. While you are somewhere that
  * lives in the sheet, the button wears that place's icon and name and lights
@@ -39,7 +42,7 @@ export const NAV: NavGroup[] = [
       { route: "review", label: "Review", icon: "🗂️", primary: true },
       { route: "words", label: "Words", icon: "📚", primary: true },
       { route: "reader", label: "Reading", icon: "📖" },
-      { route: "decks", label: "Decks", icon: "📦" },
+      { route: "decks", label: "Decks", icon: "📦", primary: true },
     ],
   },
   {
@@ -70,8 +73,22 @@ export const NAV: NavGroup[] = [
 const ITEMS = NAV.flatMap((group) => group.items);
 
 function link(item: NavItem, className = ""): string {
+  // The label is its own element so the bar can hold it to one line and the
+  // icon can wear the active pill without the text inside it.
   return `<a href="#${item.route}" data-route="${item.route}"${item.primary ? " data-primary" : ""}
-    ${className ? `class="${className}"` : ""}><span class="icon">${item.icon}</span>${item.label}</a>`;
+    ${className ? `class="${className}"` : ""}><span class="icon">${item.icon}</span><span class="lbl">${item.label}</span></a>`;
+}
+
+/**
+ * How wide to lay a group out.
+ *
+ * Three across is the most that fits, but a group of four across three
+ * columns is a row and then one tile on its own, which reads as a mistake.
+ * Four goes two-by-two instead.
+ */
+function sheetColumns(count: number): number {
+  if (count === 4) return 2;
+  return Math.min(count, 3);
 }
 
 /** The bar/sidebar, and the sheet that opens off it. */
@@ -85,7 +102,7 @@ export function navHtml(): string {
         </div>`,
       ).join("")}
       <button type="button" class="nav-more" id="nav-more" aria-expanded="false" aria-controls="nav-sheet">
-        <span class="icon" id="nav-more-icon">⋯</span><span id="nav-more-label">More</span>
+        <span class="icon" id="nav-more-icon">⋯</span><span class="lbl" id="nav-more-label">More</span>
       </button>
     </nav>`;
 }
@@ -99,7 +116,7 @@ export function navSheetHtml(): string {
         ${NAV.map(
           (group) => `<div class="nav-sheet-group">
             <div class="nav-sheet-label">${group.label}</div>
-            <div class="nav-sheet-items">${group.items
+            <div class="nav-sheet-items" style="--cols:${sheetColumns(group.items.length)}">${group.items
               .map((item) => link(item, "nav-sheet-item"))
               .join("")}</div>
           </div>`,
@@ -141,7 +158,7 @@ export function mountNav(root: ParentNode): void {
 /**
  * Light up wherever we are — in the bar, in the sidebar, and in the sheet.
  *
- * When the current place is not one of the four on the phone bar, the More
+ * When the current place is not one of the five on the phone bar, the More
  * button becomes it: same icon, same name, same accent. The bar never shows
  * nothing selected.
  */
