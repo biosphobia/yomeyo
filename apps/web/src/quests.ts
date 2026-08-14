@@ -35,6 +35,8 @@ export interface DayPlan {
   milestone?: string;
   /** True for days before the journey began — cleared by grace, not effort. */
   beforeJourney?: boolean;
+  /** True past the written schedule; new journeys leave these days open. */
+  afterSchedule?: boolean;
 }
 
 /** The pool for days beyond the scheduled curriculum. */
@@ -85,16 +87,46 @@ const START_KEY = "questStart";
 let startCached: string | null = null;
 onAccountChange(() => {
   startCached = null;
+  freshCached = null;
 });
 
-/** The journey's day 1, fixed the first time anything asks. */
-export async function questStart(): Promise<string> {
+/**
+ * When the journey began, or null if it has not.
+ *
+ * This used to be fixed silently the first time anything asked — opening
+ * the calendar to have a look was enough to start the clock, and the
+ * schedule marched on whether or not anyone had chosen to follow it. Now
+ * the only thing that starts a journey is `beginJourney`, behind a button
+ * pressed on purpose. Anyone whose start is already stored (signed in or
+ * not — it lives in the same per-account storage either way) is exactly
+ * where they were.
+ */
+export async function journeyStarted(): Promise<string | null> {
   if (startCached) return startCached;
   const stored = await getMeta<string>(START_KEY);
-  if (stored) return (startCached = stored);
+  if (stored) startCached = stored;
+  return stored ?? null;
+}
+
+/** Journeys begun by the button carry this; their later days are not the
+ * old quest pool but a schedule still being written. */
+const FRESH_KEY = "journeyByChoice";
+let freshCached: boolean | null = null;
+
+/** Start the journey today. Pressing the button twice is one journey. */
+export async function beginJourney(): Promise<string> {
+  const existing = await journeyStarted();
+  if (existing) return existing;
   const today = dateKey();
   await setMeta(START_KEY, today);
+  await setMeta(FRESH_KEY, true);
+  freshCached = true;
   return (startCached = today);
+}
+
+async function byChoice(): Promise<boolean> {
+  freshCached ??= (await getMeta<boolean>(FRESH_KEY)) ?? false;
+  return freshCached;
 }
 
 function localTime(key: string): number {
@@ -135,7 +167,10 @@ export interface Countdown {
  * has started.
  */
 export async function examCountdown(now: Date = new Date()): Promise<Countdown> {
-  const start = await questStart();
+  const start = await journeyStarted();
+  // No journey, no exam date: reported as already behind us, which every
+  // caller treats as "show nothing".
+  if (!start) return { key: dateKey(now), daysAway: -1 };
   const key = keyOfDay(start, EXAM_DAY);
   const daysAway = Math.round((localTime(key) - localTime(dateKey(now))) / 86400000);
   return { key, daysAway };
@@ -196,7 +231,18 @@ function vanityQuest(day: number): QuestDef {
  * nobody misses a quest that was never put to them.
  */
 export async function planForDay(key: string): Promise<DayPlan> {
-  return planForDayFrom(key, await questStart());
+  const start = await journeyStarted();
+  if (!start) return { quests: [], beforeJourney: true };
+  const plan = planForDayFrom(key, start);
+  /*
+   * Days beyond the exam. A journey started by the button follows the new
+   * schedule, which so far is only written up to the exam — those days
+   * stand empty rather than showing the old quest pool, and will be filled
+   * in as the schedule is written. Journeys from before the button keep the
+   * pool: those learners have been drawing days from it all along.
+   */
+  if (plan.afterSchedule && (await byChoice())) return { quests: [], afterSchedule: true };
+  return plan;
 }
 
 /**
@@ -244,7 +290,7 @@ export function planForDayFrom(key: string, start: string): DayPlan {
     };
   }
 
-  return { quests: seededShuffle(QUEST_POOL, hashKey(key)).slice(0, PER_DAY) };
+  return { quests: seededShuffle(QUEST_POOL, hashKey(key)).slice(0, PER_DAY), afterSchedule: true };
 }
 
 export async function questsForDay(key: string): Promise<QuestDef[]> {
@@ -305,7 +351,9 @@ export async function recordQuestEvent(event: string, amount = 1): Promise<void>
 
 /** Several events at once, one write — a level clear reports a bundle. */
 export async function recordQuestEvents(events: string[], amount = 1): Promise<void> {
-  await questStart(); // earning anything fixes day 1
+  // Logged whether or not a journey is under way: the log is per-day
+  // counts and the quests are goals laid over them, so playing all
+  // morning and pressing "start" at noon still counts the morning.
   const all = await log();
   const today = dateKey();
   const day = (all[today] ??= {});
@@ -384,7 +432,8 @@ export async function dayComplete(key: string): Promise<boolean> {
  * the walk stops at day 1.
  */
 export async function dayStreak(now: Date = new Date()): Promise<number> {
-  const start = await questStart();
+  const start = await journeyStarted();
+  if (!start) return 0;
   let streak = 0;
   const cursor = new Date(now);
   if (!(await dayComplete(dateKey(cursor)))) cursor.setDate(cursor.getDate() - 1);

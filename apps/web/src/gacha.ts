@@ -589,8 +589,11 @@ async function openCrate(
       // rather than appearing from the bottom of an unrelated box.
       rollBox.style.setProperty("--from-x", `${(origin.x * 100).toFixed(1)}%`);
       rollBox.style.setProperty("--from-y", `${(origin.y * 100).toFixed(1)}%`);
-      rollBox.classList.add("over-scene");
-      rolled = runRoll(rollBox, prize, table);
+      // One crate rolls over the film. A stack of crates rolls under it,
+      // in normal flow: five lanes are taller than the scene, and pinned
+      // over it they would either be clipped or bury the picture entirely.
+      rollBox.classList.add(results.length === 1 ? "over-scene" : "under-scene");
+      rolled = runRoll(rollBox, results.map((r) => r.prize), table);
     },
   });
   void cutscene.id.then((id) => {

@@ -1343,6 +1343,13 @@ button.gram-swap-line:hover {
   }
 }
 
+/* The multi-pull's lanes, below the film in normal flow. They still grow
+   out of the crate's last position, just downward instead of over it. */
+.gacha-stage #gacha-roll.under-scene {
+  transform-origin: var(--from-x, 50%) 0;
+  animation: roll-out-of 0.55s cubic-bezier(0.18, 0.9, 0.3, 1) both;
+}
+
 /* The lines, drawn small and scaled up so the letters are proper blocks. */
 .scene-dialogue {
   position: absolute;
@@ -1406,6 +1413,46 @@ button.gram-swap-line:hover {
   gap: 10px;
   padding: 8px 0;
   will-change: transform;
+}
+
+/*
+ * The multi-pull: one lane per crate inside a single window, all flying at
+ * once past one shared marker. The cards shrink to the face alone — five
+ * full-size lanes would not fit a phone screen, and the results grid right
+ * after names every prize anyway. These sizes are read by the roll's own
+ * maths (SIZES in gacha-roll.ts); change them together or the strips stop
+ * landing under the marker.
+ */
+.roll-multi .roll-window {
+  height: auto;
+}
+
+.roll-multi .roll-strip {
+  gap: 8px;
+  padding: 6px 0;
+}
+
+.roll-multi .roll-card {
+  width: 72px;
+  height: 64px;
+  border-radius: 10px;
+  gap: 0;
+  padding: 4px;
+}
+
+.roll-multi .roll-gif {
+  width: 44px;
+  height: 36px;
+}
+
+.roll-multi .roll-swatch {
+  width: 44px;
+  height: 36px;
+  padding: 4px;
+}
+
+.roll-multi .roll-item {
+  font-size: 1.5rem;
 }
 
 .roll-card {
@@ -5883,4 +5930,25 @@ button.gram-swap-line:hover {
 .deck-row-face {
   font-size: 1.05rem;
   margin-right: 2px;
+}
+
+/* The calendar before a journey: bare days, and the one button that
+   starts everything. */
+.cal-cell.quiet {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.journey-invite {
+  text-align: center;
+  margin-top: 14px;
+}
+
+.journey-invite .big {
+  font-size: 2.2rem;
+  margin-bottom: 6px;
+}
+
+.journey-invite button {
+  min-width: 200px;
 }

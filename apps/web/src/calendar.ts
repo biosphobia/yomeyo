@@ -1,8 +1,10 @@
 import {
+  beginJourney,
   dateKey,
   dayStreak,
   eventsOf,
   examCountdown,
+  journeyStarted,
   planForDay,
   questProgress,
   type Countdown,
@@ -39,6 +41,16 @@ export async function renderCalendar(main: HTMLElement, isCurrent: () => boolean
   viewYear ??= now.getFullYear();
   viewMonth ??= now.getMonth();
   selectedKey ??= dateKey(now);
+
+  // No journey yet: a bare month and the invitation, nothing else. The
+  // journey used to start itself the first time this screen was opened,
+  // which meant the schedule was already three days old by the time anyone
+  // understood what it was. Now day 1 is the day the button is pressed.
+  if ((await journeyStarted()) === null) {
+    if (!isCurrent()) return;
+    renderInvitation(main, now, isCurrent);
+    return;
+  }
 
   const streak = await dayStreak(now);
   const level = await levelState();
@@ -114,6 +126,9 @@ export async function renderCalendar(main: HTMLElement, isCurrent: () => boolean
     let status = "";
     if (plan.beforeJourney) {
       status = "grace";
+    } else if (plan.quests.length === 0) {
+      // An unwritten day past the exam: no quests to have done or missed.
+      status = "";
     } else if (!future) {
       const events = await eventsOf(key);
       const done = plan.quests.filter((quest) => questProgress(quest, events) >= quest.goal).length;
@@ -150,6 +165,75 @@ export async function renderCalendar(main: HTMLElement, isCurrent: () => boolean
     ? selectedKey
     : todayKey;
   void renderDay(main, shown, todayKey, isCurrent);
+}
+
+/**
+ * The calendar before there is a journey: the month, blank, and one button.
+ *
+ * The days carry nothing because there is nothing yet — no quests, no
+ * streak, no exam date. All of that begins when the button is pressed, and
+ * the schedule it starts runs from that day up to the hiragana exam a week
+ * later. What comes after the exam is still being written.
+ */
+function renderInvitation(main: HTMLElement, now: Date, isCurrent: () => boolean): void {
+  const todayKey = dateKey(now);
+  const first = new Date(viewYear!, viewMonth!, 1);
+  const daysInMonth = new Date(viewYear!, viewMonth! + 1, 0).getDate();
+  const leadingBlanks = (first.getDay() + 6) % 7; // Monday-first
+
+  main.innerHTML = `
+    ${screenHeader("Calendar")}
+    <div class="cal-head">
+      <button id="cal-prev" class="ghost" aria-label="Previous month">‹</button>
+      <div class="cal-month">${MONTHS[viewMonth!]} ${viewYear}</div>
+      <button id="cal-next" class="ghost" aria-label="Next month">›</button>
+    </div>
+    <div class="cal-grid">
+      ${WEEKDAYS.map((day) => `<div class="cal-weekday">${day}</div>`).join("")}
+      ${Array.from({ length: leadingBlanks }, () => `<div class="cal-cell blank"></div>`).join("")}
+      ${Array.from({ length: daysInMonth }, (_, i) => {
+        const key = dateKey(new Date(viewYear!, viewMonth!, i + 1));
+        return `<div class="cal-cell quiet${key === todayKey ? " today" : ""}"><span>${i + 1}</span></div>`;
+      }).join("")}
+    </div>
+    <div class="card-panel journey-invite">
+      <div class="big">🌱</div>
+      <b>Your journey has not started yet.</b>
+      <div class="glosses" style="margin:8px 0 14px">
+        Press the button and today becomes day 1. A week of daily quests
+        teaches you the whole hiragana, two rows a day, and on day 8 you sit
+        the hiragana exam. The calendar fills in as you go.
+      </div>
+      <button id="journey-begin">Start my journey</button>
+    </div>
+  `;
+
+  main.querySelector<HTMLButtonElement>("#cal-prev")!.addEventListener("click", () => {
+    viewMonth!--;
+    if (viewMonth! < 0) {
+      viewMonth = 11;
+      viewYear!--;
+    }
+    void renderCalendar(main, isCurrent);
+  });
+  main.querySelector<HTMLButtonElement>("#cal-next")!.addEventListener("click", () => {
+    viewMonth!++;
+    if (viewMonth! > 11) {
+      viewMonth = 0;
+      viewYear!++;
+    }
+    void renderCalendar(main, isCurrent);
+  });
+
+  main.querySelector<HTMLButtonElement>("#journey-begin")!.addEventListener("click", async (ev) => {
+    (ev.currentTarget as HTMLButtonElement).disabled = true;
+    await beginJourney();
+    // Back to the month being lived in, where day 1 now is.
+    viewYear = now.getFullYear();
+    viewMonth = now.getMonth();
+    selectedKey = todayKey;
+    void renderCalendar(main, isCurrent);
+  });
 }
 
 /**
@@ -204,6 +288,18 @@ async function renderDay(
       <div class="card-panel">
         <b>${key}</b><span class="glosses"> · cleared ✓</span>
         <div class="glosses" style="margin-top:6px">Before your journey began.</div>
+      </div>
+    `;
+    return;
+  }
+
+  // Past the written schedule: the journey so far runs up to the hiragana
+  // exam, and these days will be filled in as the road is laid further.
+  if (plan.afterSchedule && plan.quests.length === 0) {
+    box.innerHTML = `
+      <div class="card-panel">
+        <b>${isToday ? "Today" : key}</b>
+        <div class="glosses" style="margin-top:6px">Beyond the exam. This part of the journey is still being written.</div>
       </div>
     `;
     return;

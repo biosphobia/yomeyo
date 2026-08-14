@@ -172,6 +172,9 @@ const seenMerge: Merge = (local, remote) => {
   return { locked: l.locked === true || r.locked === true, opened: l.opened === true || r.opened === true };
 };
 
+const eitherTrue: Merge = (local, remote) =>
+  local === true || remote === true ? true : local === undefined && remote === undefined ? undefined : false;
+
 /** Every key that travels, and how its two sides become one. */
 const KEYS: { key: string; merge: Merge }[] = [
   { key: "xpTotal", merge: larger },
@@ -186,6 +189,10 @@ const KEYS: { key: string; merge: Merge }[] = [
   { key: "doorKeys", merge: unionStrings },
   { key: "doorKeysInserted", merge: unionStrings },
   { key: "questStart", merge: earliestDay },
+  // Whether the journey was begun by the button (its later days follow the
+  // new schedule). True on either device makes it true; a journey does not
+  // become an old-style one by syncing.
+  { key: "journeyByChoice", merge: eitherTrue },
   // The flashcard review log shares the quest log's shape: per day, per
   // counter, the larger count wins.
   { key: "reviewLog", merge: questLogMerge },

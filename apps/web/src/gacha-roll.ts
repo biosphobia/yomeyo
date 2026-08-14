@@ -9,17 +9,29 @@ import { prizeImageUrl, type Prize, type PrizeTable } from "./gacha-data.js";
  * is for is the moment of not-quite-knowing while the strip slows down,
  * which is worth building properly and worth nothing at all if it is also a
  * lie about where it stops.
+ *
+ * A multi-pull runs one lane per crate, all at once: the strips fly
+ * together and settle one after another, left to right down the stack,
+ * because five separate suspenses in a row is four too many and a single
+ * strip showing one prize of five is a film about the wrong thing.
  */
 
-/** How many cards the strip holds, and where the winner sits in it. */
+/** How many cards a strip holds, and where the winner sits in it. */
 const STRIP = 56;
 const WINNER_AT = 48;
 
-const CARD_WIDTH = 116;
-const CARD_GAP = 10;
-const PITCH = CARD_WIDTH + CARD_GAP;
+/**
+ * Lane geometry, by how many lanes there are. One lane gets the full-size
+ * cards; a stack of them shrinks so five crates still fit on a phone
+ * screen. The strip maths reads these same numbers, so the landing spot
+ * cannot drift from what the stylesheet draws.
+ */
+const SIZES = {
+  single: { cardW: 116, gap: 10 },
+  multi: { cardW: 72, gap: 8 },
+};
 
-function cardHtml(prize: Prize, table: PrizeTable): string {
+function cardHtml(prize: Prize, table: PrizeTable, compact: boolean): string {
   const rarity = table.rarities[prize.rarity];
   const face =
     prize.type === "item"
@@ -30,68 +42,86 @@ function cardHtml(prize: Prize, table: PrizeTable): string {
            <i style="background:${escapeAttr(prize.vars["--accent"] ?? "#fff")}"></i>
          </span>`
       : `<img class="roll-gif" src="${escapeAttr(prizeImageUrl(prize.image))}" alt="" loading="lazy" />`;
+  // The compact card is the face alone: at five lanes the names would be
+  // four-point type, and the results screen right after names everything.
   return `<div class="roll-card" style="--rarity:${escapeAttr(rarity?.color ?? "#94a3b8")}">
     ${face}
-    <span class="roll-name">${escapeHtml(prize.name)}</span>
+    ${compact ? "" : `<span class="roll-name">${escapeHtml(prize.name)}</span>`}
   </div>`;
 }
 
 /**
- * Run the roll inside `box`, landing on `winner`. Resolves when it stops,
- * or as soon as it is skipped.
+ * Run the roll inside `box`, one lane per winner, all landing at once.
+ * Resolves when the last lane stops.
  */
 export function runRoll(
   box: HTMLElement,
-  winner: Prize,
+  winners: Prize | Prize[],
   table: PrizeTable,
 ): Promise<void> {
-  const pool = table.prizes.length > 0 ? table.prizes : [winner];
-  const strip: Prize[] = Array.from({ length: STRIP }, (_, i) =>
-    i === WINNER_AT ? winner : pool[Math.floor(Math.random() * pool.length)],
-  );
+  const landing = Array.isArray(winners) ? winners : [winners];
+  if (landing.length === 0) return Promise.resolve();
+  const compact = landing.length > 1;
+  const { cardW, gap } = compact ? SIZES.multi : SIZES.single;
+  const pitch = cardW + gap;
+
+  const pool = table.prizes.length > 0 ? table.prizes : landing;
+  const laneHtml = (winner: Prize): string => {
+    const strip: Prize[] = Array.from({ length: STRIP }, (_, i) =>
+      i === WINNER_AT ? winner : pool[Math.floor(Math.random() * pool.length)],
+    );
+    return `<div class="roll-strip">${strip.map((p) => cardHtml(p, table, compact)).join("")}</div>`;
+  };
 
   box.innerHTML = `
-    <div class="roll">
+    <div class="roll${compact ? " roll-multi" : ""}">
       <div class="roll-window">
         <div class="roll-marker"></div>
-        <div class="roll-strip" id="roll-strip">${strip.map((p) => cardHtml(p, table)).join("")}</div>
+        ${landing.map(laneHtml).join("")}
       </div>
     </div>
   `;
 
-  const stripEl = box.querySelector<HTMLDivElement>("#roll-strip")!;
   const windowEl = box.querySelector<HTMLDivElement>(".roll-window")!;
+  const lanes = [...box.querySelectorAll<HTMLDivElement>(".roll-strip")];
 
-  return new Promise<void>((resolve) => {
-    let done = false;
-    const finish = (): void => {
-      if (done) return;
-      done = true;
-      resolve();
-    };
+  const settled = lanes.map(
+    (lane, i) =>
+      new Promise<void>((resolve) => {
+        let done = false;
+        const finish = (): void => {
+          if (done) return;
+          done = true;
+          resolve();
+        };
 
-    // Where the winner has to end up: its middle under the marker, off by a
-    // few pixels either way so it never stops suspiciously dead centre.
-    const settle = (): void => {
-      const centre = windowEl.clientWidth / 2;
-      const jitter = (Math.random() - 0.5) * (CARD_WIDTH * 0.5);
-      const target = -(WINNER_AT * PITCH + CARD_WIDTH / 2 - centre) + jitter;
+        // Where this lane's winner has to end up: its middle under the
+        // marker, off by a few pixels either way so it never stops
+        // suspiciously dead centre.
+        const centre = windowEl.clientWidth / 2;
+        const jitter = (Math.random() - 0.5) * (cardW * 0.5);
+        const target = -(WINNER_AT * pitch + cardW / 2 - centre) + jitter;
 
-      stripEl.style.transition = "none";
-      stripEl.style.transform = "translate3d(0,0,0)";
-      // A frame with the start position committed, or the browser folds the
-      // two transforms together and nothing moves.
-      requestAnimationFrame(() => {
-        stripEl.style.transition = "transform 6.4s cubic-bezier(0.12, 0.72, 0.06, 1)";
-        stripEl.style.transform = `translate3d(${target}px,0,0)`;
-      });
-      stripEl.addEventListener("transitionend", finish, { once: true });
-      // Belt and braces: a dropped transitionend must not hang the pull.
-      setTimeout(finish, 7200);
-    };
+        // Everyone launches together; the lanes come to rest in order down
+        // the stack, a beat apart, so the reveal reads top to bottom
+        // instead of as one thud.
+        const seconds = (compact ? 5.2 : 6.4) + i * 0.45 + Math.random() * 0.25;
 
-    settle();
-  });
+        lane.style.transition = "none";
+        lane.style.transform = "translate3d(0,0,0)";
+        // A frame with the start position committed, or the browser folds
+        // the two transforms together and nothing moves.
+        requestAnimationFrame(() => {
+          lane.style.transition = `transform ${seconds.toFixed(2)}s cubic-bezier(0.12, 0.72, 0.06, 1)`;
+          lane.style.transform = `translate3d(${target}px,0,0)`;
+        });
+        lane.addEventListener("transitionend", finish, { once: true });
+        // Belt and braces: a dropped transitionend must not hang the pull.
+        setTimeout(finish, seconds * 1000 + 800);
+      }),
+  );
+
+  return Promise.all(settled).then(() => undefined);
 }
 
 function escapeHtml(s: string): string {
