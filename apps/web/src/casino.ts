@@ -24,6 +24,17 @@ type GameId = "slots" | "pachinko" | "dice" | "highlow" | "cups" | "race" | "doo
 
 let game: GameId = "slots";
 
+/**
+ * Where the pachinko ball ends up pays: the centre pocket, its neighbours,
+ * or nothing. Simulated at every dial setting, with the windmill pin in
+ * play: 0.87 at the best dial.
+ *
+ * Up here rather than beside the game because the board's paint asks it too
+ * — the labels under the pockets are drawn from the same answer that pays
+ * them out, so they cannot disagree.
+ */
+const pocketMult = (x: number): number => (Math.abs(x) < 0.035 ? 8 : Math.abs(x) < 0.15 ? 2 : 0);
+
 // ---------------- the reels ----------------
 
 /**
@@ -271,6 +282,8 @@ interface Room {
   cupFish: any;
   /** Three racing fish, floor-grade. */
   racers: any[];
+  /** The red arrow that rides over whichever fish was backed. */
+  racePicker: any;
   /** The scrap-built race track, shown only on race days. */
   raceTrack: any;
   /** The crowd: cans on benches. Each remembers its seat in userData. */
@@ -415,6 +428,12 @@ function buildRoom(THREE: any, scene: any): Room {
   // ball is a real ball — its physics run in board space (x across,
   // y up the face) and the mesh just follows.
   const PKX = -4.3;
+  // The pockets along the bottom, defined once. The fins are built from
+  // this, the payouts are read from it and the labels are placed by it, so
+  // a pocket cannot be worth one thing and be labelled another — which is
+  // what hand-placed labels had already drifted into.
+  const PK_FINS = [-0.3, -0.15, -0.035, 0.035, 0.15, 0.3];
+  const PK_BOARD_W = 0.96;
   slab(matte(0x1f5a78, 0.4), 1.3, 2.3, 0.7, PKX, 1.15, MZ);
   slab(gold, 1.4, 0.12, 0.8, PKX, 2.32, MZ);
   slab(gold, 1.4, 0.12, 0.8, PKX, 0.06, MZ);
@@ -425,9 +444,13 @@ function buildRoom(THREE: any, scene: any): Room {
   pachinkoGroup.rotation.x = -0.07;
   scene.add(pachinkoGroup);
   const boardCanvas = document.createElement("canvas");
-  boardCanvas.width = 256;
-  boardCanvas.height = 384;
+  // Painted in a 256x384 space at twice the pixels. The pocket labels are
+  // small by necessity — the money pocket is seven hundredths of the board
+  // wide — and at one pixel per unit the ×8 came out as a smear.
+  boardCanvas.width = 512;
+  boardCanvas.height = 768;
   const boardPaint = boardCanvas.getContext("2d")!;
+  boardPaint.scale(2, 2);
   boardPaint.fillStyle = "#140a26";
   boardPaint.fillRect(0, 0, 256, 384);
   // A full sunburst behind the pins, parlour-loud.
@@ -468,15 +491,39 @@ function buildRoom(THREE: any, scene: any): Room {
     boardPaint.fillRect(sx, sy, 3, 3);
   }
   boardPaint.shadowBlur = 0;
-  // The pockets, marked under the fins. Small: the fins stand at ±9, ±40
-  // and ±80 of centre on this 256-wide canvas, so anything wider than a
-  // pocket smears the three labels into one another.
-  boardPaint.font = "bold 15px 'Hiragino Sans', sans-serif";
-  boardPaint.fillStyle = "#ffd97a";
-  boardPaint.fillText("×8", 128, 376);
-  boardPaint.fillStyle = "#b8a8d8";
-  boardPaint.fillText("×2", 103, 376);
-  boardPaint.fillText("×2", 153, 376);
+  /*
+   * The pocket labels.
+   *
+   * Each one is placed from the fins it sits between and sized to the gap it
+   * has, rather than from three numbers somebody typed. The three labels
+   * used to be hand-placed at a fixed size around the middle, so the ×8
+   * pocket — seven hundredths of the board wide — got a label wider than
+   * itself, and the two losing pockets on the outside got nothing at all:
+   * the row read as one blob in the centre with dead space either side.
+   *
+   * Now every pocket is marked, the losing ones included as a plain x0, and
+   * each label shrinks until it fits between its own fins.
+   */
+  const toCanvasX = (boardX: number): number => 128 + (boardX / PK_BOARD_W) * 256;
+  const pocketFont = (text: string, space: number): void => {
+    for (let size = 21; size >= 8; size--) {
+      boardPaint.font = `bold ${size}px 'Hiragino Sans', sans-serif`;
+      if (boardPaint.measureText(text).width <= space - 3) return;
+    }
+  };
+  // A dark band behind them, so a number never has to be read off a
+  // sunburst ray. It ends where the pockets do.
+  boardPaint.fillStyle = "rgba(10, 5, 20, 0.72)";
+  boardPaint.fillRect(toCanvasX(PK_FINS[0]), 318, toCanvasX(PK_FINS[5]) - toCanvasX(PK_FINS[0]), 46);
+  for (let i = 0; i < PK_FINS.length - 1; i++) {
+    const middle = (PK_FINS[i] + PK_FINS[i + 1]) / 2;
+    const mult = pocketMult(middle);
+    const space = toCanvasX(PK_FINS[i + 1]) - toCanvasX(PK_FINS[i]);
+    const text = `×${mult}`;
+    pocketFont(text, space);
+    boardPaint.fillStyle = mult >= 8 ? "#ffd97a" : mult > 0 ? "#b8a8d8" : "#6b5f80";
+    boardPaint.fillText(text, toCanvasX(middle), 355);
+  }
   const board = new THREE.Mesh(
     new THREE.PlaneGeometry(0.96, 1.44),
     new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(boardCanvas) }),
@@ -538,7 +585,7 @@ function buildRoom(THREE: any, scene: any): Room {
   spinner.add(hub);
   pachinkoGroup.add(spinner);
   // Fins divide the bottom into pockets; the middle one is the money.
-  for (const x of [-0.3, -0.15, -0.035, 0.035, 0.15, 0.3]) {
+  for (const x of PK_FINS) {
     const fin = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.12, 0.055), gold);
     fin.position.set(x, -0.56, 0.03);
     pachinkoGroup.add(fin);
@@ -681,6 +728,30 @@ function buildRoom(THREE: any, scene: any): Room {
   const cupFish = fishBody(0x4fd1c5);
   // The racers: teal, orange, ivory. Nobody asks where they swim to.
   const racers = [0x4fd1c5, 0xf0a860, 0xe8e2d2].map((colour) => fishBody(colour));
+
+  /*
+   * The marker over the fish you backed.
+   *
+   * Three fish of similar size, seen from a camera trotting alongside, and
+   * the only thing telling you which one was yours is the colour named on a
+   * button you pressed a moment ago. This says it outright: a red arrow,
+   * pointing down at your fish, riding above it for the whole race and
+   * still there at the finish.
+   *
+   * Unlit material on purpose — it is a pointer, not part of the scene, and
+   * it must read the same whichever way the room's lights fall.
+   */
+  const pickerMat = new THREE.MeshBasicMaterial({ color: 0xff3b30 });
+  const racePicker = new THREE.Group();
+  const pickerHead = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.15, 4), pickerMat);
+  pickerHead.rotation.x = Math.PI; // nose down, at the fish
+  pickerHead.rotation.y = Math.PI / 4; // square on to the camera's side view
+  racePicker.add(pickerHead);
+  const pickerStem = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.14, 0.035), pickerMat);
+  pickerStem.position.y = 0.14;
+  racePicker.add(pickerStem);
+  racePicker.visible = false;
+  scene.add(racePicker);
 
   // The race track, built the only way anything here gets built: out of
   // scrap. Salvaged plates for a bed, pipes for rails, a checkered strip
@@ -845,6 +916,7 @@ function buildRoom(THREE: any, scene: any): Room {
     cups,
     cupFish,
     racers,
+    racePicker,
     raceTrack,
     cans,
     doorGlow,
@@ -1268,6 +1340,7 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
     for (const cup of room.cups) cup.visible = false;
     room.cupFish.visible = false;
     for (const racer of room.racers) racer.visible = false;
+    room.racePicker.visible = false;
     room.raceTrack.visible = false;
     room.pachinko.ball.visible = false;
     for (const doll of dolls) doll.root.visible = false;
@@ -1460,14 +1533,6 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
   };
 
   // ---- pachinko ----
-
-  /**
-   * Where the ball ends up pays: the centre pocket, its neighbours, or
-   * nothing. Simulated at every dial setting: the best returns 0.97,
-   * an average hand more like 0.8.
-   */
-  // Re-simulated with the windmill pin in play: 0.87 at the best dial.
-  const pocketMult = (x: number): number => (Math.abs(x) < 0.035 ? 8 : Math.abs(x) < 0.15 ? 2 : 0);
 
   const drawPachinko = (): void => {
     hideDice();
@@ -1976,6 +2041,9 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
           racer.position.set(RACE_START, 0.14, RACE_LANES[i]);
           racer.rotation.y = 0; // the tail is already at the back; nose to the finish
         });
+        // Yours, marked, from the off.
+        room.racePicker.visible = true;
+        room.racePicker.position.set(RACE_START, 0.62, RACE_LANES[pick]);
         const speeds = [0, 0, 0].map(() => 0.55 + Math.random() * 0.2);
         // Race events: a burst, a stall, a can on the track, a rattling
         // crowd — each holds a per-fish multiplier for a moment.
@@ -2034,6 +2102,14 @@ export async function renderCasino(body: HTMLDivElement, isCurrent: () => boolea
               racer.rotation.z = Math.sin(now / 70 + i) * 0.25 * wriggle;
               if (racer.position.x >= RACE_END && winner < 0) winner = i;
             });
+            // The arrow rides over its fish, bobbing on its own beat so it
+            // reads as a marker and not as something the fish is wearing.
+            const mine = room.racers[pick];
+            room.racePicker.position.set(
+              mine.position.x,
+              mine.position.y + 0.4 + Math.abs(Math.sin(now / 260)) * 0.05,
+              RACE_LANES[pick],
+            );
             // The camera trots alongside the pack, and the room's own
             // lerp keeps the ride smooth.
             const packX = Math.max(
