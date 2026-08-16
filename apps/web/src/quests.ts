@@ -281,7 +281,7 @@ export function planForDayFrom(key: string, start: string): DayPlan {
         {
           id: "hiragana-exam",
           title: "Hiragana exam",
-          detail: "The final hiragana test. Coming soon.",
+          detail: "Every hiragana, one timer, four lives. Sit it from this day's panel, and run.",
           goal: 1,
           event: "hiragana-exam",
         },

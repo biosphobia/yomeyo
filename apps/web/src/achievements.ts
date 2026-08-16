@@ -54,6 +54,13 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: "first-chapter", name: "Chapter one", icon: "📖", detail: "Pass a grammar chapter's test.", tier: "easy" },
   { id: "first-pull", name: "Beginner's luck", icon: "🎁", detail: "Open your first crate.", tier: "easy" },
   {
+    id: "hiragana-exam",
+    name: "Outran her",
+    icon: "🎓",
+    detail: "Pass the hiragana exam: every kana, four lives, one very large Yuuri.",
+    tier: "hard",
+  },
+  {
     id: "kana-3000",
     name: "House key",
     icon: "🎰",

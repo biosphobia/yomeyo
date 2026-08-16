@@ -11,6 +11,7 @@ import {
 } from "./quests.js";
 import { screenHeader } from "./screen.js";
 import { levelState } from "./levels.js";
+import { unlockAllNow } from "./unlock.js";
 import { renderAchievements } from "./achievements.js";
 import { totalKanaReviews } from "./kana-stats.js";
 
@@ -333,13 +334,27 @@ async function renderDay(
           .join("")}
       </div>
       ${
-        isToday && !complete
+        // The exam sits on its milestone day and stays available from then
+        // on — a retake is always a retake, never a locked door. Admins can
+        // sit it early to see it.
+        plan.milestone && (!future || unlockAllNow())
+          ? `<div class="row-actions" style="margin-top:12px"><button id="cal-exam">🎓 Sit the hiragana exam</button></div>`
+          : ""
+      }
+      ${
+        isToday && !complete && !plan.milestone
           ? `<div class="row-actions" style="margin-top:12px"><a href="#kana"><button class="secondary">To the Kana game →</button></a></div>`
           : ""
       }
       <div id="cal-study" class="cal-study"></div>
     </div>
   `;
+
+  box.querySelector<HTMLButtonElement>("#cal-exam")?.addEventListener("click", async () => {
+    const { runHiraganaExam } = await import("./kana-exam.js");
+    if (!isCurrent()) return;
+    void runHiraganaExam(main, () => void renderCalendar(main, isCurrent));
+  });
 
   // What was actually studied that day: flashcards by button, kana by
   // answer. Filled in after the panel stands, absent when nothing happened.

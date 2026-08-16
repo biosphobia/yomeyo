@@ -6036,3 +6036,108 @@ button.gram-swap-line:hover {
 .journey-invite button {
   min-width: 200px;
 }
+
+/* ---------------- the hiragana exam ----------------
+   A chase across the top, the clock under it, one kana at a time. */
+
+.kana-exam {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* The stage: sky up top, and whatever renders — the models or the emoji
+   stand-in — runs across it. */
+.exam-chase {
+  position: relative;
+  height: 180px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: linear-gradient(#2a3352, #4a3d5c 70%, #241f33);
+  border: 1px solid #ffffff14;
+}
+
+.exam-chase canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.exam-chase-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 0 18% 14px 6%;
+  font-size: 2rem;
+}
+
+.exam-chase-fallback .exam-yuuri {
+  font-size: 3rem;
+  transform-origin: bottom center;
+}
+
+.exam-chase-fallback .exam-chito {
+  animation: exam-run 0.4s infinite alternate ease-in-out;
+}
+
+@keyframes exam-run {
+  from { transform: translateY(0); }
+  to { transform: translateY(-7px); }
+}
+
+.exam-hud {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 4px;
+}
+
+.exam-lives {
+  letter-spacing: 2px;
+}
+
+/* The clock: a bar that drains for every kana. */
+.exam-timer {
+  height: 6px;
+  border-radius: 3px;
+  background: #ffffff14;
+  overflow: hidden;
+}
+
+.exam-timer-fill {
+  height: 100%;
+  width: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--warn));
+}
+
+.exam-card {
+  text-align: center;
+}
+
+.exam-kana {
+  font-size: 4.2rem;
+  line-height: 1.2;
+  min-height: 90px;
+}
+
+.exam-card input {
+  max-width: 220px;
+  margin: 8px auto 10px;
+  text-align: center;
+  font-size: 1.3rem;
+}
+
+.exam-verdict {
+  font-size: 1.9rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  margin: 10px 0 8px;
+  color: var(--ok, #4cc38a);
+}
+
+.exam-verdict.caught {
+  color: var(--bad, #e5644b);
+}
