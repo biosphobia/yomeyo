@@ -6053,7 +6053,9 @@ button.gram-swap-line:hover {
   height: 190px;
   border-radius: var(--radius);
   overflow: hidden;
-  background: linear-gradient(#2a3352, #4a3d5c 70%, #241f33);
+  /* An overcast winter afternoon; the fog in the scene dissolves into the
+     same band, so the sky and the distance read as one weather. */
+  background: linear-gradient(#b9c5d6, #93a2ba 62%, #6e7d96);
   border: 1px solid #ffffff14;
   transition: background 1.2s ease;
 }
@@ -6149,35 +6151,41 @@ button.gram-swap-line:hover {
   height: 100%;
 }
 
-.exam-chase-fallback {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  padding: 0 18% 14px 6%;
-  font-size: 2rem;
-}
-
-.exam-chase-fallback .exam-yuuri {
-  font-size: 3rem;
-  transform-origin: bottom center;
-}
-
-.exam-chase-fallback .exam-chito {
-  animation: exam-run 0.4s infinite alternate ease-in-out;
-}
-
-@keyframes exam-run {
-  from { transform: translateY(0); }
-  to { transform: translateY(-7px); }
-}
-
 .exam-hud {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 10px;
   padding: 0 4px;
+}
+
+/* Three bars, one per phase, each as wide as its share of the questions.
+   Behind you they sit full; ahead of you, empty; the live one fills. */
+.exam-phases {
+  display: flex;
+  flex: 1;
+  gap: 5px;
+}
+
+.exam-phase-bar {
+  flex-grow: var(--w, 1);
+  height: 7px;
+  border-radius: 4px;
+  background: #ffffff16;
+  overflow: hidden;
+}
+
+.exam-phase-bar i {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  border-radius: 4px;
+  transition: width 0.25s ease;
+}
+
+.exam-phase-bar.live i {
+  background: linear-gradient(90deg, var(--accent), var(--warn));
 }
 
 .exam-lives {

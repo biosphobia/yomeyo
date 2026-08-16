@@ -198,7 +198,9 @@ export async function runHiraganaExam(main: HTMLElement, onExit: () => void): Pr
       <div class="exam-chase" id="exam-chase"></div>
       <div class="exam-hud">
         <span id="exam-lives" class="exam-lives"></span>
-        <span id="exam-phase" class="glosses"></span>
+        <div class="exam-phases" id="exam-phases" aria-label="Progress through the three phases">
+          ${[0, 1, 2].map((n) => `<div class="exam-phase-bar" data-phase="${n}"><i></i></div>`).join("")}
+        </div>
         <span id="exam-count" class="glosses"></span>
       </div>
       <div class="exam-timer"><div class="exam-timer-fill" id="exam-fuse"></div></div>
@@ -220,8 +222,10 @@ export async function runHiraganaExam(main: HTMLElement, onExit: () => void): Pr
   const input = main.querySelector<HTMLInputElement>("#exam-input")!;
   const fuse = main.querySelector<HTMLDivElement>("#exam-fuse")!;
   const livesEl = main.querySelector<HTMLElement>("#exam-lives")!;
-  const phaseEl = main.querySelector<HTMLElement>("#exam-phase")!;
+  const phaseBars = [...main.querySelectorAll<HTMLElement>(".exam-phase-bar")];
   const countEl = main.querySelector<HTMLElement>("#exam-count")!;
+  // Each bar's width says how much of the run that phase is.
+  phaseBars.forEach((bar, n) => bar.style.setProperty("--w", String(phases[n].length)));
   const note = main.querySelector<HTMLDivElement>("#exam-note")!;
 
   let phaseAt = 0;
@@ -242,11 +246,17 @@ export async function runHiraganaExam(main: HTMLElement, onExit: () => void): Pr
   };
 
   const current = (): ExamItem => phases[phaseAt][at];
-  const phaseNames = ["ON FOOT", "THE KETTENKRAD", "THE LAST STRETCH"];
 
   const drawHud = (): void => {
     livesEl.textContent = "❤️".repeat(lives) + "🖤".repeat(LIVES - lives);
-    phaseEl.textContent = `${phaseAt + 1}/3 · ${phaseNames[phaseAt]}`;
+    // One bar per phase: the ones behind you full, the one you are in
+    // filling, the ones ahead empty.
+    phaseBars.forEach((bar, n) => {
+      const fill = bar.querySelector<HTMLElement>("i")!;
+      const fraction = n < phaseAt ? 1 : n > phaseAt ? 0 : at / phases[n].length;
+      fill.style.width = `${Math.round(fraction * 100)}%`;
+      bar.classList.toggle("live", n === phaseAt);
+    });
     countEl.textContent = `${answered} / ${total}`;
     stage.gap(lives / LIVES);
   };

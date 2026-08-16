@@ -113,11 +113,9 @@ const DREAM_CAPTIONS: Caption[] = [
 
 export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
   // The caption line lives over the stage whatever renders beneath it.
+  // Until the models arrive the stage is just the winter sky — no stand-in;
+  // if three.js never comes, the captions alone carry the films.
   stage.innerHTML = `
-    <div class="exam-chase-fallback" aria-hidden="true">
-      <span class="exam-yuuri">😤</span>
-      <span class="exam-chito">🏃</span>
-    </div>
     <div class="exam-caption" id="exam-caption"></div>
     <div class="exam-flash" id="exam-flash"></div>`;
   const captionEl = stage.querySelector<HTMLDivElement>("#exam-caption")!;
@@ -368,17 +366,6 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
     },
   };
 
-  // The emoji fallback's own little run cycle.
-  const fallbackYuuri = stage.querySelector<HTMLElement>(".exam-yuuri");
-  let fallbackGap = 1;
-  const fallbackTick = (): void => {
-    if (stopped || three || !fallbackYuuri?.isConnected) return;
-    fallbackGap += (gapTarget - fallbackGap) * 0.06;
-    fallbackYuuri.style.transform = `translateX(${(1 - fallbackGap) * 90}px) scale(${2.2 + (1 - fallbackGap)})`;
-    requestAnimationFrame(fallbackTick);
-  };
-  requestAnimationFrame(fallbackTick);
-
   // ---------------- the real stage ----------------
   try {
     const THREE: any = await import("three");
@@ -401,25 +388,207 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
     const matte = (color: number, rough = 0.85): any =>
       new THREE.MeshStandardMaterial({ color, roughness: rough });
 
-    // The road: slabs streaming left. Everything scenery joins `world` so
-    // the dream scene can strip it all at once.
+    // Winter light: everything far dissolves into the same pale distance
+    // the CSS sky is painted in, which is what sells depth on a phone.
+    scene.fog = new THREE.Fog(0x93a2ba, 6.5, 15);
+
+    // Everything scenery joins `world` so the dream can strip it at once.
     const world = new THREE.Group();
     scene.add(world);
+
+    // The road: packed snow, with tyre-worn ruts showing tarmac beneath.
     const slabs: any[] = [];
     for (let i = 0; i < 10; i++) {
-      const slab = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.08, 2.4), matte(0x3a3f4a, 0.9));
+      const slab = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.08, 2.6), matte(0xdde5ee, 1));
       slab.position.set(-7 + i * 1.6, -0.06, 0);
       world.add(slab);
       slabs.push(slab);
+      const rut = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.005, 0.14), matte(0x525a68, 0.95));
+      rut.position.set(0, 0.043, 0.35);
+      slab.add(rut);
+      const rut2 = rut.clone();
+      rut2.position.z = -0.35;
+      slab.add(rut2);
     }
-    // A far skyline, parallaxing slower: ruins the world scrolls past.
+    // Snowbanks shoulder the road on both sides, lumpy on purpose.
+    for (let i = 0; i < 14; i++) {
+      const bank = new THREE.Mesh(new THREE.SphereGeometry(0.5 + Math.random() * 0.4, 7, 5), matte(0xe9eff6, 1));
+      bank.scale.set(1.6, 0.5, 1);
+      bank.position.set(-7 + i * 1.15, -0.12, i % 2 === 0 ? 1.5 : -1.6);
+      world.add(bank);
+      slabs.push(bank); // recycled with the road
+    }
+    // A far skyline of dead towers, snow-capped, parallaxing slower.
     const skyline: any[] = [];
-    for (let i = 0; i < 7; i++) {
-      const h = 1 + Math.random() * 2.4;
-      const tower = new THREE.Mesh(new THREE.BoxGeometry(0.9, h, 0.6), matte(0x232838, 0.95));
-      tower.position.set(-8 + i * 2.6, h / 2 - 0.1, -3.4);
+    for (let i = 0; i < 8; i++) {
+      const h = 1.2 + Math.random() * 2.6;
+      const tower = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.9, h, 0.6), matte(0x3e4a60, 0.95));
+      body.position.y = h / 2 - 0.1;
+      tower.add(body);
+      const cap = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.09, 0.66), matte(0xe9eff6, 1));
+      cap.position.y = h - 0.08;
+      tower.add(cap);
+      // Dark windows, the odd one faintly lit: somebody's old light.
+      for (let w = 0; w < 3; w++) {
+        const lit = Math.random() < 0.15;
+        const win = new THREE.Mesh(
+          new THREE.BoxGeometry(0.16, 0.16, 0.02),
+          lit
+            ? new THREE.MeshStandardMaterial({ color: 0xffe9a8, emissive: 0xffdd66, emissiveIntensity: 0.5 })
+            : matte(0x1c2230, 0.6),
+        );
+        win.position.set(-0.25 + w * 0.25, 0.4 + Math.random() * (h - 0.8), 0.32);
+        tower.add(win);
+      }
+      tower.position.set(-8 + i * 2.4, 0, -3.6);
       world.add(tower);
       skyline.push(tower);
+    }
+
+    /**
+     * The roadside props, one every stretch of road: the junk a dead city
+     * leaves by its arteries. Each is built fresh from a small catalogue,
+     * capped with snow, and recycled when it scrolls off the left edge.
+     */
+    const propRoster: (() => any)[] = [
+      // A street lamp, upright or knocked crooked.
+      () => {
+        const lamp = new THREE.Group();
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 1.7, 7), matte(0x55606e, 0.7));
+        post.position.y = 0.85;
+        lamp.add(post);
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.08, 7, 6), matte(0x8b95a4, 0.5));
+        head.position.y = 1.72;
+        lamp.add(head);
+        if (Math.random() < 0.4) lamp.rotation.z = (Math.random() - 0.5) * 0.7;
+        return lamp;
+      },
+      // A telegraph pole with its crossbar, wires long gone.
+      () => {
+        const pole = new THREE.Group();
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 2.1, 6), matte(0x4a4038, 0.9));
+        post.position.y = 1.05;
+        pole.add(post);
+        const bar = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.05, 0.05), matte(0x4a4038, 0.9));
+        bar.position.y = 1.85;
+        pole.add(bar);
+        return pole;
+      },
+      // A rusted barrel, or a small stack of crates.
+      () => {
+        if (Math.random() < 0.5) {
+          const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.42, 9), matte(0x7a4a34, 0.85));
+          barrel.position.y = 0.21;
+          const group = new THREE.Group();
+          group.add(barrel);
+          return group;
+        }
+        const stack = new THREE.Group();
+        for (let c = 0; c < 2 + Math.floor(Math.random() * 2); c++) {
+          const crate = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), matte(0x6e5a42, 0.85));
+          crate.position.set((Math.random() - 0.5) * 0.2, 0.15 + c * 0.3, (Math.random() - 0.5) * 0.15);
+          crate.rotation.y = Math.random() * 0.6;
+          stack.add(crate);
+        }
+        return stack;
+      },
+      // A dead tree: a trunk and a few bare cones for branches.
+      () => {
+        const tree = new THREE.Group();
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.1, 1.3, 6), matte(0x3d3229, 0.95));
+        trunk.position.y = 0.65;
+        tree.add(trunk);
+        for (let b = 0; b < 3; b++) {
+          const branch = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.04, 0.7, 5), matte(0x3d3229, 0.95));
+          branch.position.set(0, 0.9 + b * 0.18, 0);
+          branch.rotation.z = (b % 2 === 0 ? 1 : -1) * (0.7 + Math.random() * 0.4);
+          tree.add(branch);
+        }
+        return tree;
+      },
+      // A car, dead where it stopped, half a snowdrift already.
+      () => {
+        const car = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.22, 0.38), matte(0x5a6a74, 0.8));
+        body.position.y = 0.2;
+        car.add(body);
+        const cabin = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.18, 0.34), matte(0x46545e, 0.8));
+        cabin.position.set(-0.05, 0.4, 0);
+        car.add(cabin);
+        const drift = new THREE.Mesh(new THREE.SphereGeometry(0.3, 7, 5), matte(0xe9eff6, 1));
+        drift.scale.set(1.4, 0.5, 1);
+        drift.position.set(0.25, 0.28, 0);
+        car.add(drift);
+        return car;
+      },
+      // A tank hulk, turret askew, long cold.
+      () => {
+        const hulk = new THREE.Group();
+        const hull = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.3, 0.6), matte(0x4c5548, 0.9));
+        hull.position.y = 0.25;
+        hulk.add(hull);
+        const turret = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.28, 0.2, 9), matte(0x434c40, 0.9));
+        turret.position.y = 0.5;
+        turret.rotation.y = Math.random() * 2;
+        hulk.add(turret);
+        const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.035, 0.8, 6), matte(0x353d33, 0.7));
+        barrel.rotation.z = Math.PI / 2 - 0.2 + Math.random() * 0.4;
+        barrel.position.set(-0.4, 0.55, 0);
+        hulk.add(barrel);
+        return hulk;
+      },
+      // A leaning road sign nobody reads any more.
+      () => {
+        const sign = new THREE.Group();
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 1.0, 6), matte(0x666e7a, 0.7));
+        post.position.y = 0.5;
+        sign.add(post);
+        const plate = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.24, 0.02), matte(0x2e5a8a, 0.6));
+        plate.position.y = 1.05;
+        sign.add(plate);
+        sign.rotation.z = (Math.random() - 0.5) * 0.4;
+        return sign;
+      },
+      // A rubble pile with a snow cap.
+      () => {
+        const pile = new THREE.Group();
+        for (let r = 0; r < 3; r++) {
+          const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.12 + Math.random() * 0.1), matte(0x5c6470, 0.95));
+          rock.position.set((Math.random() - 0.5) * 0.3, 0.1 + r * 0.08, (Math.random() - 0.5) * 0.2);
+          pile.add(rock);
+        }
+        const cap = new THREE.Mesh(new THREE.SphereGeometry(0.16, 6, 5), matte(0xe9eff6, 1));
+        cap.scale.set(1.3, 0.5, 1);
+        cap.position.y = 0.34;
+        pile.add(cap);
+        return pile;
+      },
+    ];
+    const props: any[] = [];
+    let nextPropAt = 0;
+    const spawnProp = (t: number): void => {
+      nextPropAt = t + 0.5 + Math.random() * 0.9;
+      const prop = propRoster[Math.floor(Math.random() * propRoster.length)]();
+      // Near lane or far lane, never on the road itself.
+      const near = Math.random() < 0.45;
+      prop.position.set(9, -0.02, near ? 1.35 + Math.random() * 0.4 : -1.7 - Math.random() * 1.2);
+      const parallax = near ? 1.15 : 0.75;
+      prop.userData.parallax = parallax;
+      if (!near) prop.scale.setScalar(0.85);
+      world.add(prop);
+      props.push(prop);
+    };
+
+    // Snow that never stops: a recycled flock of flakes riding the wind.
+    const ambientFlakes: any[] = [];
+    for (let i = 0; i < 55; i++) {
+      const flake = new THREE.Mesh(new THREE.SphereGeometry(0.02 + Math.random() * 0.015, 5, 5), matte(0xffffff, 0.4));
+      flake.position.set(-6 + Math.random() * 14, Math.random() * 4.5, -2.5 + Math.random() * 4);
+      flake.userData.fall = 0.35 + Math.random() * 0.5;
+      flake.userData.sway = Math.random() * Math.PI * 2;
+      world.add(flake);
+      ambientFlakes.push(flake);
     }
 
     // ---------------- the kettenkrad ----------------
@@ -492,7 +661,6 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
     yuuri.rotation.y = Math.PI / 2 - 0.25;
     chito.rotation.y = Math.PI / 2 + 0.15;
     scene.add(yuuri, chito);
-    stage.querySelector(".exam-chase-fallback")?.remove();
     stage.prepend(renderer.domElement);
 
     // ---------------- actors, camera, events ----------------
@@ -544,6 +712,8 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
     let darkTarget = 0;
     let redSky = 0;
     let redTarget = 0;
+    let wind = 0.5; // sideways push on the falling snow
+    let windTarget = 0.5;
 
     // ---------------- the procedural events ----------------
     const EVENTS: { name: string; phases: number[]; run: (t: number) => void }[] = [
@@ -553,7 +723,7 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
         run: () => {
           // A tower scrolls in from the right, and she does not go around.
           const h = 1.6 + Math.random() * 1.2;
-          const tower = new THREE.Mesh(new THREE.BoxGeometry(0.8, h, 1.2), matte(0x4a4256, 0.9));
+          const tower = new THREE.Mesh(new THREE.BoxGeometry(0.8, h, 1.2), matte(0x46536b, 0.9));
           tower.position.set(8, h / 2, -0.5);
           world.add(tower);
           let smashed = false;
@@ -564,7 +734,7 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
               world.remove(tower);
               crash();
               quake = Math.max(quake, 0.09);
-              debris(yuuri.position.x + 0.6, h / 2, -0.5, 12, 0x4a4256);
+              debris(yuuri.position.x + 0.6, h / 2, -0.5, 12, 0x46536b);
               say("She went THROUGH it.", 1.8);
               return false;
             }
@@ -903,6 +1073,142 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
         },
       },
       {
+        name: "searchlight",
+        phases: [1, 2, 3],
+        run: () => {
+          // A beam from somewhere in the ruins, sweeping the road once.
+          const beam = new THREE.Mesh(
+            new THREE.ConeGeometry(0.7, 6, 12, 1, true),
+            new THREE.MeshBasicMaterial({ color: 0xfff6cc, transparent: true, opacity: 0.14, depthWrite: false }),
+          );
+          beam.position.set(2, 3.2, -2.6);
+          beam.rotation.z = 0.8;
+          world.add(beam);
+          sTone(2.4, 0.12, 220, 180, "sine");
+          let life = 3;
+          spawn((dt) => {
+            life -= dt;
+            beam.rotation.z = 0.8 - (3 - life) * 0.5;
+            (beam.material as any).opacity = Math.min(0.14, life * 0.1);
+            if (life <= 0) {
+              world.remove(beam);
+              return false;
+            }
+            return true;
+          });
+          say("A light. Nobody has lived here for years.", 2);
+        },
+      },
+      {
+        name: "artillery-horizon",
+        phases: [1, 2, 3],
+        run: () => {
+          for (let i = 0; i < 3; i++) {
+            later(() => {
+              if (stopped) return;
+              const glow = new THREE.Mesh(
+                new THREE.SphereGeometry(0.5, 8, 6),
+                new THREE.MeshBasicMaterial({ color: 0xffb066, transparent: true, opacity: 0.5 }),
+              );
+              glow.position.set(-5 + Math.random() * 10, 0.6, -4.2);
+              world.add(glow);
+              sTone(0.9, 0.18, 60, 24);
+              let life = 0.7;
+              spawn((dt) => {
+                life -= dt;
+                glow.scale.setScalar(1 + (0.7 - life) * 2);
+                (glow.material as any).opacity = Math.max(0, life * 0.7);
+                if (life <= 0) {
+                  world.remove(glow);
+                  return false;
+                }
+                return true;
+              });
+            }, i * 900 + Math.random() * 300);
+          }
+          say("Something, far off, is still fighting a war.", 2.2);
+        },
+      },
+      {
+        name: "wind-gust",
+        phases: [1, 2, 3],
+        run: () => {
+          windTarget = 3.2;
+          sBurst(2.2, 0.22, 500, 900, 0.4);
+          later(() => {
+            windTarget = 0.5;
+          }, 2600);
+        },
+      },
+      {
+        name: "sky-fish",
+        phases: [1, 2],
+        run: () => {
+          // Something pale and enormous, swimming through the sky. Neither
+          // of them has time to ask.
+          const fish = new THREE.Group();
+          const body = new THREE.Mesh(new THREE.SphereGeometry(0.5, 10, 8), matte(0xf0f2ee, 0.4));
+          body.scale.set(1.9, 0.8, 0.7);
+          fish.add(body);
+          const tail = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.6, 7), matte(0xf0f2ee, 0.4));
+          tail.rotation.z = Math.PI / 2;
+          tail.position.x = -1.1;
+          fish.add(tail);
+          fish.position.set(8, 3.6, -3);
+          world.add(fish);
+          spawn((dt, t2) => {
+            fish.position.x -= 0.9 * dt;
+            fish.position.y = 3.6 + Math.sin(t2 * 0.8) * 0.2;
+            tail.rotation.y = Math.sin(t2 * 4) * 0.4;
+            if (fish.position.x < -9) {
+              world.remove(fish);
+              return false;
+            }
+            return true;
+          });
+          say("CHITO: ...was that a fish?", 2.2);
+        },
+      },
+      {
+        name: "tower-collapse",
+        phases: [2, 3],
+        run: () => {
+          // One of the skyline's towers gives up, on camera.
+          const tower = skyline[Math.floor(Math.random() * skyline.length)];
+          let life = 1.6;
+          boom();
+          spawn((dt) => {
+            life -= dt;
+            tower.rotation.z += dt * 1.1;
+            tower.position.y -= dt * 0.8;
+            if (life <= 0) {
+              debris(tower.position.x, 0.6, -3.4, 10, 0x3e4a60, 0.2);
+              crash();
+              quake = Math.max(quake, 0.08);
+              // Reborn off the right edge, upright, as a different building.
+              tower.rotation.z = 0;
+              tower.position.y = 0;
+              tower.position.x = 10 + Math.random() * 3;
+              return false;
+            }
+            return true;
+          });
+          say("The skyline is one tower shorter.", 2);
+        },
+      },
+      {
+        name: "night-falls",
+        phases: [2, 3],
+        run: () => {
+          darkTarget = 0.4;
+          sBurst(1.6, 0.1, 300, 150, 0.4);
+          say("The light is going. The headlight is not much.", 2);
+          later(() => {
+            darkTarget = 0;
+          }, 7000);
+        },
+      },
+      {
         name: "meteors",
         phases: [3],
         run: () => {
@@ -983,6 +1289,8 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
       if (tank) scene.remove(tank);
       krad.visible = false;
       stage.classList.add("exam-dream");
+      // Night air instead of daylight fog, so the forest keeps its dark.
+      scene.fog = new THREE.Fog(0x1a2440, 7, 18);
       const snowGround = new THREE.Mesh(new THREE.BoxGeometry(20, 0.2, 8), matte(0xdfe6ee, 1));
       snowGround.position.y = -0.1;
       scene.add(snowGround);
@@ -1101,6 +1409,7 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
       burstLife *= 0.95;
       redSky += (redTarget - redSky) * rawDt * 2;
       dark += (darkTarget - dark) * rawDt * 2;
+      wind += (windTarget - wind) * rawDt * 2;
       stage.style.setProperty("--exam-red", redSky.toFixed(2));
       stage.style.setProperty("--exam-dark", dark.toFixed(2));
 
@@ -1122,7 +1431,30 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
         }
         for (const tower of skyline) {
           tower.position.x -= roadSpeed() * 0.3 * dt;
-          if (tower.position.x < -9) tower.position.x += 7 * 2.6;
+          if (tower.position.x < -9) tower.position.x += 8 * 2.4;
+        }
+        // The roadside junk streams past with the road, and more arrives.
+        if (t > nextPropAt) spawnProp(t);
+        for (let i = props.length - 1; i >= 0; i--) {
+          const prop = props[i];
+          prop.position.x -= roadSpeed() * prop.userData.parallax * dt;
+          if (prop.position.x < -9) {
+            world.remove(prop);
+            props.splice(i, 1);
+          }
+        }
+      }
+
+      // Snow falls through everything except the dream, which brings its own.
+      if (!dream) {
+        for (const flake of ambientFlakes) {
+          flake.userData.sway += rawDt * 2;
+          flake.position.y -= flake.userData.fall * rawDt;
+          flake.position.x -= (wind + Math.sin(flake.userData.sway) * 0.3) * rawDt;
+          if (flake.position.y < -0.2 || flake.position.x < -7) {
+            flake.position.y = 4 + Math.random();
+            flake.position.x = -4 + Math.random() * 13;
+          }
         }
       }
 
