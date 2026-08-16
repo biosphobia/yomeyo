@@ -1150,7 +1150,7 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
         phases: [1, 2, 3],
         run: (t) => {
           // The road runs out and there is simply a sea. Nobody explains.
-          if (!claimEnv(t, 9)) return;
+          if (!claimEnv(t, 13)) return;
           seaTarget = 1;
           sBurst(1.0, 0.6, 300, 120, 0.6);
           say("CHITO: why is there a SEA.", 2.2);
@@ -1161,13 +1161,42 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
               mat.color.setHex(0x39647e);
             }
           }
-          let life = 9;
+
+          // The same fish every game in this app draws: a fat ellipsoid
+          // with a cone for a tail, in the fishing drill's own colours.
+          const buildFish = (colour: number, size = 1): any => {
+            const fish = new THREE.Group();
+            const body = new THREE.Mesh(new THREE.SphereGeometry(0.09 * size, 8, 7), matte(colour, 0.45));
+            body.scale.set(1.7, 0.9, 0.8);
+            fish.add(body);
+            const tail = new THREE.Mesh(new THREE.ConeGeometry(0.06 * size, 0.12 * size, 7), matte(colour, 0.45));
+            tail.rotation.z = Math.PI / 2;
+            tail.position.x = -0.17 * size;
+            fish.add(tail);
+            return fish;
+          };
+          const FISH_COLOURS = [0x4fd1c5, 0xf0a860, 0xe8e2d2, 0xd4508a];
+
+          // A school keeping pace in the far lane, half out of the water,
+          // wriggling as one.
+          const school: any[] = [];
+          for (let i = 0; i < 5; i++) {
+            const swimmer = buildFish(FISH_COLOURS[i % FISH_COLOURS.length], 0.8);
+            swimmer.position.set(3 + i * 0.55, 0.04, -1.5 + (i % 2) * 0.3);
+            world.add(swimmer);
+            school.push(swimmer);
+          }
+
+          let life = 13;
           let nextSplash = 0;
+          let nextLeap = 1.2;
+          let nextFloe = 0.6;
           spawn((dt, t2) => {
             life -= dt;
+
+            // Spray off everything moving: her wake and Yuuri's wading.
             if (t2 > nextSplash) {
               nextSplash = t2 + 0.14;
-              // Spray off everything moving: her wake and Yuuri's wading.
               for (const [sx, sz, big] of [
                 [chito.position.x - 0.3, chito.position.z, false],
                 [yuuri.position.x + 0.4, -0.2, true],
@@ -1190,8 +1219,93 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
               }
               if (Math.random() < 0.2) sBurst(0.3, 0.25, 500, 200, 0.8);
             }
+
+            // Fish leaping clear across the road in bright arcs, one
+            // splash out and one splash back in.
+            if (t2 > nextLeap && life > 2) {
+              nextLeap = t2 + 0.9 + Math.random() * 1.3;
+              const leaper = buildFish(FISH_COLOURS[Math.floor(Math.random() * FISH_COLOURS.length)], 1 + Math.random() * 0.6);
+              const fromX = -2 + Math.random() * 5;
+              leaper.position.set(fromX, 0, 0.6);
+              world.add(leaper);
+              sBurst(0.25, 0.3, 600, 250, 0.9);
+              const vx = 1.4 + Math.random();
+              let vy = 3 + Math.random() * 1.2;
+              spawn((ldt) => {
+                vy -= 9 * ldt;
+                leaper.position.x += vx * ldt;
+                leaper.position.y += vy * ldt;
+                leaper.rotation.z = Math.atan2(vy, vx) * 0.5;
+                if (leaper.position.y < -0.1) {
+                  sBurst(0.3, 0.35, 500, 180, 0.8);
+                  for (let d = 0; d < 3; d++) {
+                    const drop = new THREE.Mesh(new THREE.SphereGeometry(0.04, 4, 4), matte(0xbfe0ee, 0.3));
+                    drop.position.copy(leaper.position);
+                    drop.position.y = 0.1;
+                    world.add(drop);
+                    let dvy = 1.5 + Math.random();
+                    spawn((ddt) => {
+                      dvy -= 9 * ddt;
+                      drop.position.y += dvy * ddt;
+                      if (drop.position.y < 0) {
+                        world.remove(drop);
+                        return false;
+                      }
+                      return true;
+                    });
+                  }
+                  world.remove(leaper);
+                  return false;
+                }
+                return true;
+              });
+            }
+
+            // Flotsam streaming past: ice floes, a buoy, a drowned mast.
+            if (t2 > nextFloe && life > 1.5) {
+              nextFloe = t2 + 0.8;
+              const roll = Math.random();
+              if (roll < 0.5) {
+                const floe = new THREE.Mesh(new THREE.BoxGeometry(0.5 + Math.random() * 0.4, 0.06, 0.4), matte(0xe9f2f8, 0.9));
+                const group = new THREE.Group();
+                group.add(floe);
+                floe.position.y = 0.03;
+                floe.rotation.y = Math.random();
+                placeProp(group, Math.random() < 0.5);
+              } else if (roll < 0.8) {
+                const buoy = new THREE.Group();
+                const float = new THREE.Mesh(new THREE.SphereGeometry(0.12, 7, 6), matte(0xc23b28, 0.6));
+                float.position.y = 0.1;
+                buoy.add(float);
+                const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.3, 5), matte(0x333, 0.5));
+                mast.position.y = 0.3;
+                buoy.add(mast);
+                placeProp(buoy, Math.random() < 0.5);
+              } else {
+                const wreck = new THREE.Group();
+                const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 1.6, 6), matte(0x4a4038, 0.9));
+                mast.rotation.z = 0.5;
+                mast.position.y = 0.5;
+                wreck.add(mast);
+                const spar = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.05, 0.05), matte(0x4a4038, 0.9));
+                spar.position.set(-0.2, 0.9, 0);
+                spar.rotation.z = 0.5;
+                wreck.add(spar);
+                placeProp(wreck, false);
+              }
+            }
+
+            // The school wriggles along, keeping pace off to the side.
+            school.forEach((swimmer, i) => {
+              swimmer.position.x -= roadSpeed() * 0.2 * dt;
+              swimmer.position.y = 0.04 + Math.sin(t2 * 6 + i) * 0.05;
+              swimmer.rotation.z = Math.sin(t2 * 8 + i) * 0.2;
+              if (swimmer.position.x < -6) swimmer.position.x = 6;
+            });
+
             if (life <= 0) {
               seaTarget = 0;
+              for (const swimmer of school) world.remove(swimmer);
               for (const slab of slabs) {
                 const mat = (slab as any).material;
                 if (mat?.color && slab.userData.landColor) mat.color.setHex(slab.userData.landColor);
@@ -1264,10 +1378,11 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
         name: "potato-field",
         phases: [1, 2, 3],
         run: (t) => {
-          // A worked field, out here: furrows, green tufts, and potatoes.
-          // Yuuri slows down. Yuuri does not stop. It costs her visibly.
-          if (!claimEnv(t, 8)) return;
+          // A worked field, out here: furrows, fences, a scarecrow, a
+          // whole harvest — and potatoes the size the dream says they are.
+          if (!claimEnv(t, 13)) return;
           say("YUURI: POTATOES.", 1.8);
+          redTarget = Math.max(redTarget, 0.18); // low golden light over the field
           for (const slab of slabs) {
             const mat = (slab as any).material;
             if (mat?.color) {
@@ -1275,38 +1390,139 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
               mat.color.setHex(0x4f3d2c);
             }
           }
-          let life = 8;
+
+          const buildPotato = (size: number): any => {
+            const potato = new THREE.Mesh(new THREE.SphereGeometry(size, 7, 6), matte(0xb08d57, 0.95));
+            potato.scale.set(1.35, 0.85, 1);
+            potato.rotation.z = Math.random();
+            return potato;
+          };
+
+          let life = 13;
           let nextRow = 0;
+          let nextSet = 0;
+          let clodTrail = 0;
           spawn((dt, t2) => {
             life -= dt;
+
+            // The furrows: long soil mounds, leafy tops, and potatoes
+            // sitting proud of the earth, big enough to argue about.
             if (t2 > nextRow && life > 1) {
-              nextRow = t2 + 0.32;
+              nextRow = t2 + 0.3;
               for (const near of [true, false]) {
                 const furrow = new THREE.Group();
-                const mound = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.14, 1.6), matte(0x3d2f21, 1));
+                const mound = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.14, 1.8), matte(0x3d2f21, 1));
                 mound.position.y = 0.06;
                 furrow.add(mound);
                 for (let plant = 0; plant < 3; plant++) {
-                  const tuft = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.16, 5), matte(0x4f7a3c, 0.9));
-                  tuft.position.set((Math.random() - 0.5) * 0.3, 0.2, -0.6 + plant * 0.6);
-                  furrow.add(tuft);
+                  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.02, 0.16, 5), matte(0x3c5a2e, 0.9));
+                  stem.position.set((Math.random() - 0.5) * 0.3, 0.2, -0.7 + plant * 0.7);
+                  furrow.add(stem);
+                  const leaves = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 5), matte(0x4f7a3c, 0.9));
+                  leaves.scale.set(1.3, 0.7, 1.3);
+                  leaves.position.set(stem.position.x, 0.3, stem.position.z);
+                  furrow.add(leaves);
                 }
-                if (Math.random() < 0.5) {
-                  const potato = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 5), matte(0xb08d57, 0.95));
-                  potato.scale.set(1.3, 0.8, 1);
-                  potato.position.set(0.1, 0.16, 0.3);
-                  furrow.add(potato);
+                if (Math.random() < 0.7) {
+                  const spud = buildPotato(0.11 + Math.random() * 0.05);
+                  spud.position.set(0.12, 0.18, (Math.random() - 0.5) * 1.2);
+                  furrow.add(spud);
                 }
                 placeProp(furrow, near);
               }
             }
-            // Now and then one comes loose under her feet and sails off.
-            if (Math.random() < dt * 1.2) {
-              const loose = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 5), matte(0xb08d57, 0.95));
-              loose.position.set(yuuri.position.x + 0.4, 0.2, 0.2);
+
+            // Set dressing between the rows: fences, the scarecrow, sacks
+            // and baskets, and now and then a heap of the harvest itself.
+            if (t2 > nextSet && life > 1.5) {
+              nextSet = t2 + 1.3;
+              const roll = Math.random();
+              if (roll < 0.3) {
+                const fence = new THREE.Group();
+                for (let post = 0; post < 3; post++) {
+                  const upright = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.5, 5), matte(0x5c4632, 0.95));
+                  upright.position.set(post * 0.5 - 0.5, 0.25, 0);
+                  fence.add(upright);
+                }
+                const rail = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.05, 0.04), matte(0x5c4632, 0.95));
+                rail.position.y = 0.4;
+                fence.add(rail);
+                placeProp(fence, Math.random() < 0.5);
+              } else if (roll < 0.5) {
+                // The scarecrow, doing nothing about any of this.
+                const scarecrow = new THREE.Group();
+                const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 1.2, 6), matte(0x5c4632, 0.95));
+                pole.position.y = 0.6;
+                scarecrow.add(pole);
+                const arms = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.05, 0.05), matte(0x5c4632, 0.95));
+                arms.position.y = 0.95;
+                scarecrow.add(arms);
+                const head = new THREE.Mesh(new THREE.SphereGeometry(0.1, 7, 6), matte(0xd8c49a, 0.9));
+                head.position.y = 1.25;
+                scarecrow.add(head);
+                const hat = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.12, 7), matte(0x8a6a3a, 0.9));
+                hat.position.y = 1.38;
+                scarecrow.add(hat);
+                const coat = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 0.1), matte(0x6a4a8a, 0.9));
+                coat.position.y = 0.85;
+                scarecrow.add(coat);
+                placeProp(scarecrow, Math.random() < 0.4);
+              } else if (roll < 0.75) {
+                // A heap of the harvest: a mound of fat potatoes.
+                const heap = new THREE.Group();
+                for (let spud = 0; spud < 6; spud++) {
+                  const potato = buildPotato(0.1 + Math.random() * 0.05);
+                  potato.position.set((Math.random() - 0.5) * 0.4, 0.08 + (spud > 3 ? 0.14 : 0), (Math.random() - 0.5) * 0.3);
+                  heap.add(potato);
+                }
+                placeProp(heap, Math.random() < 0.5);
+              } else {
+                // Sacks, tied and leaning on each other.
+                const sacks = new THREE.Group();
+                for (let sack = 0; sack < 2; sack++) {
+                  const bag = new THREE.Mesh(new THREE.CapsuleGeometry(0.12, 0.18, 4, 8), matte(0x9a835e, 0.95));
+                  bag.position.set(sack * 0.25, 0.2, 0);
+                  bag.rotation.z = (Math.random() - 0.5) * 0.4;
+                  sacks.add(bag);
+                }
+                placeProp(sacks, Math.random() < 0.5);
+              }
+            }
+
+            // Dirt kicked up behind both of them, the whole way through.
+            clodTrail += dt;
+            if (clodTrail > 0.12) {
+              clodTrail = 0;
+              for (const [cx, cz] of [
+                [chito.position.x - 0.25, chito.position.z],
+                [yuuri.position.x + 0.3, -0.2],
+              ] as [number, number][]) {
+                const clod = new THREE.Mesh(new THREE.DodecahedronGeometry(0.035), matte(0x3d2f21, 1));
+                clod.position.set(cx, 0.12, cz);
+                world.add(clod);
+                const vx = -1.2 - Math.random();
+                let vy = 1.4 + Math.random();
+                spawn((cdt) => {
+                  vy -= 9 * cdt;
+                  clod.position.x += vx * cdt;
+                  clod.position.y += vy * cdt;
+                  clod.rotation.x += 8 * cdt;
+                  if (clod.position.y < 0) {
+                    world.remove(clod);
+                    return false;
+                  }
+                  return true;
+                });
+              }
+            }
+
+            // Big ones come loose under her feet and sail across the sky.
+            if (Math.random() < dt * 1.4) {
+              const loose = buildPotato(0.12 + Math.random() * 0.06);
+              loose.position.set(yuuri.position.x + 0.4, 0.25, 0.2);
               world.add(loose);
-              let vy = 2.5 + Math.random() * 1.5;
-              const vx = 1 + Math.random() * 2;
+              let vy = 2.8 + Math.random() * 1.8;
+              const vx = 1 + Math.random() * 2.2;
               spawn((ddt) => {
                 vy -= 9 * ddt;
                 loose.position.x += vx * ddt;
@@ -1319,7 +1535,9 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
                 return true;
               });
             }
+
             if (life <= 0) {
+              redTarget = phaseNum === 3 ? 0.5 : 0;
               for (const slab of slabs) {
                 const mat = (slab as any).material;
                 if (mat?.color && slab.userData.landColor) mat.color.setHex(slab.userData.landColor);
