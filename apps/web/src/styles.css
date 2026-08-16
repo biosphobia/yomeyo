@@ -6082,6 +6082,16 @@ button.gram-swap-line:hover {
   opacity: calc(var(--exam-dark, 0) * 0.75);
 }
 
+/* The sea sequence's water light, over the picture and under the text. */
+.exam-chase .exam-tint {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(#2c5a7280, #1d4258c8);
+  opacity: calc(var(--exam-sea, 0) * 0.6);
+}
+
 /* The dream: the war sky swaps for a night forest's. */
 .exam-chase.exam-dream {
   background: linear-gradient(#0c1226, #1a2440 60%, #232f52);
