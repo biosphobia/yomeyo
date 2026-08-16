@@ -208,7 +208,7 @@ export async function runHiraganaExam(main: HTMLElement, onExit: () => void): Pr
         <div class="exam-kana" id="exam-kana" lang="ja"></div>
         <input id="exam-input" type="text" autocomplete="off" autocapitalize="none"
           spellcheck="false" enterkeyhint="go" placeholder="romaji" aria-label="Type the romaji" />
-        <div class="glosses" id="exam-note">Type the sound. Right answers go through on their own.</div>
+        <div class="glosses" id="exam-note"></div>
       </div>
       <div class="row-actions" style="justify-content:center">
         <button id="exam-flee" class="ghost">Give up</button>
@@ -296,10 +296,9 @@ export async function runHiraganaExam(main: HTMLElement, onExit: () => void): Pr
       fuse.style.transition = "none";
       fuse.style.width = "100%";
       input.value = "";
-      note.textContent = phaseAt === 1 ? "She found something with an engine." : "Nearly out. Don't blink.";
+      note.textContent = "";
       await stage.phase((phaseAt + 1) as 2 | 3);
       if (over) return;
-      note.textContent = phaseAt === 1 ? "Whole words now. Type the whole sound." : "Anything goes. Slightly less time.";
       ask();
       return;
     }
@@ -330,7 +329,7 @@ export async function runHiraganaExam(main: HTMLElement, onExit: () => void): Pr
     sfx.thud();
     sfx.growl();
     stage.lunge();
-    note.textContent = `${item.kana} is “${item.romaji[0]}”. ${lives > 0 ? "She's closing in." : ""}`;
+    note.textContent = `${item.kana} is “${item.romaji[0]}”.`;
     if (lives <= 0) {
       void lose(`${answered} of ${total} answered before she got you.`);
       return;
@@ -366,7 +365,6 @@ export async function runHiraganaExam(main: HTMLElement, onExit: () => void): Pr
     card.innerHTML = `
       <div class="exam-kana" style="font-size:1.6rem;min-height:48px">She's coming.</div>
       <button id="exam-fire" class="exam-fire">🔥 FIRE — <span id="exam-fire-count">${FINALE_SECONDS}</span></button>
-      <div class="glosses">One shell. Wait for her, but not too long.</div>
     `;
     let left = FINALE_SECONDS;
     const counter = card.querySelector<HTMLElement>("#exam-fire-count")!;
@@ -438,7 +436,6 @@ export async function runHiraganaExam(main: HTMLElement, onExit: () => void): Pr
   };
 
   drawHud();
-  note.textContent = "RUN. Type each sound before the clock runs out.";
   sfx.menace(1.2);
   window.setTimeout(() => {
     if (!over) ask();

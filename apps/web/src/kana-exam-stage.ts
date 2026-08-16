@@ -332,7 +332,7 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
         three.playFinale(seconds);
         return;
       }
-      say("She's coming. The tank is RIGHT THERE.", 3);
+      say("The TANK. Fire when she's close.", 2.5);
     },
     fire: () =>
       new Promise<void>((resolve) => {
@@ -388,6 +388,13 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
 
     const matte = (color: number, rough = 0.85): any =>
       new THREE.MeshStandardMaterial({ color, roughness: rough });
+
+    /** What the stage is doing: running, playing a film, or the approach. */
+    type Mode =
+      | { kind: "chase" }
+      | { kind: "film"; name: string; start: number; done: () => void }
+      | { kind: "finale"; start: number; seconds: number };
+    let mode: Mode = { kind: "chase" };
 
     // Winter light: everything far dissolves into the same pale distance
     // the CSS sky is painted in, which is what sells depth on a phone.
@@ -571,8 +578,11 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
 
     const props: any[] = [];
     let nextPropAt = 0;
-    /** Put one prop into the stream, in the near or the far lane. */
+    /** Put one prop into the stream, in the near or the far lane. Placing
+     * is chase-only: an environment still winding down during the finale
+     * must not roll fresh scenery — least of all a hulk — past the tank. */
     const placeProp = (prop: any, near: boolean, xJitter = 0): void => {
+      if (mode.kind !== "chase") return;
       prop.position.set(9 + xJitter, -0.02, near ? 1.35 + Math.random() * 0.4 : -1.7 - Math.random() * 1.2);
       prop.userData.parallax = near ? 1.15 : 0.75;
       if (!near) prop.scale.setScalar(0.85);
@@ -592,7 +602,7 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
     let envUntil = 0;
     const claimEnv = (t: number, seconds: number): boolean => {
       if (t < envUntil) return false;
-      envUntil = t + seconds + 4;
+      envUntil = t + seconds + 1.5;
       return true;
     };
 
@@ -755,7 +765,6 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
               crash();
               quake = Math.max(quake, 0.09);
               debris(yuuri.position.x + 0.6, h / 2, -0.5, 12, 0x46536b);
-              say("She went THROUGH it.", 1.8);
               return false;
             }
             return tower.position.x > -9;
@@ -826,7 +835,6 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
             yuuri.scale.setScalar(2.6 + Math.sin((pulse - life) * Math.PI) * 0.25);
             return life > 0;
           });
-          say(["YUURI: WAIT.", "YUURI: I just want to TALK.", "YUURI: You have SNACKS."][Math.floor(Math.random() * 3)], 1.8);
         },
       },
       {
@@ -901,7 +909,6 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
             yuuri.position.y = Math.abs(Math.sin((1 - roll) * Math.PI * 3)) * 0.3 * roll;
             return life > 0;
           });
-          say("She tripped. GO.", 1.6);
         },
       },
       {
@@ -956,7 +963,6 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
             }
             return true;
           });
-          say("AIRBORNE.", 1.3);
         },
       },
       {
@@ -997,7 +1003,6 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
               quake = Math.max(quake, 0.05);
               debris(crate.position.x, 0.2, 0, 6, 0x7a5a36, 0.09);
               world.remove(crate);
-              say("YUURI: (throwing things)", 1.4);
               return false;
             }
             return true;
@@ -1009,7 +1014,6 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
         phases: [2],
         run: () => {
           engine.sputter();
-          say("The engine coughs. The engine reconsiders.", 1.8);
           let life = 1.2;
           spawn((dt) => {
             life -= dt;
@@ -1052,7 +1056,6 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
           boom();
           quake = Math.max(quake, 0.12);
           debris(yuuri.position.x - 1.2, 3, -1, 14, 0x2f3442, 0.18);
-          say("The bridge did not make it.", 1.8);
         },
       },
       {
@@ -1070,7 +1073,6 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
             }
             return true;
           });
-          say("CHITO: (accidental wheelie)", 1.5);
         },
       },
       {
@@ -1090,7 +1092,6 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
             }
             return true;
           });
-          say("She has stopped pretending to be tired.", 2);
         },
       },
       {
@@ -1102,7 +1103,6 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
           if (!claimEnv(t, 8)) return;
           darkTarget = 0.45;
           sTone(1.2, 0.15, 100, 60);
-          say("Straight through the lobby.", 2);
           const ceiling = new THREE.Mesh(new THREE.BoxGeometry(20, 0.15, 5), matte(0x2c3140, 0.95));
           ceiling.position.set(0, 2.7, -0.5);
           world.add(ceiling);
@@ -1137,7 +1137,6 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
             if (life <= 0) {
               world.remove(ceiling);
               darkTarget = 0;
-              say("Out the far wall. Obviously.", 1.8);
               crash();
               debris(yuuri.position.x + 0.5, 1.4, -0.4, 10, 0x3a4152);
               return false;
@@ -1197,7 +1196,6 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
                 const mat = (slab as any).material;
                 if (mat?.color && slab.userData.landColor) mat.color.setHex(slab.userData.landColor);
               }
-              say("YUURI: I'm WET.", 1.8);
               return false;
             }
             return true;
@@ -1211,7 +1209,6 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
           // A rail bridge over nothing much, complaining the whole way.
           if (!claimEnv(t, 7)) return;
           darkTarget = 0.15;
-          say("A bridge. Old. Complaining.", 2);
           lookAngle(3, [-1.6, 0.35, 4.6], [0.4, 1.4, 0]);
           let life = 7;
           let nextPost = 0;
@@ -1247,7 +1244,6 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
           // both sides, and the runners weave between them.
           if (!claimEnv(t, 6.5)) return;
           weaveTarget = 0.3;
-          say("A hundred cars. Nobody going anywhere.", 2.2);
           let life = 6.5;
           let nextWreck = 0;
           spawn((dt, t2) => {
@@ -1265,6 +1261,76 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
         },
       },
       {
+        name: "potato-field",
+        phases: [1, 2, 3],
+        run: (t) => {
+          // A worked field, out here: furrows, green tufts, and potatoes.
+          // Yuuri slows down. Yuuri does not stop. It costs her visibly.
+          if (!claimEnv(t, 8)) return;
+          say("YUURI: POTATOES.", 1.8);
+          for (const slab of slabs) {
+            const mat = (slab as any).material;
+            if (mat?.color) {
+              slab.userData.landColor ??= mat.color.getHex();
+              mat.color.setHex(0x4f3d2c);
+            }
+          }
+          let life = 8;
+          let nextRow = 0;
+          spawn((dt, t2) => {
+            life -= dt;
+            if (t2 > nextRow && life > 1) {
+              nextRow = t2 + 0.32;
+              for (const near of [true, false]) {
+                const furrow = new THREE.Group();
+                const mound = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.14, 1.6), matte(0x3d2f21, 1));
+                mound.position.y = 0.06;
+                furrow.add(mound);
+                for (let plant = 0; plant < 3; plant++) {
+                  const tuft = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.16, 5), matte(0x4f7a3c, 0.9));
+                  tuft.position.set((Math.random() - 0.5) * 0.3, 0.2, -0.6 + plant * 0.6);
+                  furrow.add(tuft);
+                }
+                if (Math.random() < 0.5) {
+                  const potato = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 5), matte(0xb08d57, 0.95));
+                  potato.scale.set(1.3, 0.8, 1);
+                  potato.position.set(0.1, 0.16, 0.3);
+                  furrow.add(potato);
+                }
+                placeProp(furrow, near);
+              }
+            }
+            // Now and then one comes loose under her feet and sails off.
+            if (Math.random() < dt * 1.2) {
+              const loose = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 5), matte(0xb08d57, 0.95));
+              loose.position.set(yuuri.position.x + 0.4, 0.2, 0.2);
+              world.add(loose);
+              let vy = 2.5 + Math.random() * 1.5;
+              const vx = 1 + Math.random() * 2;
+              spawn((ddt) => {
+                vy -= 9 * ddt;
+                loose.position.x += vx * ddt;
+                loose.position.y += vy * ddt;
+                loose.rotation.z += 6 * ddt;
+                if (loose.position.y < 0) {
+                  world.remove(loose);
+                  return false;
+                }
+                return true;
+              });
+            }
+            if (life <= 0) {
+              for (const slab of slabs) {
+                const mat = (slab as any).material;
+                if (mat?.color && slab.userData.landColor) mat.color.setHex(slab.userData.landColor);
+              }
+              return false;
+            }
+            return true;
+          });
+        },
+      },
+      {
         name: "dead-forest",
         phases: [1, 2],
         run: (t) => {
@@ -1272,7 +1338,6 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
           if (!claimEnv(t, 7)) return;
           darkTarget = 0.2;
           windTarget = 1.4;
-          say("The trees are dead. They are still a forest.", 2.2);
           let life = 7;
           let nextTree = 0;
           spawn((dt, t2) => {
@@ -1314,7 +1379,6 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
             }
             return true;
           });
-          say("A light. Nobody has lived here for years.", 2);
         },
       },
       {
@@ -1344,7 +1408,6 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
               });
             }, i * 900 + Math.random() * 300);
           }
-          say("Something, far off, is still fighting a war.", 2.2);
         },
       },
       {
@@ -1411,7 +1474,6 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
             }
             return true;
           });
-          say("The skyline is one tower shorter.", 2);
         },
       },
       {
@@ -1420,7 +1482,6 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
         run: () => {
           darkTarget = 0.4;
           sBurst(1.6, 0.1, 300, 150, 0.4);
-          say("The light is going. The headlight is not much.", 2);
           later(() => {
             darkTarget = 0;
           }, 7000);
@@ -1457,19 +1518,28 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
       },
     ];
 
-    let nextEventAt = 4;
+    const ENV_NAMES = new Set([
+      "building-interior",
+      "sea-crossing",
+      "bridge-chasm",
+      "wreck-field",
+      "potato-field",
+      "dead-forest",
+      "tunnel",
+    ]);
+    let nextEventAt = 3;
     const fireEvent = (t: number): void => {
-      const pool = EVENTS.filter((event) => event.phases.includes(phaseNum));
-      pool[Math.floor(Math.random() * pool.length)].run(t);
-      nextEventAt = t + 5 + Math.random() * 6;
+      const here = EVENTS.filter((event) => event.phases.includes(phaseNum));
+      // When the stage is free for a whole new place, it usually takes one;
+      // the small events fill the gaps between places rather than the
+      // other way round.
+      const wantEnv = t >= envUntil && Math.random() < 0.55;
+      const pool = here.filter((event) => ENV_NAMES.has(event.name) === wantEnv);
+      (pool.length > 0 ? pool : here)[Math.floor(Math.random() * (pool.length > 0 ? pool.length : here.length))].run(t);
+      nextEventAt = t + 3.5 + Math.random() * 4;
     };
 
     // ---------------- modes and films ----------------
-    type Mode =
-      | { kind: "chase" }
-      | { kind: "film"; name: string; start: number; done: () => void }
-      | { kind: "finale"; start: number; seconds: number };
-    let mode: Mode = { kind: "chase" };
     let gapNow = 1;
 
     const roadSpeed = (): number =>
@@ -1561,7 +1631,7 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
           mode = { kind: "film", name: "last-stretch", start: performance.now(), done };
           redTarget = 0.5;
           roar();
-          say("THE LAST STRETCH. Answer, and keep answering.", 2.4);
+          say("THE LAST STRETCH.", 2.0);
         }
       },
       playFinale(seconds) {
@@ -1572,7 +1642,7 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
         buildTank();
         engine.sputter();
         later(() => engine.stop(), 900);
-        say("Out of road. The TANK. FIRE when she's close.", 3);
+        say("The TANK. Fire when she's close.", 2.5);
       },
       playFire(done) {
         mode = { kind: "film", name: "victory", start: performance.now(), done };
