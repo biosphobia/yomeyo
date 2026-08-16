@@ -355,6 +355,7 @@ function renderSelection(
       <button id="kana-quick" class="secondary" disabled>⚡ Quick review</button>
       <span class="glosses" id="kana-start-note"></span>
     </div>
+    <div id="kana-exam-row"></div>
     ${
       // The admin's key: jump straight to any level, to see one without
       // playing through everything below it first.
@@ -365,6 +366,28 @@ function renderSelection(
         : ""
     }
   `;
+
+  /*
+   * The hiragana exam, for anyone whose exam day has arrived — it stays,
+   * because a retake is always a retake — and for admins at any time.
+   * Decided after the screen stands: it needs two async answers, and the
+   * selection grid must not wait on them.
+   */
+  void (async () => {
+    const eligible =
+      unlockAllNow() ||
+      (await import("./quests.js").then(
+        async (q) => (await q.journeyStarted()) !== null && (await q.examCountdown()).daysAway <= 0,
+        () => false,
+      ));
+    const row = body.querySelector<HTMLDivElement>("#kana-exam-row");
+    if (!eligible || !row || !row.isConnected) return;
+    row.innerHTML = `<button id="kana-exam-btn" class="secondary" style="margin-top:10px">🎓 Hiragana exam</button>`;
+    row.querySelector<HTMLButtonElement>("#kana-exam-btn")!.addEventListener("click", async () => {
+      const { runHiraganaExam } = await import("./kana-exam.js");
+      void runHiraganaExam(main, () => void renderKana(main, isCurrent));
+    });
+  })();
 
   for (const chip of body.querySelectorAll<HTMLButtonElement>("#kana-jump button")) {
     chip.addEventListener("click", async () => {

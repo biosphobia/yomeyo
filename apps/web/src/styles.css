@@ -6050,11 +6050,97 @@ button.gram-swap-line:hover {
    stand-in — runs across it. */
 .exam-chase {
   position: relative;
-  height: 180px;
+  height: 190px;
   border-radius: var(--radius);
   overflow: hidden;
   background: linear-gradient(#2a3352, #4a3d5c 70%, #241f33);
   border: 1px solid #ffffff14;
+  transition: background 1.2s ease;
+}
+
+/* Weather the stage can call for: a red sky, a tunnel's dark. Driven by
+   custom properties the render loop eases every frame. */
+.exam-chase::before,
+.exam-chase::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.exam-chase::before {
+  background: #c22b1e;
+  mix-blend-mode: overlay;
+  opacity: calc(var(--exam-red, 0) * 0.55);
+}
+
+.exam-chase::after {
+  background: #04050b;
+  opacity: calc(var(--exam-dark, 0) * 0.75);
+}
+
+/* The dream: the war sky swaps for a night forest's. */
+.exam-chase.exam-dream {
+  background: linear-gradient(#0c1226, #1a2440 60%, #232f52);
+}
+
+/* One line of film dialogue, over everything on the stage. */
+.exam-caption {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 8px;
+  z-index: 3;
+  text-align: center;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 1px 8px #000000cc, 0 0 2px #000;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  pointer-events: none;
+}
+
+.exam-caption.on {
+  opacity: 1;
+  transform: none;
+}
+
+/* The muzzle flash, and nothing else, at full white. */
+.exam-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease-out;
+}
+
+.exam-flash.on {
+  opacity: 0.9;
+  transition: none;
+}
+
+/* The trigger. Impossible to miss on purpose. */
+.exam-fire {
+  font-size: 1.3rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  padding: 18px 26px;
+  margin: 10px auto;
+  display: block;
+  background: linear-gradient(#e5644b, #b23324);
+  border: 1px solid #ffffff30;
+  box-shadow: 0 6px 24px -8px #e5644b;
+  animation: exam-fire-pulse 0.8s infinite alternate ease-in-out;
+}
+
+@keyframes exam-fire-pulse {
+  from { transform: scale(1); }
+  to { transform: scale(1.05); }
 }
 
 .exam-chase canvas {
@@ -6121,6 +6207,12 @@ button.gram-swap-line:hover {
   font-size: 4.2rem;
   line-height: 1.2;
   min-height: 90px;
+}
+
+/* Whole words wear a smaller size so four kana still fit the card. */
+.exam-kana.word {
+  font-size: 2.7rem;
+  padding-top: 14px;
 }
 
 .exam-card input {

@@ -48,6 +48,9 @@ function isExcluded(relPath) {
     // never download it.
     relPath.startsWith("gacha/models/") ||
     relPath.startsWith("gacha/gifs/") ||
+    // The exam's theme: ten megabytes that only the exam plays, streamed
+    // when it starts. Precaching it would bloat every install.
+    relPath.startsWith("audio/") ||
     relPath.endsWith(".zip") || // the packaged extension
     // The Firebase SDK is loaded only when cloud sync is configured; a user
     // who never signs in should never download it, let alone at install time.
