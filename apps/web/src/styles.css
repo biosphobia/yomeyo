@@ -6251,3 +6251,10 @@ button.gram-swap-line:hover {
 .exam-verdict.caught {
   color: var(--bad, #e5644b);
 }
+
+/* What the word means, small, between the word and the answer box. */
+.exam-gloss {
+  min-height: 1.1em;
+  margin-top: -6px;
+  font-size: 0.85rem;
+}

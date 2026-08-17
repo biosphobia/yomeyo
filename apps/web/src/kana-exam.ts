@@ -24,12 +24,13 @@ import { toast } from "./toast.js";
  */
 
 const LIVES = 4;
-/** Seconds on the clock, by what is being asked. */
+/** Seconds on the clock, by what is being asked. The final phase runs a
+ * meaner clock: by then every kana has been answered once already. */
 const CLOCK = {
   kana: 7,
   word: 10,
-  finalKana: 6,
-  finalWord: 8.5,
+  finalKana: 5,
+  finalWord: 7.5,
 };
 /** Seconds to fire the mounted gun at the end. */
 const FINALE_SECONDS = 10;
@@ -40,6 +41,9 @@ interface ExamItem {
   kana: string;
   romaji: string[];
   seconds: number;
+  /** What the word means, shown small under it. Words only: a lone kana
+   * has a sound, not a meaning. */
+  gloss?: string;
 }
 
 /** Every hiragana with a sound of its own: rows 1-15. The small tsu has no
@@ -56,35 +60,35 @@ function kanaPool(): KanaEntry[] {
  * food. Alternate spellings are written out rather than derived, so し in
  * a word takes shi and si the same as it does alone.
  */
-const WORDS: [kana: string, ...romaji: string[]][] = [
-  ["ねこ", "neko"],
-  ["いぬ", "inu"],
-  ["みず", "mizu"],
-  ["ゆき", "yuki"],
-  ["そら", "sora"],
-  ["ほし", "hoshi", "hosi"],
-  ["さかな", "sakana"],
-  ["たまご", "tamago"],
-  ["やま", "yama"],
-  ["かわ", "kawa"],
-  ["つき", "tsuki", "tuki"],
-  ["はな", "hana"],
-  ["くも", "kumo"],
-  ["あめ", "ame"],
-  ["よる", "yoru"],
-  ["ふゆ", "fuyu"],
-  ["おちゃ", "ocha", "otya", "ocya"],
-  ["りんご", "ringo"],
+const WORDS: [kana: string, gloss: string, ...romaji: string[]][] = [
+  ["ねこ", "cat", "neko"],
+  ["いぬ", "dog", "inu"],
+  ["みず", "water", "mizu"],
+  ["ゆき", "snow", "yuki"],
+  ["そら", "sky", "sora"],
+  ["ほし", "star", "hoshi", "hosi"],
+  ["さかな", "fish", "sakana"],
+  ["たまご", "egg", "tamago"],
+  ["やま", "mountain", "yama"],
+  ["かわ", "river", "kawa"],
+  ["つき", "moon", "tsuki", "tuki"],
+  ["はな", "flower", "hana"],
+  ["くも", "cloud", "kumo"],
+  ["あめ", "rain", "ame"],
+  ["よる", "night", "yoru"],
+  ["ふゆ", "winter", "fuyu"],
+  ["おちゃ", "tea", "ocha", "otya", "ocya"],
+  ["りんご", "apple", "ringo"],
 ];
 
 /** The final phase's word half: a few more, no repeats from phase 2. */
-const FINAL_WORDS: [kana: string, ...romaji: string[]][] = [
-  ["ごはん", "gohan"],
-  ["へや", "heya"],
-  ["ちず", "chizu", "tizu"],
-  ["じかん", "jikan", "zikan"],
-  ["ぱん", "pan"],
-  ["ひる", "hiru"],
+const FINAL_WORDS: [kana: string, gloss: string, ...romaji: string[]][] = [
+  ["ごはん", "rice; a meal", "gohan"],
+  ["へや", "room", "heya"],
+  ["ちず", "map", "chizu", "tizu"],
+  ["じかん", "time", "jikan", "zikan"],
+  ["ぱん", "bread", "pan"],
+  ["ひる", "noon; daytime", "hiru"],
 ];
 
 function shuffled<T>(items: T[]): T[] {
@@ -105,9 +109,10 @@ function buildPhases(): ExamItem[][] {
     romaji: entry.romaji,
     seconds: CLOCK.kana,
   }));
-  const phase2: ExamItem[] = shuffled(WORDS).map(([kana_, ...romaji]) => ({
-    kind: "word",
+  const phase2: ExamItem[] = shuffled(WORDS).map(([kana_, gloss, ...romaji]) => ({
+    kind: "word" as const,
     kana: kana_,
+    gloss,
     romaji,
     seconds: CLOCK.word,
   }));
@@ -123,7 +128,13 @@ function buildPhases(): ExamItem[][] {
         }),
       ),
     ...shuffled(FINAL_WORDS).map(
-      ([kana_, ...romaji]): ExamItem => ({ kind: "word", kana: kana_, romaji, seconds: CLOCK.finalWord }),
+      ([kana_, gloss, ...romaji]): ExamItem => ({
+        kind: "word",
+        kana: kana_,
+        gloss,
+        romaji,
+        seconds: CLOCK.finalWord,
+      }),
     ),
   ]);
   return [phase1, phase2, phase3];
@@ -206,6 +217,7 @@ export async function runHiraganaExam(main: HTMLElement, onExit: () => void): Pr
       <div class="exam-timer"><div class="exam-timer-fill" id="exam-fuse"></div></div>
       <div class="card-panel exam-card" id="exam-card">
         <div class="exam-kana" id="exam-kana" lang="ja"></div>
+        <div class="exam-gloss glosses" id="exam-gloss"></div>
         <input id="exam-input" type="text" autocomplete="off" autocapitalize="none"
           spellcheck="false" enterkeyhint="go" placeholder="romaji" aria-label="Type the romaji" />
         <div class="glosses" id="exam-note"></div>
@@ -219,6 +231,7 @@ export async function runHiraganaExam(main: HTMLElement, onExit: () => void): Pr
   const stage: ExamStage = await mountExamStage(main.querySelector<HTMLElement>("#exam-chase")!);
   const card = main.querySelector<HTMLDivElement>("#exam-card")!;
   const kanaEl = main.querySelector<HTMLDivElement>("#exam-kana")!;
+  const glossEl = main.querySelector<HTMLDivElement>("#exam-gloss")!;
   const input = main.querySelector<HTMLInputElement>("#exam-input")!;
   const fuse = main.querySelector<HTMLDivElement>("#exam-fuse")!;
   const livesEl = main.querySelector<HTMLElement>("#exam-lives")!;
@@ -267,6 +280,7 @@ export async function runHiraganaExam(main: HTMLElement, onExit: () => void): Pr
     const item = current();
     kanaEl.textContent = item.kana;
     kanaEl.classList.toggle("word", item.kind === "word");
+    glossEl.textContent = item.gloss ?? "";
     input.value = "";
     input.focus();
     fuse.style.transition = "none";
