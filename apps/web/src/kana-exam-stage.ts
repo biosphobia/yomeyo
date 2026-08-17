@@ -1286,7 +1286,6 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
           if (!claimEnv(t, 14)) return;
           seaTarget = 1;
           sBurst(1.0, 0.6, 300, 120, 0.6);
-          say("CHITO: why is there a SEA.", 2.2);
           groundTint = new THREE.Color(0x39647e);
 
           // They go IN. A beat after the shore, both of them plunge, the
@@ -2291,7 +2290,7 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
           if (Math.sin(stride) * Math.sin(lastChitoStep) < 0) footPuff(chito.position.x - 0.1, chito.position.z, 0.05);
           lastChitoStep = stride;
         }
-        yuuriRun(-0.6 - gapNow * 3.4 + lunge * 0.9);
+        yuuriRun(-0.35 - gapNow * 2.55 + lunge * 0.9);
         yuuri.position.z = -0.3 + Math.sin(t * 2.6 + 1.2) * weave * 0.7;
 
         // Under the sea, running becomes swimming: both of them prone,
@@ -2345,7 +2344,7 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
         if (name === "kettenkrad") {
           // It scrolls in, she hops on, the engine catches, and go.
           krad.position.x += (1.55 - krad.position.x) * rawDt * 2.2;
-          yuuriRun(-4.4);
+          yuuriRun(-3.0);
           if (gone < 1.2) {
             chito.position.set(1.55, Math.abs(Math.sin(stride)) * 0.16, 0);
           } else if (gone < 1.9) {
@@ -2368,7 +2367,7 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
             nextEventAt = t + 3;
           }
         } else if (name === "last-stretch") {
-          yuuriRun(-0.6 - gapNow * 3.4);
+          yuuriRun(-0.35 - gapNow * 2.55);
           lookAngle(0.2, [-2.4, 2.6, 4.6], [0, 1.4, 0], 0.12);
           if (gone > 2.2) {
             camOverride = null;
@@ -2426,7 +2425,7 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
           const which = name.slice(7);
           const e = Math.min(1, gone / 1.0);
           // She closes the last of the distance in every version.
-          yuuri.position.x = -1.6 + e * (chito.position.x - 1.2);
+          yuuri.position.x = -1.4 + e * (chito.position.x - 1.4);
           yuuri.position.y = Math.abs(Math.sin(stride * 0.62)) * 0.3 * (1 - e);
           if (which === "rations" || which === "bite" || which === "hug") {
             if (gone > 1) {

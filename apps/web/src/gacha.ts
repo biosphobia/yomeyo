@@ -250,17 +250,44 @@ async function preview(
  * have of one), stackable items with their counts. The collection above
  * answers "what exists"; this answers "what's mine".
  */
+/**
+ * The door keys, as inventory rows. Their names say where they came from;
+ * only their notes keep the door's secret. A key already turned in its
+ * lock stays listed, and says so — a thing spent on a mystery is still a
+ * thing you found.
+ */
+const DOOR_KEY_ROWS: Record<string, { name: string; note: string }> = {
+  hiragana: { name: "Hiragana key", note: "Won at the hiragana exam. It fits something, somewhere." },
+  katakana: { name: "Katakana key", note: "Won at the katakana exam. It fits something, somewhere." },
+  grammar: { name: "Grammar key", note: "Earned from the grammar course. It fits something, somewhere." },
+};
+
 async function drawInventory(main: HTMLElement, table: PrizeTable, have: Set<string>): Promise<void> {
   const box = main.querySelector<HTMLDivElement>("#gacha-inventory");
   if (!box) return;
   const counts = await itemCounts();
+  const { heldDoorKeys, insertedDoorKeys } = await import("./door-keys.js");
+  const [doorKeys, turned] = await Promise.all([heldDoorKeys(), insertedDoorKeys()]);
   const held = table.prizes.filter(
     (prize) => (prize.type === "item" ? (counts[prize.id] ?? 0) > 0 : have.has(prize.id)),
   );
-  if (held.length === 0) {
+  if (held.length === 0 && doorKeys.length === 0) {
     box.innerHTML = `<div class="glosses">Nothing yet. Open a crate.</div>`;
     return;
   }
+
+  const doorKeyRow = (id: string): string => {
+    const info = DOOR_KEY_ROWS[id] ?? { name: "A strange key", note: "It fits something, somewhere." };
+    const used = turned.includes(id as (typeof doorKeys)[number]);
+    return `<div class="inv-row" style="--rarity:#e8b24c">
+      <span class="inv-face">🗝️</span>
+      <span class="inv-body">
+        <span class="inv-name">${escapeHtml(info.name)}</span>
+        <span class="glosses">${escapeHtml(used ? "Turned in its lock. It stays turned." : info.note)}</span>
+      </span>
+      <span class="inv-rarity">key item</span>
+    </div>`;
+  };
 
   const row = (prize: Prize): string => {
     const rarity = table.rarities[prize.rarity];
@@ -281,17 +308,18 @@ async function drawInventory(main: HTMLElement, table: PrizeTable, have: Set<str
   };
 
   // By kind, each section only there when something of that kind is held.
-  const sections: [string, string, Prize[]][] = [
-    ["🎞", "Reactions", held.filter((prize) => prize.type === "gif")],
-    ["🎨", "Skins", held.filter((prize) => prize.type === "skin")],
-    ["🗝", "Key items", held.filter((prize) => prize.type === "item")],
+  // The key items open with the door keys, ahead of anything from a crate.
+  const sections: [string, string, string[]][] = [
+    ["🎞", "Reactions", held.filter((prize) => prize.type === "gif").map(row)],
+    ["🎨", "Skins", held.filter((prize) => prize.type === "skin").map(row)],
+    ["🗝", "Key items", [...doorKeys.map(doorKeyRow), ...held.filter((prize) => prize.type === "item").map(row)]],
   ];
   box.innerHTML = sections
-    .filter(([, , prizes]) => prizes.length > 0)
+    .filter(([, , rows]) => rows.length > 0)
     .map(
-      ([icon, title, prizes]) => `<div class="inv-section">
-        <div class="inv-section-head">${icon} <b>${title}</b> <span class="glosses">${prizes.length}</span></div>
-        ${prizes.map(row).join("")}
+      ([icon, title, rows]) => `<div class="inv-section">
+        <div class="inv-section-head">${icon} <b>${title}</b> <span class="glosses">${rows.length}</span></div>
+        ${rows.join("")}
       </div>`,
     )
     .join("");
