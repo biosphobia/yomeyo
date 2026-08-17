@@ -24,6 +24,13 @@ const WORDS: DictEntry[] = [
   { term: "魚", reading: "さかな", pos: ["n"], glosses: ["fish"], freq: 400 },
   { term: "食べる", reading: "たべる", pos: ["v1", "vt"], glosses: ["to eat"], freq: 200 },
   { term: "遠距離恋愛", reading: "えんきょりれんあい", pos: ["n"], glosses: ["long distance relationship"], freq: 30000 },
+  { term: "ちぐはぐ", reading: "ちぐはぐ", pos: ["adj-na"], glosses: ["mismatched; odd; irregular"], freq: 40000 },
+  { term: "猿も木から落ちる", reading: "さるもきからおちる", pos: ["exp", "v1"], glosses: ["even monkeys fall from trees"], freq: 60000 },
+  { term: "情けは人のためならず", reading: "なさけはひとのためならず", pos: ["exp"], glosses: ["compassion is not for other people's benefit"], freq: 70000 },
+  { term: "木", reading: "き", pos: ["n"], glosses: ["tree"], freq: 350 },
+  { term: "落ちる", reading: "おちる", pos: ["v1", "vi"], glosses: ["to fall"], freq: 600 },
+  { term: "人", reading: "ひと", pos: ["n"], glosses: ["person"], freq: 120 },
+  { term: "猿", reading: "さる", pos: ["n"], glosses: ["monkey"], freq: 1500 },
   { term: "恋愛", reading: "れんあい", pos: ["n"], glosses: ["love; romance"], freq: 4000 },
   { term: "距離", reading: "きょり", pos: ["n"], glosses: ["distance"], freq: 2000 },
 ];
@@ -131,5 +138,31 @@ describe("ordering", () => {
     // 臭い (started one character back) and いか (starts at the finger) are
     // both two characters long; the commoner one leads.
     expect(termsAt("この魚は臭いから食べない。", 5)[0]).toBe("臭い");
+  });
+});
+
+describe("sayings, tapped anywhere along their length", () => {
+  it("finds a kana-only word from any of its characters", () => {
+    // ちぐはぐ never takes kanji; a tap on any of its four characters must
+    // surface it, not the fragments inside it.
+    const text = "ちぐはぐな服";
+    for (let at = 0; at < 4; at++) {
+      expect(termsAt(text, at)).toContain("ちぐはぐ");
+    }
+  });
+
+  it("finds a whole proverb from a tap in its middle", () => {
+    const text = "猿も木から落ちるという。";
+    // Tapping the 落 — five characters in — must reach back to the start.
+    expect(termsAt(text, 5)).toContain("猿も木から落ちる");
+    // And the expression outranks the fragments under the same finger.
+    expect(topTermAt(text, 0)).toBe("猿も木から落ちる");
+  });
+
+  it("finds a ten-character saying from a tap on its tail", () => {
+    const text = "情けは人のためならず";
+    // ら is the ninth character: further back than any single word would
+    // ever need, and exactly what a saying needs.
+    expect(termsAt(text, 8)).toContain("情けは人のためならず");
   });
 });

@@ -26,24 +26,48 @@ function cacheStorage(): CacheStorage | null {
   }
 }
 
+/** How old a copy with no validators may grow before it is refetched. */
+const STALE_AFTER_MS = 7 * 24 * 3600 * 1000;
+const CACHED_AT = "x-yomeyo-cached-at";
+
+/** The response, restamped with when it was cached, so a copy from a host
+ * that sends no validators can still be judged old. */
+function stamped(res: Response): Response {
+  const headers = new Headers(res.headers);
+  headers.set(CACHED_AT, String(Date.now()));
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+}
+
 /**
  * Ask the server whether the dictionary has changed, and quietly replace the
  * cached copy if it has. Never blocks a lookup: the new bytes are picked up
  * on the next load.
+ *
+ * Hosts that send ETag or Last-Modified get a proper conditional request.
+ * Hosts that send neither used to make the cached copy immortal — a
+ * dictionary downloaded in the app's early days would never improve, which
+ * is what "the dictionary is missing X" reports turned out to be. Those
+ * copies now simply expire: after a week, the whole file is refetched in
+ * the background and replaced.
  */
 async function revalidate(cache: Cache, url: string, cached: Response): Promise<void> {
   const etag = cached.headers.get("etag");
   const modified = cached.headers.get("last-modified");
-  if (!etag && !modified) return; // nothing to compare against
-
-  const headers: Record<string, string> = {};
-  if (etag) headers["if-none-match"] = etag;
-  else if (modified) headers["if-modified-since"] = modified;
 
   try {
-    // no-store so this really reaches the server rather than the HTTP cache.
-    const res = await fetch(url, { headers, cache: "no-store" });
-    if (res.status === 200) await cache.put(url, res);
+    if (etag || modified) {
+      const headers: Record<string, string> = {};
+      if (etag) headers["if-none-match"] = etag;
+      else if (modified) headers["if-modified-since"] = modified;
+      // no-store so this really reaches the server, not the HTTP cache.
+      const res = await fetch(url, { headers, cache: "no-store" });
+      if (res.status === 200) await cache.put(url, stamped(res));
+      return;
+    }
+    const cachedAt = Number(cached.headers.get(CACHED_AT) ?? 0);
+    if (Date.now() - cachedAt < STALE_AFTER_MS) return; // young enough
+    const res = await fetch(url, { cache: "no-store" });
+    if (res.ok) await cache.put(url, stamped(res));
   } catch {
     /* offline, or the server does not do conditional requests */
   }
@@ -74,7 +98,7 @@ export async function loadDictBytes(url: string): Promise<ArrayBuffer> {
   if (!res.ok) throw new Error(`Could not load the dictionary (${res.status})`);
   if (cache) {
     try {
-      await cache.put(url, res.clone());
+      await cache.put(url, stamped(res.clone()));
     } catch {
       /* out of quota: the dictionary still works, just not offline */
     }

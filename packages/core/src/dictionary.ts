@@ -200,7 +200,15 @@ export function isJapaneseChar(ch: string): boolean {
   );
 }
 
-const MAX_SCAN_LENGTH = 20;
+/**
+ * The longest run of characters the scanner will consider as one word.
+ *
+ * Twenty was enough for vocabulary but not for JMdict's sayings —
+ * 情けは人のためならず is ten characters, and whole proverbs run well past
+ * twenty. The cost of the higher cap is a handful of extra binary searches
+ * per tap, which is nothing.
+ */
+const MAX_SCAN_LENGTH = 32;
 
 /**
  * How far back from the tapped character to look for the start of a word.
@@ -209,10 +217,12 @@ const MAX_SCAN_LENGTH = 20;
  * word begins — and a fingertip covers several characters anyway. Scanning
  * only forwards, as a desktop hover tool can afford to, means a tap on the 臭
  * of 水臭い finds 臭い, and a tap on its い finds 遺孤 or 胃: the word actually
- * under the finger is missed. Most Japanese words are within this many
- * characters of any point inside them.
+ * under the finger is missed. Vocabulary sits within a few characters of any
+ * point inside it, but sayings do not: tapping the ならず at the end of
+ * 情けは人のためならず has to reach nine characters back to find the
+ * expression's start, so the reach is sized for expressions, not words.
  */
-const MAX_LOOKBEHIND = 8;
+const MAX_LOOKBEHIND = 18;
 
 /** Step back one whole character, never into the middle of a surrogate pair. */
 function previousCharStart(text: string, index: number): number {

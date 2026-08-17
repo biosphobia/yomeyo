@@ -199,6 +199,7 @@ describe("dictionary verification gate", () => {
         makeWord("する", "する", ["vs-i"], "to do"),
         makeWord("臭い", "くさい", ["adj-i"], "stinking; smelly"),
         makeWord("水臭い", "みずくさい", ["adj-i"], "stand-offish; distant"),
+        makeWord("ちぐはぐ", "ちぐはぐ", ["adj-na"], "mismatched; odd"),
       ],
     });
     expect(() => verifyDict(good, { minEntries: 1 })).not.toThrow();

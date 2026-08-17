@@ -214,11 +214,21 @@ export function verifyDict(dict, { minEntries = 10_000, requireCompounds = false
     ["する", "する", null],
     ["臭い", "くさい", "adj-i"],
     ["水臭い", "みずくさい", "adj-i"],
+    // Kana-only vocabulary: no kanji form to hang the entry on, so a bug in
+    // the kana-only path would silently drop the whole class of words.
+    ["ちぐはぐ", "ちぐはぐ", null],
   ];
-  // Compounds that exist in JMdict but not in its common-words subset. They
-  // catch a build that silently fell back to the smaller dictionary.
+  // Compounds and sayings that exist in JMdict but not in its common-words
+  // subset. They catch a build that silently fell back to the smaller
+  // dictionary — and the sayings prove whole expressions survive, which is
+  // what the reader's long-tap scan reaches back for.
   if (requireCompounds) {
-    expectations.push(["遠距離恋愛", "えんきょりれんあい", "n"], ["人工知能", "じんこうちのう", "n"]);
+    expectations.push(
+      ["遠距離恋愛", "えんきょりれんあい", "n"],
+      ["人工知能", "じんこうちのう", "n"],
+      ["猿も木から落ちる", "さるもきからおちる", "exp"],
+      ["塵も積もれば山となる", "ちりもつもればやまとなる", "exp"],
+    );
   }
   for (const [term, reading, pos] of expectations) {
     const entry = byTerm.get(term);
