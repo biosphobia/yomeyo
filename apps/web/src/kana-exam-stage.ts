@@ -16,7 +16,8 @@ import { assetUrl } from "./store.js";
  * exhaust that actually puffs — with an engine made of oscillators.
  *
  * The endings are little films. Defeat picks one of six in-character
- * catches. Victory is the tank shot, and then the truth: both of them
+ * catches. Victory is the shot from the kettenkrad's own gun, and then
+ * the truth: both of them
  * waking from the dream in sleeping bags in a snowy forest.
  *
  * Everything three.js collapses to an emoji stand-in on failure; the
@@ -332,7 +333,7 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
         three.playFinale(seconds);
         return;
       }
-      say("The TANK. Fire when she's close.", 2.5);
+      say("The gun. Fire when she's close.", 2.5);
     },
     fire: () =>
       new Promise<void>((resolve) => {
@@ -405,9 +406,13 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
     scene.add(world);
 
     // The road: packed snow, with tyre-worn ruts showing tarmac beneath.
+    // Grounds change colour by easing toward `groundTint` (null = home),
+    // so a sea or a field arrives as a wash, not a cut.
+    let groundTint: any = null;
     const slabs: any[] = [];
     for (let i = 0; i < 10; i++) {
       const slab = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.08, 2.6), matte(0xdde5ee, 1));
+      slab.userData.homeColor = new THREE.Color(0xdde5ee);
       slab.position.set(-7 + i * 1.6, -0.06, 0);
       world.add(slab);
       slabs.push(slab);
@@ -421,6 +426,7 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
     // Snowbanks shoulder the road on both sides, lumpy on purpose.
     for (let i = 0; i < 14; i++) {
       const bank = new THREE.Mesh(new THREE.SphereGeometry(0.5 + Math.random() * 0.4, 7, 5), matte(0xe9eff6, 1));
+      bank.userData.homeColor = new THREE.Color(0xe9eff6);
       bank.scale.set(1.6, 0.5, 1);
       bank.position.set(-7 + i * 1.15, -0.12, i % 2 === 0 ? 1.5 : -1.6);
       world.add(bank);
@@ -580,7 +586,7 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
     let nextPropAt = 0;
     /** Put one prop into the stream, in the near or the far lane. Placing
      * is chase-only: an environment still winding down during the finale
-     * must not roll fresh scenery — least of all a hulk — past the tank. */
+     * must not roll fresh scenery — least of all a hulk — past the gun. */
     const placeProp = (prop: any, near: boolean, xJitter = 0): void => {
       if (mode.kind !== "chase") return;
       prop.position.set(9 + xJitter, -0.02, near ? 1.35 + Math.random() * 0.4 : -1.7 - Math.random() * 1.2);
@@ -602,7 +608,7 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
     let envUntil = 0;
     const claimEnv = (t: number, seconds: number): boolean => {
       if (t < envUntil) return false;
-      envUntil = t + seconds + 1.5;
+      envUntil = t + seconds + 0.8;
       return true;
     };
 
@@ -725,6 +731,51 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
       }
     };
 
+    /** Fire, smoke, debris, flash, thunder: the full send, one call. */
+    const explode = (x: number, y: number, z: number, color: number, count = 14): void => {
+      boom();
+      flash();
+      quake = Math.max(quake, 0.14);
+      debris(x, y, z, count, color, 0.15);
+      for (let i = 0; i < 5; i++) {
+        const smoke = new THREE.Mesh(
+          new THREE.SphereGeometry(0.14, 6, 5),
+          new THREE.MeshStandardMaterial({ color: 0x555b66, transparent: true, opacity: 0.55, roughness: 1 }),
+        );
+        smoke.position.set(x + (Math.random() - 0.5) * 0.5, y + Math.random() * 0.4, z);
+        world.add(smoke);
+        let life = 1.1 + Math.random() * 0.5;
+        spawn((dt) => {
+          life -= dt;
+          smoke.position.y += 0.7 * dt;
+          smoke.scale.setScalar(smoke.scale.x + dt * 2.4);
+          (smoke.material as any).opacity = Math.max(0, life * 0.4);
+          if (life <= 0) {
+            world.remove(smoke);
+            return false;
+          }
+          return true;
+        });
+      }
+      const fire = new THREE.Mesh(
+        new THREE.SphereGeometry(0.3, 8, 6),
+        new THREE.MeshBasicMaterial({ color: 0xffaa44, transparent: true, opacity: 0.9 }),
+      );
+      fire.position.set(x, y, z);
+      world.add(fire);
+      let fLife = 0.35;
+      spawn((dt) => {
+        fLife -= dt;
+        fire.scale.setScalar(fire.scale.x + dt * 8);
+        (fire.material as any).opacity = Math.max(0, fLife * 2.5);
+        if (fLife <= 0) {
+          world.remove(fire);
+          return false;
+        }
+        return true;
+      });
+    };
+
     /** The camera's default seat, and temporary overrides events request. */
     const CAM_HOME = { pos: [0, 1.35, 5.4], look: [0, 1.0, 0] };
     let camOverride: { pos: number[]; look: number[]; roll: number; until: number } | null = null;
@@ -738,12 +789,17 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
     let darkTarget = 0;
     let redSky = 0;
     let redTarget = 0;
+    let lastGait = 0; // where her stride was last frame, for footfalls
+    let lastThump = 0;
+    let lastChitoStep = 0;
     let wind = 0.5; // sideways push on the falling snow
     let windTarget = 0.5;
     let weave = 0; // how hard the runners swing across the road
     let weaveTarget = 0;
-    let sea = 0; // how underwater everything currently is
+    let sea = 0; // how underwater the light currently is
     let seaTarget = 0;
+    let swim = 0; // how underwater the RUNNERS currently are
+    let swimTarget = 0;
 
     // ---------------- the procedural events ----------------
     const EVENTS: { name: string; phases: number[]; run: (t: number) => void }[] = [
@@ -763,8 +819,7 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
               smashed = true;
               world.remove(tower);
               crash();
-              quake = Math.max(quake, 0.09);
-              debris(yuuri.position.x + 0.6, h / 2, -0.5, 12, 0x46536b);
+              explode(yuuri.position.x + 0.6, h / 2, -0.5, 0x46536b);
               return false;
             }
             return tower.position.x > -9;
@@ -1053,9 +1108,7 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
         name: "bridge-behind",
         phases: [2, 3],
         run: () => {
-          boom();
-          quake = Math.max(quake, 0.12);
-          debris(yuuri.position.x - 1.2, 3, -1, 14, 0x2f3442, 0.18);
+          explode(yuuri.position.x - 1.2, 2.6, -1, 0x2f3442, 16);
         },
       },
       {
@@ -1098,28 +1151,99 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
         name: "building-interior",
         phases: [1, 2],
         run: (t) => {
-          // The road goes straight through a lobby: dark, columns both
-          // sides, a ceiling, dust hanging in what light is left.
-          if (!claimEnv(t, 8)) return;
-          darkTarget = 0.45;
-          sTone(1.2, 0.15, 100, 60);
-          const ceiling = new THREE.Mesh(new THREE.BoxGeometry(20, 0.15, 5), matte(0x2c3140, 0.95));
+          // Through the wall, along a dead building's great hall, and out
+          // the far side. Foreground columns strobe past between camera
+          // and runners, which is what says INSIDE more than anything.
+          if (!claimEnv(t, 10)) return;
+          explode(3.2, 1.2, 0.6, 0x46536b, 16); // the way in
+          darkTarget = 0.5;
+          groundTint = new THREE.Color(0x4a443c);
+          const ceiling = new THREE.Mesh(new THREE.BoxGeometry(22, 0.15, 6), matte(0x2c3140, 0.95));
           ceiling.position.set(0, 2.7, -0.5);
           world.add(ceiling);
-          let life = 8;
+
+          let life = 10;
           let nextColumn = 0;
+          let nextLamp = 0.7;
+          let nextFurniture = 1.4;
           spawn((dt, t2) => {
             life -= dt;
+
             if (t2 > nextColumn && life > 1.5) {
-              nextColumn = t2 + 0.55;
-              for (const near of [true, false]) {
-                const column = new THREE.Mesh(new THREE.BoxGeometry(0.3, 2.8, 0.3), matte(0x3a4152, 0.9));
-                column.position.y = 1.3;
-                const group = new THREE.Group();
-                group.add(column);
-                placeProp(group, near);
-              }
-              // Dust, drifting down through the beam of the doorway.
+              nextColumn = t2 + 0.5;
+              // A back wall segment with a dim window, and a fat column in
+              // the foreground with a capital, both streaming.
+              const wall = new THREE.Group();
+              const panel = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.8, 0.2), matte(0x333a4c, 0.95));
+              panel.position.y = 1.3;
+              wall.add(panel);
+              const pane = new THREE.Mesh(
+                new THREE.BoxGeometry(0.5, 0.7, 0.05),
+                new THREE.MeshStandardMaterial({ color: 0x9fb4d0, emissive: 0x6a86ac, emissiveIntensity: 0.35 }),
+              );
+              pane.position.set((Math.random() - 0.5) * 0.6, 1.6, 0.12);
+              wall.add(pane);
+              placeProp(wall, false);
+
+              const column = new THREE.Group();
+              const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 2.7, 9), matte(0x3f4658, 0.9));
+              shaft.position.y = 1.3;
+              column.add(shaft);
+              const capital = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.14, 0.5), matte(0x4a5268, 0.9));
+              capital.position.y = 2.6;
+              column.add(capital);
+              placeProp(column, true);
+            }
+
+            // Lamps hanging from the dark, swinging as the giant passes.
+            if (t2 > nextLamp && life > 1.5) {
+              nextLamp = t2 + 1.1;
+              const lamp = new THREE.Group();
+              const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.7, 4), matte(0x222, 0.6));
+              cord.position.y = 2.3;
+              lamp.add(cord);
+              const shade = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.14, 8), matte(0x5a6274, 0.7));
+              shade.position.y = 1.95;
+              lamp.add(shade);
+              const bulb = new THREE.Mesh(
+                new THREE.SphereGeometry(0.05, 6, 5),
+                new THREE.MeshStandardMaterial({ color: 0xffe9a8, emissive: 0xffd966, emissiveIntensity: 0.6 }),
+              );
+              bulb.position.y = 1.88;
+              lamp.add(bulb);
+              placeProp(lamp, false);
+              const swing = lamp;
+              spawn((sdt, st) => {
+                swing.rotation.z = Math.sin(st * 2.4) * 0.18;
+                return swing.parent !== null;
+              });
+            }
+
+            // The furniture is in her way. The furniture loses.
+            if (t2 > nextFurniture && life > 2) {
+              nextFurniture = t2 + 1.7;
+              const desk = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.35, 0.5), matte(0x6e5a42, 0.85));
+              desk.position.set(9, 0.18, -0.35);
+              world.add(desk);
+              let smashed = false;
+              spawn((ddt) => {
+                desk.position.x -= roadSpeed() * ddt;
+                if (!smashed && desk.position.x < yuuri.position.x + 0.6) {
+                  smashed = true;
+                  world.remove(desk);
+                  explode(yuuri.position.x + 0.5, 0.4, -0.35, 0x6e5a42, 8);
+                  return false;
+                }
+                if (desk.position.x < -9) {
+                  world.remove(desk);
+                  return false;
+                }
+                return true;
+              });
+            }
+
+            // Dust, sinking through the lamp light.
+            if (Math.random() < dt * 3) {
               const mote = new THREE.Mesh(new THREE.SphereGeometry(0.015, 4, 4), matte(0xcfd4dd, 0.5));
               mote.position.set(-2 + Math.random() * 5, 2.2, 0.5);
               world.add(mote);
@@ -1134,11 +1258,12 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
                 return true;
               });
             }
+
             if (life <= 0) {
               world.remove(ceiling);
               darkTarget = 0;
-              crash();
-              debris(yuuri.position.x + 0.5, 1.4, -0.4, 10, 0x3a4152);
+              groundTint = null;
+              explode(yuuri.position.x + 0.6, 1.4, -0.4, 0x333a4c, 18); // the way out
               return false;
             }
             return true;
@@ -1150,17 +1275,37 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
         phases: [1, 2, 3],
         run: (t) => {
           // The road runs out and there is simply a sea. Nobody explains.
-          if (!claimEnv(t, 13)) return;
+          if (!claimEnv(t, 14)) return;
           seaTarget = 1;
           sBurst(1.0, 0.6, 300, 120, 0.6);
           say("CHITO: why is there a SEA.", 2.2);
-          for (const slab of slabs) {
-            const mat = (slab as any).material;
-            if (mat?.color) {
-              slab.userData.landColor ??= mat.color.getHex();
-              mat.color.setHex(0x39647e);
-            }
+          groundTint = new THREE.Color(0x39647e);
+
+          // They go IN. A beat after the shore, both of them plunge, the
+          // camera sinks with them, and the surface becomes a ceiling of
+          // light overhead with shafts leaning down through it.
+          const surface = new THREE.Mesh(
+            new THREE.BoxGeometry(24, 0.05, 8),
+            new THREE.MeshBasicMaterial({ color: 0xbfe7f5, transparent: true, opacity: 0.35, depthWrite: false }),
+          );
+          surface.position.set(0, 1.32, -0.5);
+          const shafts: any[] = [];
+          for (let i = 0; i < 3; i++) {
+            const shaft = new THREE.Mesh(
+              new THREE.ConeGeometry(0.5, 2.4, 8, 1, true),
+              new THREE.MeshBasicMaterial({ color: 0xdff4ff, transparent: true, opacity: 0.08, depthWrite: false }),
+            );
+            shaft.position.set(-3 + i * 3, 0.6, -1.2);
+            shaft.rotation.z = 0.15;
+            shafts.push(shaft);
           }
+          later(() => {
+            if (stopped) return;
+            sBurst(0.8, 0.7, 400, 100, 0.7); // the plunge
+            swimTarget = 1;
+            world.add(surface);
+            for (const shaft of shafts) world.add(shaft);
+          }, 900);
 
           // The same fish every game in this app draws: a fat ellipsoid
           // with a cone for a tail, in the fishing drill's own colours.
@@ -1180,22 +1325,37 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
           // A school keeping pace in the far lane, half out of the water,
           // wriggling as one.
           const school: any[] = [];
-          for (let i = 0; i < 5; i++) {
+          for (let i = 0; i < 6; i++) {
             const swimmer = buildFish(FISH_COLOURS[i % FISH_COLOURS.length], 0.8);
-            swimmer.position.set(3 + i * 0.55, 0.04, -1.5 + (i % 2) * 0.3);
+            swimmer.position.set(3 + i * 0.55, 0.5, -1.2 + (i % 3) * 0.5);
             world.add(swimmer);
             school.push(swimmer);
           }
 
-          let life = 13;
+          let life = 14;
           let nextSplash = 0;
           let nextLeap = 1.2;
           let nextFloe = 0.6;
           spawn((dt, t2) => {
             life -= dt;
 
-            // Spray off everything moving: her wake and Yuuri's wading.
-            if (t2 > nextSplash) {
+            // The camera rides just under the surface while they swim, and
+            // hands itself back as they climb out.
+            if (swim > 0.25 && life > 1.2) {
+              lookAngle(0.2, [0, 0.6 + (1 - swim) * 0.75, 4.9], [0.3, 0.5 * swim + 1.0 * (1 - swim), 0]);
+              surface.position.y = 1.32 + Math.sin(t2 * 1.7) * 0.03;
+            }
+            // The way out: surface, shake off, run on.
+            if (life < 1.6 && swimTarget !== 0) {
+              swimTarget = 0;
+              sBurst(0.7, 0.6, 500, 150, 0.7);
+              world.remove(surface);
+              for (const shaft of shafts) world.remove(shaft);
+            }
+
+            // Spray off everything moving — at the surface. Underwater it
+            // is bubbles, and the swim blend already makes those.
+            if (t2 > nextSplash && swim < 0.5) {
               nextSplash = t2 + 0.14;
               for (const [sx, sz, big] of [
                 [chito.position.x - 0.3, chito.position.z, false],
@@ -1265,22 +1425,28 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
             if (t2 > nextFloe && life > 1.5) {
               nextFloe = t2 + 0.8;
               const roll = Math.random();
-              if (roll < 0.5) {
-                const floe = new THREE.Mesh(new THREE.BoxGeometry(0.5 + Math.random() * 0.4, 0.06, 0.4), matte(0xe9f2f8, 0.9));
-                const group = new THREE.Group();
-                group.add(floe);
-                floe.position.y = 0.03;
-                floe.rotation.y = Math.random();
-                placeProp(group, Math.random() < 0.5);
-              } else if (roll < 0.8) {
-                const buoy = new THREE.Group();
-                const float = new THREE.Mesh(new THREE.SphereGeometry(0.12, 7, 6), matte(0xc23b28, 0.6));
-                float.position.y = 0.1;
-                buoy.add(float);
-                const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.3, 5), matte(0x333, 0.5));
-                mast.position.y = 0.3;
-                buoy.add(mast);
-                placeProp(buoy, Math.random() < 0.5);
+              if (roll < 0.7) {
+                // Overhead traffic: floes and buoys ride the ceiling of
+                // light, seen from below.
+                const floater = new THREE.Group();
+                if (Math.random() < 0.6) {
+                  const floe = new THREE.Mesh(new THREE.BoxGeometry(0.5 + Math.random() * 0.4, 0.07, 0.4), matte(0xe9f2f8, 0.9));
+                  floe.rotation.y = Math.random();
+                  floater.add(floe);
+                } else {
+                  const float = new THREE.Mesh(new THREE.SphereGeometry(0.13, 7, 6), matte(0xc23b28, 0.6));
+                  floater.add(float);
+                }
+                floater.position.set(8, 1.3, -0.8 + Math.random() * 1.4);
+                world.add(floater);
+                spawn((fdt) => {
+                  floater.position.x -= roadSpeed() * 0.85 * fdt;
+                  if (floater.position.x < -9) {
+                    world.remove(floater);
+                    return false;
+                  }
+                  return true;
+                });
               } else {
                 const wreck = new THREE.Group();
                 const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 1.6, 6), matte(0x4a4038, 0.9));
@@ -1295,10 +1461,11 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
               }
             }
 
-            // The school wriggles along, keeping pace off to the side.
+            // The school swims with them, at their depth, weaving close.
             school.forEach((swimmer, i) => {
               swimmer.position.x -= roadSpeed() * 0.2 * dt;
-              swimmer.position.y = 0.04 + Math.sin(t2 * 6 + i) * 0.05;
+              swimmer.position.y = 0.35 + swim * 0.15 + Math.sin(t2 * 3 + i * 1.3) * 0.18;
+              swimmer.position.z = -1.2 + (i % 3) * 0.5 + Math.sin(t2 * 1.5 + i) * 0.2;
               swimmer.rotation.z = Math.sin(t2 * 8 + i) * 0.2;
               if (swimmer.position.x < -6) swimmer.position.x = 6;
             });
@@ -1306,10 +1473,7 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
             if (life <= 0) {
               seaTarget = 0;
               for (const swimmer of school) world.remove(swimmer);
-              for (const slab of slabs) {
-                const mat = (slab as any).material;
-                if (mat?.color && slab.userData.landColor) mat.color.setHex(slab.userData.landColor);
-              }
+              groundTint = null;
               return false;
             }
             return true;
@@ -1383,13 +1547,7 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
           if (!claimEnv(t, 13)) return;
           say("YUURI: POTATOES.", 1.8);
           redTarget = Math.max(redTarget, 0.18); // low golden light over the field
-          for (const slab of slabs) {
-            const mat = (slab as any).material;
-            if (mat?.color) {
-              slab.userData.landColor ??= mat.color.getHex();
-              mat.color.setHex(0x4f3d2c);
-            }
-          }
+          groundTint = new THREE.Color(0x4f3d2c);
 
           const buildPotato = (size: number): any => {
             const potato = new THREE.Mesh(new THREE.SphereGeometry(size, 7, 6), matte(0xb08d57, 0.95));
@@ -1538,10 +1696,7 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
 
             if (life <= 0) {
               redTarget = phaseNum === 3 ? 0.5 : 0;
-              for (const slab of slabs) {
-                const mat = (slab as any).material;
-                if (mat?.color && slab.userData.landColor) mat.color.setHex(slab.userData.landColor);
-              }
+              groundTint = null;
               return false;
             }
             return true;
@@ -1723,8 +1878,7 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
                 rock.position.x -= 6 * dt;
                 rock.position.y -= 7 * dt;
                 if (rock.position.y < 0) {
-                  crash();
-                  debris(rock.position.x, 0.2, -1.5, 5, 0x774433, 0.1);
+                  explode(rock.position.x, 0.25, -1.5, 0x774433, 8);
                   world.remove(rock);
                   return false;
                 }
@@ -1751,10 +1905,10 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
       // When the stage is free for a whole new place, it usually takes one;
       // the small events fill the gaps between places rather than the
       // other way round.
-      const wantEnv = t >= envUntil && Math.random() < 0.55;
+      const wantEnv = t >= envUntil && Math.random() < 0.8;
       const pool = here.filter((event) => ENV_NAMES.has(event.name) === wantEnv);
       (pool.length > 0 ? pool : here)[Math.floor(Math.random() * (pool.length > 0 ? pool.length : here.length))].run(t);
-      nextEventAt = t + 3.5 + Math.random() * 4;
+      nextEventAt = t + 2.2 + Math.random() * 2.6;
     };
 
     // ---------------- modes and films ----------------
@@ -1763,29 +1917,27 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
     const roadSpeed = (): number =>
       (phaseNum === 1 ? 3.4 : phaseNum === 2 ? 5.2 : 6.0) + (1 - gapNow) * 2.4;
 
-    // The tank, built when the finale needs it.
-    let tank: any = null;
-    const buildTank = (): void => {
-      if (tank) return; // one tank; the second one on stage was a bug
-      tank = new THREE.Group();
-      const hull = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.5, 1.0), matte(0x3d4438, 0.8));
-      hull.position.y = 0.45;
-      tank.add(hull);
-      const turret = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.5, 0.36, 10), matte(0x333a2f, 0.8));
-      turret.position.y = 0.85;
-      tank.add(turret);
-      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 1.7, 8), matte(0x272c24, 0.6));
-      barrel.rotation.z = Math.PI / 2 - 0.06;
-      barrel.position.set(-0.9, 0.92, 0);
-      tank.add(barrel);
-      for (const wx of [-0.6, -0.2, 0.2, 0.6]) {
-        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 1.04, 10), matte(0x1a1d18, 0.9));
-        wheel.rotation.x = Math.PI / 2;
-        wheel.position.set(wx, 0.17, 0);
-        tank.add(wheel);
-      }
-      tank.position.set(6.5, 0, 0.3);
-      scene.add(tank);
+    /**
+     * The finale's gun, mounted on the kettenkrad's tail and pointing back
+     * the way they came — which is where she is. Built once, when the last
+     * question is answered; there is no other artillery on this stage.
+     */
+    let kradGun: any = null;
+    const mountGun = (): void => {
+      if (kradGun) return;
+      kradGun = new THREE.Group();
+      const pivot = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.12, 8), matte(0x3a3f36, 0.7));
+      pivot.position.y = 0.42;
+      kradGun.add(pivot);
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 0.9, 8), matte(0x272c24, 0.6));
+      barrel.rotation.z = Math.PI / 2 - 0.12;
+      barrel.position.set(-0.45, 0.5, 0);
+      kradGun.add(barrel);
+      const shield = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.26, 0.3), matte(0x3a3f36, 0.8));
+      shield.position.set(-0.12, 0.5, 0);
+      kradGun.add(shield);
+      kradGun.position.x = -0.25; // over the tail, behind the seat
+      krad.add(kradGun);
     };
 
     // The dream: the world swapped for a snowy forest and two sleeping bags.
@@ -1793,7 +1945,6 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
     const buildDream = (): void => {
       // Strip the chase world.
       scene.remove(world);
-      if (tank) scene.remove(tank);
       krad.visible = false;
       stage.classList.add("exam-dream");
       // Night air instead of daylight fog, so the forest keeps its dark.
@@ -1854,24 +2005,36 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
       },
       playFinale(seconds) {
         mode = { kind: "finale", start: performance.now(), seconds };
-        // Sweep the roadside clutter so the stage holds exactly one tank.
+        // A clear stage: her, the ride, and the gun it just grew.
         for (const prop of props) world.remove(prop);
         props.length = 0;
-        buildTank();
+        mountGun();
         engine.sputter();
         later(() => engine.stop(), 900);
-        say("The TANK. Fire when she's close.", 2.5);
+        say("The gun. Fire when she's close.", 2.5);
       },
       playFire(done) {
         mode = { kind: "film", name: "victory", start: performance.now(), done };
         playCaptions(VICTORY_CAPTIONS);
-        // The shell, visibly, from barrel to Yuuri.
+        // The shell, visibly, from the kettenkrad's own barrel to Yuuri —
+        // and the whole ride kicks back on the recoil.
         const shell = new THREE.Mesh(
           new THREE.SphereGeometry(0.08, 6, 6),
           new THREE.MeshStandardMaterial({ color: 0xffcc66, emissive: 0xffaa33, emissiveIntensity: 1 }),
         );
-        shell.position.set(tank ? tank.position.x - 1.6 : 3, 0.95, 0.2);
+        shell.position.set(krad.position.x - 0.8, 0.85, krad.position.z);
         scene.add(shell);
+        let recoil = 0.5;
+        spawn((dt) => {
+          recoil -= dt;
+          krad.position.x = 2.5 + Math.max(0, recoil) * 0.5;
+          krad.rotation.z = Math.max(0, recoil) * 0.25;
+          if (recoil <= 0) {
+            krad.rotation.z = 0;
+            return false;
+          }
+          return true;
+        });
         spawn((dt) => {
           shell.position.x -= 16 * dt;
           if (shell.position.x <= yuuri.position.x + 0.3) {
@@ -1879,7 +2042,7 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
             boom();
             flash();
             quake = 0.2;
-            debris(yuuri.position.x, 1.4, 0, 16, 0x4a4256, 0.16);
+            explode(yuuri.position.x, 1.4, 0, 0x4a4256, 18);
             return false;
           }
           return true;
@@ -1922,6 +2085,13 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
       wind += (windTarget - wind) * rawDt * 2;
       weave += (weaveTarget - weave) * rawDt * 2;
       sea += (seaTarget - sea) * rawDt * 2;
+      swim += (swimTarget - swim) * rawDt * 2.2;
+      for (const slab of slabs) {
+        const mat = (slab as any).material;
+        if (mat?.color && slab.userData.homeColor) {
+          mat.color.lerp(groundTint ?? slab.userData.homeColor, rawDt * 1.6);
+        }
+      }
       stage.style.setProperty("--exam-sea", sea.toFixed(2));
       stage.style.setProperty("--exam-red", redSky.toFixed(2));
       stage.style.setProperty("--exam-dark", dark.toFixed(2));
@@ -1932,9 +2102,53 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
       }
 
       const stride = t * (9 + (1 - gapNow) * 4);
+      /**
+       * A footfall kicks up a puff of whatever the ground currently is.
+       * Cheap, and it is most of what makes the running read as weight.
+       */
+      const footPuff = (x: number, z: number, size: number): void => {
+        const puffColor = groundTint ? groundTint.getHex() : 0xffffff;
+        const puff = new THREE.Mesh(
+          new THREE.SphereGeometry(size, 5, 4),
+          new THREE.MeshStandardMaterial({ color: puffColor, transparent: true, opacity: 0.5, roughness: 1 }),
+        );
+        puff.position.set(x, 0.05, z);
+        world.add(puff);
+        let life = 0.45;
+        spawn((pdt) => {
+          life -= pdt;
+          puff.position.x -= 0.8 * pdt;
+          puff.position.y += 0.5 * pdt;
+          puff.scale.setScalar(puff.scale.x + pdt * 3);
+          (puff.material as any).opacity = Math.max(0, life);
+          if (life <= 0) {
+            world.remove(puff);
+            return false;
+          }
+          return true;
+        });
+      };
       const yuuriRun = (back: number): void => {
-        yuuri.position.set(back, Math.abs(Math.sin(stride * 0.62)) * 0.3, -0.3);
-        if (mode.kind === "chase") yuuri.rotation.z = Math.sin(stride * 0.62) * 0.06 - 0.16;
+        const gait = stride * 0.62;
+        yuuri.position.set(back, Math.abs(Math.sin(gait)) * 0.34, -0.3);
+        if (mode.kind === "chase" || mode.kind === "finale") {
+          // The heavyweight's run: sway, a churn of the shoulders, and a
+          // squash into every landing that stretches through the leap.
+          yuuri.rotation.z = Math.sin(gait) * 0.07 - 0.18;
+          yuuri.rotation.x = Math.sin(gait * 2) * 0.05;
+          const crouch = Math.max(0, -Math.sin(gait * 2)) * 0.07;
+          yuuri.scale.set(2.6 * (1 + crouch * 0.6), 2.6 * (1 - crouch), 2.6);
+          // Each step lands: a thump you can hear and a puff you can see.
+          if (Math.sin(gait) * Math.sin(lastGait) < 0) {
+            footPuff(yuuri.position.x + 0.2, -0.1, 0.12);
+            quake = Math.max(quake, 0.02);
+            if (now - lastThump > 260) {
+              lastThump = now;
+              sBurst(0.16, 0.3, 130, 60, 0.9);
+            }
+          }
+          lastGait = gait;
+        }
       };
 
       if (mode.kind === "chase" || mode.kind === "finale") {
@@ -1947,8 +2161,8 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
           if (tower.position.x < -9) tower.position.x += 8 * 2.4;
         }
         // The roadside junk streams past with the road, and more arrives —
-        // but not during the finale: that stage belongs to the real tank,
-        // and a hulk from the catalogue parked next to it reads as two.
+        // but not during the finale: that stage belongs to the gun, and a
+        // catalogue hulk rolling past it reads as a second one.
         if (mode.kind === "chase" && t > nextPropAt) spawnProp(t);
         for (let i = props.length - 1; i >= 0; i--) {
           const prop = props[i];
@@ -1984,7 +2198,9 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
           const kBob = Math.sin(t * 18) * 0.015;
           krad.position.z = 0.35 + Math.sin(t * 2.6) * weave;
           chito.position.set(krad.position.x - 0.02, 0.36 + krad.position.y + kBob, krad.position.z);
-          chito.rotation.z = -0.06 + krad.rotation.z * 0.6;
+          // Leant into the bars, and further into it the faster it goes.
+          chito.rotation.z = -0.1 - (1 - gapNow) * 0.08 + krad.rotation.z * 0.6;
+          chito.scale.set(0.85, 0.85, 0.85);
           // Exhaust, puffing in time with the putter.
           if (Math.floor(t * 6) !== Math.floor((t - dt) * 6)) {
             const puff = new THREE.Mesh(new THREE.SphereGeometry(0.05, 5, 5), matte(0x99a, 0.5));
@@ -2005,10 +2221,47 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
           }
         } else {
           chito.position.set(1.55 + sprint * 0.3, Math.abs(Math.sin(stride)) * 0.16, Math.sin(t * 2.6) * weave);
-          chito.rotation.z = Math.sin(stride) * 0.08 - 0.1;
+          chito.rotation.z = Math.sin(stride) * 0.08 - 0.12;
+          // Squash into the landing, stretch through the leap, and every
+          // few seconds a glance back over the shoulder at the problem.
+          const crouch = Math.max(0, -Math.sin(stride * 2)) * 0.08;
+          chito.scale.set(0.85 * (1 + crouch * 0.5), 0.85 * (1 - crouch), 0.85);
+          const glance = Math.max(0, Math.sin(t * 0.55) - 0.94) / 0.06;
+          chito.rotation.y = Math.PI / 2 + 0.15 - glance * 1.0;
+          if (Math.sin(stride) * Math.sin(lastChitoStep) < 0) footPuff(chito.position.x - 0.1, chito.position.z, 0.05);
+          lastChitoStep = stride;
         }
         yuuriRun(-0.6 - gapNow * 3.4 + lunge * 0.9);
         yuuri.position.z = -0.3 + Math.sin(t * 2.6 + 1.2) * weave * 0.7;
+
+        // Under the sea, running becomes swimming: both of them prone,
+        // kicking, trailing bubbles, the ride sinking gently with them.
+        if (swim > 0.01) {
+          const bob = Math.sin(t * 2.1);
+          chito.position.y = chito.position.y * (1 - swim) + (0.52 + bob * 0.06) * swim;
+          chito.rotation.z = chito.rotation.z * (1 - swim) + (0.95 + Math.sin(t * 3.4) * 0.22) * swim * -1;
+          yuuri.position.y = yuuri.position.y * (1 - swim) + (0.6 + Math.sin(t * 2.1 + 1) * 0.1) * swim;
+          yuuri.rotation.z = yuuri.rotation.z * (1 - swim) + (0.85 + Math.sin(t * 2.7 + 0.5) * 0.28) * swim * -1;
+          if (riding) krad.position.y = krad.position.y * (1 - swim) + (0.15 + bob * 0.05) * swim;
+          if (Math.random() < rawDt * 8) {
+            const from = Math.random() < 0.5 ? chito : yuuri;
+            const bubble = new THREE.Mesh(
+              new THREE.SphereGeometry(0.025 + Math.random() * 0.02, 5, 4),
+              new THREE.MeshStandardMaterial({ color: 0xcfeaf5, transparent: true, opacity: 0.6, roughness: 0.3 }),
+            );
+            bubble.position.set(from.position.x + 0.2, from.position.y + 0.2, from.position.z);
+            world.add(bubble);
+            spawn((bdt) => {
+              bubble.position.y += 0.8 * bdt;
+              bubble.position.x += Math.sin(bubble.position.y * 8) * 0.1 * bdt;
+              if (bubble.position.y > 1.5) {
+                world.remove(bubble);
+                return false;
+              }
+              return true;
+            });
+          }
+        }
       }
 
       if (mode.kind === "finale") {
@@ -2018,12 +2271,12 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
         yuuriRun(-4 + closeness * 4.6);
         yuuri.scale.setScalar(2.6 + closeness * 0.5);
         quake = Math.max(quake, closeness * 0.05);
-        // Chito and the ride pull in next to the tank.
-        if (tank) {
-          tank.position.x += (3.4 - tank.position.x) * rawDt * 2;
-          krad.position.x += (2.5 - krad.position.x) * rawDt * 2;
-          chito.position.set(krad.position.x, 0.36, krad.position.z);
-        }
+        // The ride pulls over hard right and swings side-on, so the gun
+        // on its tail faces down the road at what is coming.
+        krad.position.x += (2.5 - krad.position.x) * rawDt * 2;
+        krad.position.y = 0;
+        chito.position.set(krad.position.x, 0.36, krad.position.z);
+        chito.rotation.z = -0.06;
       }
 
       if (mode.kind === "film") {

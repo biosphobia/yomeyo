@@ -15,8 +15,8 @@ import { toast } from "./toast.js";
  * Phase 1 is every single hiragana with a sound of its own, on foot.
  * Phase 2 is whole words — Chito has found the kettenkrad, and typing a
  * word buys the fuel, so to speak. Phase 3 is a short mixed sprint on a
- * slightly meaner clock. Survive all three and the reward is a tank, ten
- * seconds, and one shot.
+ * slightly meaner clock. Survive all three and the kettenkrad's own gun
+ * gets ten seconds and one shot.
  *
  * Four lives across the whole thing. The chase on the stage is the health
  * bar; the stage also keeps itself interesting with procedural events the
@@ -31,7 +31,7 @@ const CLOCK = {
   finalKana: 6,
   finalWord: 8.5,
 };
-/** Seconds to fire the tank at the end. */
+/** Seconds to fire the mounted gun at the end. */
 const FINALE_SECONDS = 10;
 const REWARD = 300;
 
@@ -352,7 +352,7 @@ export async function runHiraganaExam(main: HTMLElement, onExit: () => void): Pr
     onExit();
   });
 
-  // ---------------- the tank, and the endings ----------------
+  // ---------------- the gun, and the endings ----------------
 
   /**
    * All questions survived: Yuuri makes her final approach, and the only
