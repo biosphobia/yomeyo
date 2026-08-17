@@ -6120,7 +6120,8 @@ button.gram-swap-line:hover {
   transform: none;
 }
 
-/* The muzzle flash, and nothing else, at full white. */
+/* Light over the frame. How much is the stage's call per moment: a soft
+   glow for ordinary destruction, bright only for the gun itself. */
 .exam-flash {
   position: absolute;
   inset: 0;
@@ -6128,11 +6129,10 @@ button.gram-swap-line:hover {
   background: #fff;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.15s ease-out;
+  transition: opacity 0.28s ease-out;
 }
 
 .exam-flash.on {
-  opacity: 0.9;
   transition: none;
 }
 

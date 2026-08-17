@@ -109,7 +109,9 @@ const DREAM_CAPTIONS: Caption[] = [
   { at: 3.4, text: "CHITO: The one where you're huge?" },
   { at: 5.6, text: "YUURI: I almost caught you this time." },
   { at: 7.8, text: "CHITO: Go back to sleep, Yuu." },
-  { at: 10.0, text: "— exam passed —" },
+  { at: 10.4, text: "CHITO: ...I thought that would really be..." },
+  { at: 12.9, text: "YUURI: our last tour..." },
+  { at: 15.8, text: "— exam passed —" },
 ];
 
 export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
@@ -145,9 +147,15 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
   const playCaptions = (captions: Caption[]): void => {
     for (const line of captions) later(() => say(line.text), line.at * 1000);
   };
-  const flash = (): void => {
+  /** A lightening of the frame, not a whiteout. The default is a glow a
+   * destruction event earns; only the gun's own muzzle goes bright. */
+  const flash = (strength = 0.22): void => {
+    flashEl.style.opacity = String(strength);
     flashEl.classList.add("on");
-    later(() => flashEl.classList.remove("on"), 180);
+    later(() => {
+      flashEl.classList.remove("on");
+      flashEl.style.opacity = "0";
+    }, 160);
   };
 
   // ---------------- sounds of the world ----------------
@@ -337,7 +345,7 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
     },
     fire: () =>
       new Promise<void>((resolve) => {
-        flash();
+        flash(0.8);
         boom();
         engine.stop();
         if (three) {
@@ -346,7 +354,7 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
         }
         playCaptions(VICTORY_CAPTIONS);
         later(() => playCaptions(DREAM_CAPTIONS), 6500);
-        later(resolve, 17500);
+        later(resolve, 23500);
       }),
     caught: () =>
       new Promise<void>((resolve) => {
@@ -1961,6 +1969,28 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
         cap.position.y += 0.55;
         scene.add(cap);
       }
+      // The kettenkrad, parked where they left it: real, theirs, and at
+      // last the same size as everything else. The dream's gun is gone.
+      if (kradGun) {
+        krad.remove(kradGun);
+        kradGun = null;
+      }
+      krad.visible = true;
+      krad.position.set(-2.1, 0, -0.7);
+      krad.rotation.set(0, 0.55, 0);
+      const kradSnow = new THREE.Mesh(new THREE.SphereGeometry(0.22, 7, 5), matte(0xe8eef4, 1));
+      kradSnow.scale.set(1.5, 0.4, 1);
+      kradSnow.position.set(-0.05, 0.42, 0);
+      krad.add(kradSnow);
+      // The stars the camera is going to look up into.
+      for (let i = 0; i < 44; i++) {
+        const star = new THREE.Mesh(
+          new THREE.SphereGeometry(0.02 + Math.random() * 0.015, 4, 4),
+          new THREE.MeshBasicMaterial({ color: 0xf2f6ff }),
+        );
+        star.position.set(-7 + Math.random() * 14, 3.5 + Math.random() * 5.5, -4.5 - Math.random() * 2);
+        scene.add(star);
+      }
       const bags: any[] = [];
       for (const [bx, color] of [
         [-0.7, 0x6a4a8a],
@@ -2040,7 +2070,7 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
           if (shell.position.x <= yuuri.position.x + 0.3) {
             scene.remove(shell);
             boom();
-            flash();
+            flash(0.5);
             quake = 0.2;
             explode(yuuri.position.x, 1.4, 0, 0x4a4256, 18);
             return false;
@@ -2051,7 +2081,37 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
           buildDream();
           playCaptions(DREAM_CAPTIONS);
         }, 7000);
-        later(done, 19000);
+        // The shooting star crosses on Yuuri's line, while the camera is
+        // already up among the stars.
+        later(() => {
+          if (stopped) return;
+          const star = new THREE.Group();
+          const head = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 5), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+          star.add(head);
+          const trail = new THREE.Mesh(
+            new THREE.BoxGeometry(0.9, 0.02, 0.02),
+            new THREE.MeshBasicMaterial({ color: 0xdfe8ff, transparent: true, opacity: 0.7 }),
+          );
+          trail.position.x = 0.5;
+          star.add(trail);
+          star.position.set(4.2, 8.2, -5);
+          star.rotation.z = -0.45;
+          scene.add(star);
+          sTone(0.8, 0.06, 2400, 900, "sine");
+          let life = 0.9;
+          spawn((dt) => {
+            life -= dt;
+            star.position.x -= 7.5 * dt;
+            star.position.y -= 3.6 * dt;
+            (trail.material as any).opacity = Math.max(0, life * 0.8);
+            if (life <= 0) {
+              scene.remove(star);
+              return false;
+            }
+            return true;
+          });
+        }, 7000 + 12700);
+        later(done, 24500);
       },
       playCaught(script, done) {
         mode = { kind: "film", name: `caught-${script.name}`, start: performance.now(), done };
@@ -2342,13 +2402,25 @@ export async function mountExamStage(stage: HTMLElement): Promise<ExamStage> {
             };
             situp(yuuri, 0.8);
             situp(chito, 2.6);
-            // Chito lies back down on her last line.
+            // Yuuri settles back down alongside, before the stars.
+            if (dreamTime > 9.0) {
+              const down = Math.min(1, (dreamTime - 9.0) / 1.6);
+              yuuri.rotation.x = -0.25 - down * 1.1;
+              yuuri.position.y = 0.52 - down * 0.18;
+            }
+            // Chito lies back down, and from there they are both looking
+            // up — so the camera goes where they are looking: the stars.
             if (dreamTime > 8.2) {
               const down = Math.min(1, (dreamTime - 8.2) / 1.4);
               chito.rotation.x = -0.25 - down * 1.1;
               chito.position.y = 0.52 - down * 0.18;
             }
-            lookAngle(0.2, [0, 1.4, 4.6], [0, 0.5, 0.3]);
+            if (dreamTime > 10.8) {
+              const up = Math.min(1, (dreamTime - 10.8) / 2.2);
+              lookAngle(0.2, [0, 1.4 + up * 0.5, 4.6], [0, 0.5 + up * 5.5, 0.3 - up * 3.5]);
+            } else {
+              lookAngle(0.2, [0, 1.4, 4.6], [0, 0.5, 0.3]);
+            }
           }
         } else if (name.startsWith("caught-")) {
           const which = name.slice(7);
