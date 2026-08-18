@@ -241,17 +241,20 @@ export function buildQueue(
   const reviewRoom = Math.max(0, config.maxReviewsPerDay - reviewed);
   const newRoom = Math.max(0, config.newPerDay - introduced);
 
-  const ordered = config.newCardOrder === "random" ? shuffle(fresh, now) : [...fresh];
+  // New cards arrive in the order the words did — chronological, or the
+  // order somebody dragged the deck into — unless the deck asked for
+  // random. (The sort used to run over the shuffle too, which quietly
+  // turned "random" back into "added".)
+  const ordered =
+    config.newCardOrder === "random"
+      ? shuffle(fresh, now)
+      : [...fresh].sort((a, b) => orderOf(a) - orderOf(b));
 
   const queue = [
     // Learning cards are never limited: they are already in flight.
     ...learning.sort((a, b) => a.due - b.due),
     ...byDueThenRandom(due, now, config.rolloverHour).slice(0, reviewRoom),
-    ...ordered
-      // The order the words arrived in, unless the deck has been
-      // rearranged, in which case the order somebody chose.
-      .sort((a, b) => orderOf(a) - orderOf(b))
-      .slice(0, config.newIgnoresReviewLimit ? newRoom : Math.min(newRoom, Math.max(0, reviewRoom))),
+    ...ordered.slice(0, config.newIgnoresReviewLimit ? newRoom : Math.min(newRoom, Math.max(0, reviewRoom))),
   ];
   if (queue.length > 0) return queue;
 
@@ -274,14 +277,16 @@ export function buildQueue(
 const LEARN_AHEAD_MS = 20 * 60 * 1000;
 
 /**
- * Anki's default review order: due date, then random.
+ * The review order: due date, then random — freshly random on every build.
  *
  * Sorting purely by the timestamp brings the cards back in the order they
  * were answered in, sitting after sitting — the same words in the same
  * run, which becomes its own cue. Cards owed from the same DAY are
- * therefore shuffled among themselves, while an older day still comes
- * first. The shuffle is drawn from the card and the date, so a redraw
- * mid-session does not reshuffle the queue under the reader.
+ * therefore shuffled among themselves, while an older day's backlog still
+ * comes first. The shuffle is a fresh draw each time the queue is built:
+ * within a sitting the queue is consumed in memory and never reshuffles
+ * under the reader, but leaving and coming back deals a new order, so
+ * even a second pass in one evening is not the same run twice.
  *
  * A "day" here is the deck's own day, beginning at its rollover hour, so a
  * card answered at one in the morning belongs to the session it was part of.
@@ -290,7 +295,7 @@ function byDueThenRandom(cards: Card[], now: number, rolloverHour: number): Card
   const day = (at: number): number => dayStart(at, rolloverHour);
   const today = day(now);
   const rank = new Map<string, number>();
-  for (const card of cards) rank.set(card.id, roll(seedOf(`${card.id}|${today}`)));
+  for (const card of cards) rank.set(card.id, Math.random());
   return [...cards].sort((a, b) => {
     // Everything owed from before today is one bucket, oldest day first.
     const dayA = Math.min(day(a.due), today);

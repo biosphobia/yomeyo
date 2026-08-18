@@ -168,11 +168,29 @@ describe("review order, the way Anki does it", () => {
     expect(new Set(queue.map((c) => c.id)).size).toBe(20);
   });
 
-  it("keeps the same order when the queue is rebuilt mid-session", () => {
-    const cards = Array.from({ length: 15 }, (_, i) => mature(`r${i}`, 10, { due: T0 - i * 1000 }));
+  it("deals a fresh order every time the queue is built", () => {
+    // Within a sitting the queue is consumed in memory and never rebuilt
+    // under the reader; a NEW sitting must not replay the last one. Twenty
+    // cards have 20! orderings, so two identical deals would take a
+    // broken shuffle, not bad luck.
+    const cards = Array.from({ length: 20 }, (_, i) => mature(`r${i}`, 10, { due: T0 - i * 1000 }));
     const first = buildQueue(cards, T0, config).map((c) => c.id);
-    const second = buildQueue([...cards].reverse(), T0 + 5000, config).map((c) => c.id);
-    expect(second).toEqual(first);
+    const second = buildQueue(cards, T0, config).map((c) => c.id);
+    expect(second).not.toEqual(first);
+    // Same cards both times, though: a reshuffle must lose nothing.
+    expect([...second].sort()).toEqual([...first].sort());
+  });
+
+  it("shows new cards in the order the words arrived", () => {
+    // Chronological is the deck's reading order: the words as they were
+    // met. The timestamps here are deliberately scrambled against the ids.
+    const fresh = [
+      card("third", { createdAt: T0 - 1000 }),
+      card("first", { createdAt: T0 - 9000 }),
+      card("second", { createdAt: T0 - 5000 }),
+    ].map((c) => ({ ...c, due: T0 - 1 }));
+    const queue = buildQueue(fresh, T0, { ...DEFAULT_DECK_CONFIG, newPerDay: 10 });
+    expect(queue.map((c) => c.id)).toEqual(["first", "second", "third"]);
   });
 
   it("pulls a learning card forward when nothing else is left", () => {
