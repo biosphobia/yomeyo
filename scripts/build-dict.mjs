@@ -164,10 +164,18 @@ export function convertJmdict(raw) {
     }
 
     if (headwords.length === 0) {
-      // Kana-only word (ありがとう, これ, …)
+      // Kana-only word (ありがとう, これ, …), or one whose every kanji form
+      // is tagged rare/outdated (或る, 塵も積もれば山となる). The kana
+      // leads, since kana is how such a word is usually met — but when a
+      // rare spelling is the ONLY spelling there is, it ships too, keyed
+      // under the kanji, so a tap on the written form still resolves.
+      // Dropping it entirely was how whole proverbs went missing.
       const kana = kanaForms[0];
       const freq = kana.common ? commonRank++ : 1_000_000 + rareRank++;
       entries.push([kana.text, kana.text, posIdx, trimmedGlosses, freq]);
+      if (kanjiForms.length > 0) {
+        entries.push([kanjiForms[0].text, readingFor(kanjiForms[0].text), posIdx, trimmedGlosses, 1_000_000 + rareRank++]);
+      }
       continue;
     }
 

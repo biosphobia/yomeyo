@@ -167,7 +167,9 @@ describe("JMdict conversion", () => {
   it("uses the kana form for kana-only and rare-kanji-only words", () => {
     expect(byTerm("ありがとう")[0]?.reading).toBe("ありがとう");
     expect(byTerm("ある")[0]?.glosses[0]).toBe("a certain; some");
-    expect(byTerm("或る")).toHaveLength(0);
+    // The rare spelling ships too, keyed under the kanji, so a tap on the
+    // written form still resolves — it just never outranks the kana.
+    expect(byTerm("或る")[0]?.reading).toBe("ある");
   });
 
   it("drops non-English glosses", () => {
@@ -175,8 +177,11 @@ describe("JMdict conversion", () => {
   });
 
   it("ranks common words ahead of uncommon ones", () => {
+    // Everything in the fixture is common — except the rare-spelling twin
+    // (或る), which ships on purpose and must rank as the rarity it is.
     for (const entry of entries) {
-      expect(entry.freq).toBeLessThan(1_000_000);
+      if (entry.term === "或る") expect(entry.freq).toBeGreaterThanOrEqual(1_000_000);
+      else expect(entry.freq).toBeLessThan(1_000_000);
     }
   });
 
@@ -185,6 +190,21 @@ describe("JMdict conversion", () => {
     const matches = lookup(dict, "食べたい");
     expect(matches[0].term).toBe("食べる");
     expect(matches[0].reasons).toContain("-tai");
+  });
+});
+
+describe("words whose only kanji spelling is tagged rare", () => {
+  it("keeps the written form instead of dropping it", () => {
+    // 塵も積もれば山となる is only ever written with 塵 — which JMdict tags
+    // rK. Skipping rare forms is right when a common spelling exists and
+    // wrong when the rare one is the only spelling there is.
+    const word = makeWord("塵も積もれば山となる", "ちりもつもればやまとなる", ["exp"], "many a little makes a mickle");
+    word.kanji[0].common = false;
+    word.kanji[0].tags = ["rK"];
+    const dict = convertJmdict({ words: [word] });
+    const terms = dict.entries.map((entry: [string, string, number[], string[], number]) => entry[0]);
+    expect(terms).toContain("塵も積もれば山となる");
+    expect(terms).toContain("ちりもつもればやまとなる");
   });
 });
 

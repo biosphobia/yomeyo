@@ -323,6 +323,12 @@ jobs:
     if: >-
       needs.build.outputs.pages_ready == 'true' &&
       github.ref_name == github.event.repository.default_branch
+    # Best-effort: the real site lives on the cPanel host, published by the
+    # build job. When Pages is off or misconfigured this job fails in a
+    # second — and a run that is red EVERY time is a run nobody reads, which
+    # is how a week of genuinely broken builds went unnoticed. The build
+    # job's own red stays load-bearing; this one must not drown it out.
+    continue-on-error: true
     runs-on: ubuntu-latest
     environment:
       name: github-pages
