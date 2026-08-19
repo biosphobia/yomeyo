@@ -142,16 +142,23 @@ describe("interval fuzz, the way Anki does it", () => {
 describe("review order, the way Anki does it", () => {
   const config = { ...DEFAULT_DECK_CONFIG, newPerDay: 0 };
 
-  it("shows an older day before a newer one", () => {
+  it("pools every due card into one shuffle, backlog included", () => {
+    // Bucketing overdue cards by their due day sounded fair and read as
+    // sorted: interval fuzz gives nearly every card its own day, so the
+    // buckets were all of size one. Random means random — over many deals,
+    // even the freshest card leads sometimes.
     const cards = [
       mature("today", 10, { due: T0 - 60_000 }),
       mature("yesterday", 10, { due: T0 - DAY }),
       mature("last week", 10, { due: T0 - 7 * DAY }),
     ];
-    const queue = buildQueue(cards, T0, config);
-    // Everything owed from before today is one bucket; within it, oldest
-    // day first — and today's card comes after all of them.
-    expect(queue[queue.length - 1].id).toBe("today");
+    const leaders = new Set<string>();
+    for (let deal = 0; deal < 60; deal++) {
+      const queue = buildQueue(cards, T0, config);
+      expect(queue).toHaveLength(3);
+      leaders.add(queue[0].id);
+    }
+    expect(leaders.size).toBe(3);
   });
 
   it("does not simply replay the order cards were answered in", () => {

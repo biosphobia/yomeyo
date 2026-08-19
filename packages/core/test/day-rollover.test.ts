@@ -70,13 +70,10 @@ describe("the review queue's idea of a day", () => {
     };
   }
 
-  it("treats last night's late cards as part of the same day", () => {
-    // Answered at 23:00 and at 01:00: one calendar day apart, one study day
-    // together — so neither is sorted ahead of the other as "older". Same
-    // bucket means the tie is broken by the shuffle, not by the clock: over
-    // enough deals, each card leads sometimes. (This assertion once pinned
-    // the two builds to the SAME order, back when the shuffle was seeded by
-    // the day; the queue now deals fresh every build, on purpose.)
+  it("never lets the clock decide who comes first", () => {
+    // Answered at 23:00 and at 01:00: with everything due pooled into one
+    // shuffle, neither is sorted ahead of the other as "older" — over
+    // enough deals, each card leads sometimes.
     const lateLastNight = due("late", at(2026, 5, 4, 23, 0));
     const smallHours = due("small-hours", at(2026, 5, 5, 1, 0));
     const now = at(2026, 5, 5, 2, 0);
@@ -91,10 +88,10 @@ describe("the review queue's idea of a day", () => {
     expect(leaders.size).toBe(2);
   });
 
-  it("still puts a genuinely older day first", () => {
+  it("loses nothing to the shuffle, however old the backlog", () => {
     const yesterday = due("yesterday", at(2026, 5, 3, 20, 0));
     const tonight = due("tonight", at(2026, 5, 5, 1, 0));
     const order = buildQueue([tonight, yesterday], at(2026, 5, 5, 2, 0), config).map((c) => c.id);
-    expect(order).toEqual(["yesterday", "tonight"]);
+    expect([...order].sort()).toEqual(["tonight", "yesterday"]);
   });
 });

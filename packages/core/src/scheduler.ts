@@ -1,4 +1,4 @@
-import { DEFAULT_DECK_CONFIG, dayStart, type DeckConfig } from "./deck-config.js";
+import { DEFAULT_DECK_CONFIG, type DeckConfig } from "./deck-config.js";
 import { orderOf } from "./deck-library.js";
 import { RATING, intervalFor, nextMemoryState, type FsrsRating, type MemoryState } from "./fsrs.js";
 import { DEFAULT_SRS_CONFIG, gradeCard as gradeSm2 } from "./srs.js";
@@ -251,9 +251,11 @@ export function buildQueue(
       : [...fresh].sort((a, b) => orderOf(a) - orderOf(b));
 
   const queue = [
-    // Learning cards are never limited: they are already in flight.
-    ...learning.sort((a, b) => a.due - b.due),
-    ...byDueThenRandom(due, now, config.rolloverHour).slice(0, reviewRoom),
+    // Learning cards are never limited: they are already in flight. They
+    // shuffle like every other seen card — their step timers have already
+    // expired, so "which first" is noise, and noise should be random.
+    ...shuffleFresh(learning),
+    ...shuffleFresh(due).slice(0, reviewRoom),
     ...ordered.slice(0, config.newIgnoresReviewLimit ? newRoom : Math.min(newRoom, Math.max(0, reviewRoom))),
   ];
   if (queue.length > 0) return queue;
@@ -277,32 +279,27 @@ export function buildQueue(
 const LEARN_AHEAD_MS = 20 * 60 * 1000;
 
 /**
- * The review order: due date, then random — freshly random on every build.
+ * The order seen cards come back in: random, fully, freshly on every build.
  *
- * Sorting purely by the timestamp brings the cards back in the order they
- * were answered in, sitting after sitting — the same words in the same
- * run, which becomes its own cue. Cards owed from the same DAY are
- * therefore shuffled among themselves, while an older day's backlog still
- * comes first. The shuffle is a fresh draw each time the queue is built:
- * within a sitting the queue is consumed in memory and never reshuffles
- * under the reader, but leaving and coming back deals a new order, so
- * even a second pass in one evening is not the same run twice.
+ * Anything gentler turns out not to feel random at all. Sorting by the due
+ * timestamp replays the order the cards were answered in, sitting after
+ * sitting, until the sequence itself becomes the cue. Bucketing by due DAY
+ * — the previous design — fared no better in practice: interval fuzz
+ * spreads a deck's cards across distinct days on purpose, so nearly every
+ * overdue card sat alone in its own bucket and the "random within a day"
+ * tie-break almost never fired. The queue came back sorted, and it showed.
  *
- * A "day" here is the deck's own day, beginning at its rollover hour, so a
- * card answered at one in the morning belongs to the session it was part of.
+ * So: one pool, one honest shuffle. Within a sitting the queue is consumed
+ * in memory and never reshuffles under the reader; leaving and coming back
+ * deals a new order.
  */
-function byDueThenRandom(cards: Card[], now: number, rolloverHour: number): Card[] {
-  const day = (at: number): number => dayStart(at, rolloverHour);
-  const today = day(now);
-  const rank = new Map<string, number>();
-  for (const card of cards) rank.set(card.id, Math.random());
-  return [...cards].sort((a, b) => {
-    // Everything owed from before today is one bucket, oldest day first.
-    const dayA = Math.min(day(a.due), today);
-    const dayB = Math.min(day(b.due), today);
-    if (dayA !== dayB) return dayA - dayB;
-    return (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0);
-  });
+function shuffleFresh(cards: Card[]): Card[] {
+  const out = [...cards];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
 }
 
 /** Deterministic shuffle, so the same day gives the same order. */
