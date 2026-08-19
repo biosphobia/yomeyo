@@ -157,11 +157,14 @@ describe("JMdict conversion", () => {
     expect(taberu.glosses[0]).toBe("to eat; to live on");
   });
 
-  it("keeps common alternate spellings with the correct reading each", () => {
+  it("keeps every alternate spelling with the correct reading each", () => {
     expect(byTerm("早い")[0]?.reading).toBe("はやい");
     expect(byTerm("速い")[0]?.reading).toBe("はやい");
-    // the rK spelling is dropped
-    expect(byTerm("疾い")).toHaveLength(0);
+    // The rK spelling ships too — a reader taps whatever spelling their
+    // page used — it is just ranked as the rarity it is.
+    const rare = byTerm("疾い")[0];
+    expect(rare?.reading).toBe("はやい");
+    expect(rare?.freq).toBeGreaterThanOrEqual(1_000_000);
   });
 
   it("uses the kana form for kana-only and rare-kanji-only words", () => {
@@ -177,10 +180,11 @@ describe("JMdict conversion", () => {
   });
 
   it("ranks common words ahead of uncommon ones", () => {
-    // Everything in the fixture is common — except the rare-spelling twin
-    // (或る), which ships on purpose and must rank as the rarity it is.
+    // Everything in the fixture is common — except the rare spellings
+    // (或る, 疾い), which ship on purpose and rank as the rarity they are.
+    const rareSpellings = new Set(["或る", "疾い"]);
     for (const entry of entries) {
-      if (entry.term === "或る") expect(entry.freq).toBeGreaterThanOrEqual(1_000_000);
+      if (rareSpellings.has(entry.term)) expect(entry.freq).toBeGreaterThanOrEqual(1_000_000);
       else expect(entry.freq).toBeLessThan(1_000_000);
     }
   });

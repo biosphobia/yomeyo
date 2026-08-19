@@ -152,15 +152,19 @@ export function convertJmdict(raw) {
       return (match ?? kanaForms[0]).text;
     };
 
-    const usableKanji = kanjiForms.filter((k) => !k.tags?.includes("rK") && !k.tags?.includes("oK"));
+    const rareTagged = (k) => k.tags?.includes("rK") || k.tags?.includes("oK");
+    const usableKanji = kanjiForms.filter((k) => !rareTagged(k));
     const headwords = [];
     if (usableKanji.length > 0) {
-      // Primary kanji form, plus any other *common* spellings so a tap on
-      // either 早い or 速い resolves.
+      // The primary kanji form, and then EVERY other spelling — common,
+      // uncommon, rare. Only common alternates used to ship, which meant a
+      // tap on 疾い found nothing and 塵も積もれば山となる (an uncommon
+      // alternate of its own mixed-kana primary) did not exist. A reader
+      // taps whatever spelling the page in front of them used; the
+      // dictionary's opinion of that spelling is what freq rank is for.
       headwords.push(usableKanji[0]);
-      for (const alt of usableKanji.slice(1)) {
-        if (alt.common) headwords.push(alt);
-      }
+      for (const alt of usableKanji.slice(1)) headwords.push(alt);
+      for (const rare of kanjiForms.filter(rareTagged).slice(0, 3)) headwords.push(rare);
     }
 
     if (headwords.length === 0) {
@@ -180,7 +184,9 @@ export function convertJmdict(raw) {
     }
 
     for (const form of headwords) {
-      const isCommon = form.common || kanaForms.some((k) => k.common);
+      // A rare-tagged spelling ranks rare no matter how common the word:
+      // 疾い must never outrank 速い just because はやい is everywhere.
+      const isCommon = !rareTagged(form) && (form.common || kanaForms.some((k) => k.common));
       const freq = isCommon ? commonRank++ : 1_000_000 + rareRank++;
       entries.push([form.text, readingFor(form.text), posIdx, trimmedGlosses, freq]);
     }
