@@ -279,8 +279,13 @@ function drawCard(session: Session): Card | undefined {
     if (at >= 0) return queue.splice(at, 1)[0];
   }
 
+  // Only a learning step mid-cooldown is "not ready": review cards in the
+  // queue are today's batch by definition, whatever o'clock their stamp
+  // says, and new cards are ready the moment they exist.
   const now = Date.now();
-  const ready = queue.filter((c) => c.due <= now);
+  const cooling = (c: Card): boolean =>
+    (c.state === "learning" || c.state === "relearning") && c.due > now;
+  const ready = queue.filter((c) => !cooling(c));
   if (ready.length === 0) {
     // Everything left is a learning step still cooling down: take the one
     // that comes ready soonest, exactly like the learn-ahead rule.

@@ -95,3 +95,43 @@ describe("the review queue's idea of a day", () => {
     expect([...order].sort()).toEqual(["tonight", "yesterday"]);
   });
 });
+
+describe("the day's whole batch, at day start", () => {
+  const config = { ...DEFAULT_DECK_CONFIG, newPerDay: 0, rolloverHour: 4 };
+  const review = (id: string, when: number): Card => ({
+    ...createCard({ term: id, reading: id, glosses: [id] }, when - 10 * DAY),
+    id,
+    state: "review",
+    stability: 10,
+    difficulty: 5,
+    reps: 4,
+    lastReview: when - 10 * DAY,
+    intervalDays: 10,
+    due: when,
+  });
+
+  it("hands over cards due later today, not at the o'clock they were answered", () => {
+    // Reviewed at 21:00 yesterday, due 21:00 tonight: at eight in the
+    // morning that card is TODAY'S work. Making it wait for the evening is
+    // the drip feed — reviews trickling in all day, each at the hour it
+    // was answered the time before.
+    const tonight = review("tonight", at(2026, 5, 5, 21, 0));
+    const smallHoursTomorrow = review("small-hours", at(2026, 5, 6, 1, 0)); // before 4am: still today
+    const trulyTomorrow = review("tomorrow", at(2026, 5, 6, 9, 0));
+    const queue = buildQueue([tonight, smallHoursTomorrow, trulyTomorrow], at(2026, 5, 5, 8, 0), config);
+    expect(queue.map((c) => c.id).sort()).toEqual(["small-hours", "tonight"]);
+  });
+
+  it("keeps learning steps on the clock, not the calendar", () => {
+    // A 5-minute step due this afternoon must NOT be handed over at 8am —
+    // minutes-level cards are due when their timer runs out.
+    const step: Card = {
+      ...createCard({ term: "step", reading: "step", glosses: ["step"] }, at(2026, 5, 5, 7, 0)),
+      id: "step",
+      state: "learning",
+      stepIndex: 1,
+      due: at(2026, 5, 5, 15, 0),
+    };
+    expect(buildQueue([step], at(2026, 5, 5, 8, 0), config)).toHaveLength(0);
+  });
+});

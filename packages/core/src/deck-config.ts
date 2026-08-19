@@ -132,6 +132,13 @@ export function dayStart(at: number, rolloverHour = DEFAULT_DECK_CONFIG.rollover
   return start <= at ? start : boundary(-1);
 }
 
+/** When the study day containing `at` ends: the next rollover boundary. */
+export function dayEnd(at: number, rolloverHour = DEFAULT_DECK_CONFIG.rolloverHour): number {
+  const hour = Math.min(23, Math.max(0, Math.round(rolloverHour)));
+  const start = new Date(dayStart(at, rolloverHour));
+  return new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1, hour, 0, 0, 0).getTime();
+}
+
 /** The study day containing `at`, as YYYY-MM-DD of the day it belongs to. */
 export function dayKey(at: number, rolloverHour = DEFAULT_DECK_CONFIG.rolloverHour): string {
   const d = new Date(dayStart(at, rolloverHour));

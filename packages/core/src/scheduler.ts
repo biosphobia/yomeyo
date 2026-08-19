@@ -1,4 +1,4 @@
-import { DEFAULT_DECK_CONFIG, type DeckConfig } from "./deck-config.js";
+import { DEFAULT_DECK_CONFIG, dayEnd, type DeckConfig } from "./deck-config.js";
 import { orderOf } from "./deck-library.js";
 import { RATING, intervalFor, nextMemoryState, type FsrsRating, type MemoryState } from "./fsrs.js";
 import { DEFAULT_SRS_CONFIG, gradeCard as gradeSm2 } from "./srs.js";
@@ -232,7 +232,19 @@ export function buildQueue(
 
   const alive = cards.filter((c) => !c.deleted);
   const suspended = (c: Card) => c.leech && config.leechAction === "suspend";
-  const live = alive.filter((c) => !suspended(c) && c.due <= now);
+  /*
+   * What "due" means depends on the card's granularity, exactly as in
+   * Anki. Learning steps are minutes: they are due when their timer has
+   * actually run out. Review cards are days: everything due anywhere
+   * before the next rollover is today's batch, all of it, at day start.
+   * Comparing reviews against the raw clock instead made each card
+   * reappear at the time of day it was answered — reviews trickling in
+   * all day long, a drip feed instead of a day's stack.
+   */
+  const endOfDay = dayEnd(now, config.rolloverHour);
+  const live = alive.filter(
+    (c) => !suspended(c) && (c.state === "review" ? c.due < endOfDay : c.due <= now),
+  );
 
   const learning = live.filter((c) => c.state === "learning" || c.state === "relearning");
   const due = live.filter((c) => c.state === "review");
