@@ -216,6 +216,10 @@ interface Session {
   refreshStats: (remaining: number) => Promise<void>;
   /** Answers given this sitting, newest last. Undo pops from the end. */
   history: Answered[];
+  /** The card on screen last, so the next draw avoids repeating it. */
+  lastId?: string;
+  /** Set by undo: the next card must be this one, not a random draw. */
+  forceNextId?: string;
 }
 
 /** How many answers back you can go. Anki's own limit is about this deep. */
@@ -245,13 +249,56 @@ async function undoLast(session: Session): Promise<void> {
   const at = session.queue.findIndex((c) => c.id === last.before.id);
   if (at >= 0) session.queue.splice(at, 1);
   session.queue.unshift(last.before);
+  // The undone card comes back itself — the reason you undid it is that
+  // you meant to answer it differently, not to be dealt something else.
+  session.forceNextId = last.before.id;
   await session.refreshStats(session.queue.length);
   showNext(session);
 }
 
+/**
+ * Draw the next card: at random, at the moment it is needed.
+ *
+ * A queue shuffled once and then consumed in order is random exactly once.
+ * The moment a learning card rejoins the back, the sitting settles into a
+ * loop, and a loop is a sequence, and a sequence gets memorised — "after
+ * this one comes the fish" is not a memory of the fish. So the draw
+ * happens per card, from whatever is currently ready, with three rules:
+ * the card just answered is not drawn again while anything else waits;
+ * undo brings back exactly the card that was undone; and a draw that
+ * lands on a new card takes the EARLIEST new card, so introductions stay
+ * chronological even though everything else is dice.
+ */
+function drawCard(session: Session): Card | undefined {
+  const { queue } = session;
+  if (queue.length === 0) return undefined;
+
+  if (session.forceNextId) {
+    const at = queue.findIndex((c) => c.id === session.forceNextId);
+    session.forceNextId = undefined;
+    if (at >= 0) return queue.splice(at, 1)[0];
+  }
+
+  const now = Date.now();
+  const ready = queue.filter((c) => c.due <= now);
+  if (ready.length === 0) {
+    // Everything left is a learning step still cooling down: take the one
+    // that comes ready soonest, exactly like the learn-ahead rule.
+    const soonest = queue.reduce((a, b) => (a.due <= b.due ? a : b));
+    return queue.splice(queue.indexOf(soonest), 1)[0];
+  }
+
+  let pool = ready.filter((c) => c.id !== session.lastId);
+  if (pool.length === 0) pool = ready;
+  const drawn = pool[Math.floor(Math.random() * pool.length)];
+  // New cards yield to the front of their own line.
+  const chosen = drawn.state === "new" ? pool.find((c) => c.state === "new")! : drawn;
+  return queue.splice(queue.indexOf(chosen), 1)[0];
+}
+
 function showNext(session: Session): void {
   const { area, queue } = session;
-  const card = queue.shift();
+  const card = drawCard(session);
   if (!card) {
     area.innerHTML = `
       <div class="empty-state">
@@ -267,6 +314,7 @@ function showNext(session: Session): void {
     return;
   }
 
+  session.lastId = card.id;
   const preview = gradePreview(card, Date.now(), session.config);
 
   area.innerHTML = `
