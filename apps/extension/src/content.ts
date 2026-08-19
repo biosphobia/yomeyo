@@ -774,9 +774,14 @@ async function buildEntryRow(match: LookupMatch, entry: DictEntry, sentence: str
 // ---------- resolving a tap into text ----------
 
 interface TapText {
+  /** The text around the tap, stitched across inline elements. */
   text: string;
+  /** The tapped character's index within `text`. */
   offset: number;
+  /** The text node actually tapped, for writing-mode checks. */
   node: Text;
+  /** Map an index in `text` back to the node and offset it lives at. */
+  locate(at: number): { node: Text; offset: number };
 }
 
 /** Resolve a screen point to the character actually under it, or null. */
@@ -829,9 +834,82 @@ function textAtPoint(x: number, y: number): TapText | null {
   for (const at of [offset, offset - 1, offset + 1]) {
     if (at < 0 || at >= content.length) continue;
     if (!isJapaneseChar(content[at])) continue;
-    if (onGlyph(at)) return { text: content, offset: at, node: textNode };
+    if (onGlyph(at)) return flattenAround(textNode, at);
   }
   return null;
+}
+
+/**
+ * The tapped node's text, stitched together with its inline neighbours.
+ *
+ * A word is one run of characters to the reader and any number of DOM nodes
+ * to the page: jisho highlights the searched kana in its own span, readers
+ * put furigana between every base run, translators bold half a word. The
+ * lookup used to see only the tapped node — so on jisho, tapping the ち of
+ * ちぐはぐ offered 血 and 地, because ぐはぐ lived next door. The scan gets
+ * the whole visual run now; furigana (rt/rp) is skipped so readings never
+ * pollute the base text.
+ */
+function flattenAround(tapped: Text, tapOffset: number): TapText {
+  // The run ends where inline layout ends: climb to the nearest block-ish
+  // ancestor, then read every text node under it in order.
+  let container: HTMLElement = tapped.parentElement ?? document.body;
+  for (let hops = 0; hops < 8 && container.parentElement; hops++) {
+    let display = "";
+    try {
+      display = getComputedStyle(container).display;
+    } catch {
+      break;
+    }
+    if (!display.startsWith("inline") && display !== "contents" && display !== "ruby") break;
+    container = container.parentElement;
+  }
+
+  const pieces: Text[] = [];
+  let tappedAt = -1;
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const text = node as Text;
+    if (text.parentElement?.closest("rt,rp,script,style,noscript")) continue;
+    if (text === tapped) tappedAt = pieces.length;
+    pieces.push(text);
+  }
+  if (tappedAt < 0) {
+    // The walker somehow missed the tapped node; fall back to it alone.
+    return { text: tapped.data, offset: tapOffset, node: tapped, locate: (at) => ({ node: tapped, offset: at }) };
+  }
+
+  // A window, not the whole paragraph: enough behind for the longest saying,
+  // enough ahead for the scan, nothing more.
+  let first = tappedAt;
+  let behind = tapOffset;
+  while (first > 0 && behind < 40) behind += pieces[--first].data.length;
+  let last = tappedAt;
+  let ahead = pieces[tappedAt].data.length - tapOffset;
+  while (last < pieces.length - 1 && ahead < 60) ahead += pieces[++last].data.length;
+
+  const kept = pieces.slice(first, last + 1);
+  const starts: number[] = [];
+  let text = "";
+  for (const piece of kept) {
+    starts.push(text.length);
+    text += piece.data;
+  }
+  const offset = starts[tappedAt - first] + tapOffset;
+
+  return {
+    text,
+    offset,
+    node: tapped,
+    locate(at: number) {
+      for (let i = kept.length - 1; i >= 0; i--) {
+        if (at >= starts[i]) {
+          return { node: kept[i], offset: Math.min(at - starts[i], kept[i].data.length) };
+        }
+      }
+      return { node: kept[0], offset: 0 };
+    },
+  };
 }
 
 /** True when the tapped text is laid out vertically (tategaki). */
@@ -885,9 +963,12 @@ async function handleLookupAt(x: number, y: number): Promise<boolean> {
   let anchor: Anchor = { left: x, top: y, right: x, bottom: y, vertical };
   try {
     const range = document.createRange();
-    const from = Math.max(0, Math.min(matches[0].start, tap.node.data.length));
-    range.setStart(tap.node, from);
-    range.setEnd(tap.node, Math.min(from + matches[0].matchLength, tap.node.data.length));
+    // The match's offsets are indices into the stitched text; locate() maps
+    // them back to real nodes, so a word split across spans highlights whole.
+    const from = tap.locate(Math.max(0, matches[0].start));
+    const to = tap.locate(Math.min(tap.text.length, matches[0].start + matches[0].matchLength));
+    range.setStart(from.node, from.offset);
+    range.setEnd(to.node, to.offset);
     const selection = window.getSelection();
     selection?.removeAllRanges();
     selection?.addRange(range);
