@@ -1,0 +1,1 @@
+import{g as l,s}from"./accounts-WZN5CFdX.js";const n="unlockEverything";let a=null;async function c(){return a??=await l(n)??!1,a}function o(){return a??!1}async function u(t){a=t,await s(n,t)}export{c as a,u as s,o as u};
