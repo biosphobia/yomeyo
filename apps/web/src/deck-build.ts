@@ -168,18 +168,24 @@ function promptFor(request: string, count: number, avoid: string[]): string {
  * already in THIS deck (a themed request collides with its own deck far
  * more than with the rest), then everything the model already offered
  * this session (it escaped the ban once, so it gets named explicitly),
- * then the rest of the collection. Capped well under the server's prompt
- * limit, so a huge collection trims the tail rather than the rules.
+ * then the rest of the collection. Capped well under the server's request
+ * limit, so a huge collection trims the tail rather than the rules — and
+ * capped in BYTES, which is what the server counts: a kanji is three of
+ * them, so a character cap three times the size would blow the request
+ * apart exactly for the collections that need the ban most.
  */
 function avoidList(have: Map<string, Card>, deckId: string, offered: Set<string>): string[] {
+  const encoder = new TextEncoder();
   const seen = new Set<string>();
   const list: string[] = [];
   let length = 0;
   const push = (term: string): void => {
-    if (!term || seen.has(term) || length + term.length > 7000) return;
+    if (!term || seen.has(term)) return;
+    const cost = encoder.encode(term).length + 3;
+    if (length + cost > 9000) return;
     seen.add(term);
     list.push(term);
-    length += term.length + 1;
+    length += cost;
   };
   const cards = [...have.values()];
   for (const card of cards) if (deckOf(card) === deckId) push(card.term);

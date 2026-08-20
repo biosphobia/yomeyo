@@ -210,8 +210,45 @@ void completeRedirectSignIn().then((account) => {
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
   // BASE_URL (not import.meta.url, which points into assets/) so the worker
   // is found at the app root and takes the app directory as its scope.
-  navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => {
-    /* offline support is progressive enhancement */
+  navigator.serviceWorker
+    .register(`${import.meta.env.BASE_URL}sw.js`)
+    .then((registration) => {
+      // A phone keeps this tab alive for days, and a tab that is never
+      // reloaded never sees a deploy: the browser only checks for a new
+      // worker on navigation. So ask — every time the tab comes back, and
+      // hourly while it stays open.
+      const check = (): void => void registration.update().catch(() => undefined);
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") check();
+      });
+      window.setInterval(check, 60 * 60 * 1000);
+    })
+    .catch(() => {
+      /* offline support is progressive enhancement */
+    });
+
+  // When a new worker takes over, this page is old code running against a
+  // new deploy. Reload at the first quiet moment rather than mid-anything:
+  // now if the tab is in the background, otherwise the next time it goes
+  // there. The guard skips the very first install, which is not an update.
+  let hadController = navigator.serviceWorker.controller !== null;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!hadController) {
+      hadController = true;
+      return;
+    }
+    if (document.visibilityState === "hidden") {
+      window.location.reload();
+      return;
+    }
+    toast("Yomeyo updated itself. The new version loads when you next switch away and back.");
+    document.addEventListener(
+      "visibilitychange",
+      () => {
+        if (document.visibilityState === "hidden") window.location.reload();
+      },
+      { once: true },
+    );
   });
 }
 

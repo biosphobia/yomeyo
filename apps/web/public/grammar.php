@@ -48,7 +48,9 @@ if (!is_array($req)) {
   exit;
 }
 $isOcrRequest = (($req["mode"] ?? "") === "ocr");
-if (!$isOcrRequest && strlen($raw) > 20000) {
+// Roomy enough for a deck request carrying a ban list of everything the
+// learner already holds; still nowhere near the OCR allowance above.
+if (!$isOcrRequest && strlen($raw) > 64000) {
   http_response_code(400);
   exit;
 }
@@ -59,7 +61,14 @@ if (!$isOcrRequest && (!isset($req["prompt"]) || !is_string($req["prompt"]))) {
 $req["prompt"] = is_string($req["prompt"] ?? null) ? $req["prompt"] : "";
 // The prompt is assembled by the app from its own unit definitions; this
 // endpoint only ever asks for practice sentences, whatever it is sent.
-$prompt = substr($req["prompt"], 0, 12000);
+// Overlong is refused whole rather than truncated: substr counts bytes,
+// and a cut through the middle of a kanji leaves invalid UTF-8 that
+// json_encode turns into a silently empty request body.
+$prompt = $req["prompt"];
+if (strlen($prompt) > 48000) {
+  http_response_code(400);
+  exit;
+}
 $count = isset($req["count"]) ? max(1, min(12, (int) $req["count"])) : 8;
 
 // The shape every sentence must arrive in. Asking the API to enforce it
