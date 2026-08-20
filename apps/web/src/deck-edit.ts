@@ -128,7 +128,7 @@ export async function renderDeckEditor(
              <b>Ask for a word list</b>
              <div class="glosses">Describe the deck and Claude drafts it. Every word it
                gives back is checked against the dictionary before it can become a card,
-               and words you already have anywhere are skipped, not offered again.</div>
+               and words this deck already has are skipped, not offered again.</div>
              <input type="text" id="deck-ask" placeholder="e.g. 40 kitchen and cooking words, N4 level" />
              <div class="row-actions" style="margin-top:10px">
                <label class="unseen-toggle">How many
@@ -267,7 +267,7 @@ export async function renderDeckEditor(
     await withBusy(ev.currentTarget as HTMLButtonElement, "Writing…", async () => {
       state.drafts = await draftsFromRequest(request, count, deck.id);
       if (state.drafts.length === 0) {
-        toast("Nothing new came back. Everything it offered, you already have.", "error");
+        toast("Nothing new came back. Everything it offered is already in this deck.", "error");
       }
       redraw();
     });
@@ -351,13 +351,7 @@ function drawDrafts(box: HTMLDivElement, deck: DeckInfo, redraw: () => void): vo
         </div>
         <div class="glosses">${escapeHtml(draft.glosses.join(" · "))}</div>
         ${draft.sentence ? `<div class="glosses" lang="ja">${escapeHtml(draft.sentence)}</div>` : ""}
-        ${
-          draft.have
-            ? `<div class="glosses">${
-                draft.have === "here" ? "already in this deck" : "already in another deck — left where it is"
-              }</div>`
-            : ""
-        }
+        ${draft.have ? `<div class="glosses">already in this deck</div>` : ""}
       </div>
       <button class="ghost draft-drop" title="Drop this one">✕</button>
     `;
@@ -380,7 +374,7 @@ function drawDrafts(box: HTMLDivElement, deck: DeckInfo, redraw: () => void): vo
     touchSharedDeck(deck.id);
     toast(
       `Added ${result.added.toLocaleString()} word${result.added === 1 ? "" : "s"}` +
-        (result.elsewhere > 0 ? ` · ${result.elsewhere} are in another deck already` : ""),
+        (result.here > 0 ? ` · ${result.here} already in this deck` : ""),
     );
     redraw();
   });

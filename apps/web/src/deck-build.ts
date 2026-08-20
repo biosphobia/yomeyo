@@ -40,8 +40,13 @@ export interface Draft {
   notes?: string;
   /** The dictionary has this word: the reading could be checked. */
   known: boolean;
-  /** Already a card somewhere. The deck it is in, when it is elsewhere. */
-  have?: "here" | "elsewhere";
+  /**
+   * Already a card in THIS deck. Only the same deck counts: the same word
+   * may perfectly well be studied in two decks at once, each with its own
+   * schedule — a themed deck is not poorer for containing a word the
+   * mining deck also picked up one day.
+   */
+  have?: "here";
 }
 
 const KANA_ONLY = /^[぀-ヿー\s]+$/u;
@@ -68,7 +73,7 @@ function lookup(dictionary: { lookupExact(t: string): DictEntry[] }, term: strin
  */
 export async function draftsFromText(text: string, deckId: string): Promise<Draft[]> {
   const dictionary = await activeDictionary();
-  const have = await existingCards();
+  const have = await existingCards(deckId);
   const drafts: Draft[] = [];
   const seen = new Set<string>();
 
@@ -98,22 +103,23 @@ export async function draftsFromText(text: string, deckId: string): Promise<Draf
     };
     if (seen.has(cardKey(draft.term, draft.reading))) continue;
     seen.add(cardKey(draft.term, draft.reading));
-    markHeld(draft, have, deckId);
+    markHeld(draft, have);
     drafts.push(draft);
   }
   return drafts;
 }
 
-/** Every live card, by word, for spotting what is already in the collection. */
-async function existingCards(): Promise<Map<string, Card>> {
+/** This deck's live cards, by word: the only duplicates that exist. */
+async function existingCards(deckId: string): Promise<Map<string, Card>> {
   const map = new Map<string, Card>();
-  for (const card of await liveCards()) map.set(cardKey(card.term, card.reading), card);
+  for (const card of await liveCards()) {
+    if (deckOf(card) === deckId) map.set(cardKey(card.term, card.reading), card);
+  }
   return map;
 }
 
-function markHeld(draft: Draft, have: Map<string, Card>, deckId: string): void {
-  const card = have.get(cardKey(draft.term, draft.reading));
-  if (card) draft.have = deckOf(card) === deckId ? "here" : "elsewhere";
+function markHeld(draft: Draft, have: Map<string, Card>): void {
+  if (have.has(cardKey(draft.term, draft.reading))) draft.have = "here";
 }
 
 // ---------------- asking for a deck ----------------
@@ -153,8 +159,8 @@ function promptFor(request: string, count: number, avoid: string[]): string {
   if (avoid.length > 0) {
     lines.push(
       "",
-      "The learner already has cards for every word below. Do NOT include any",
-      "of them, in any spelling or form; each slot one of them would have",
+      "This deck already contains every word below. Do NOT include any of",
+      "them, in any spelling or form; each slot one of them would have",
       `taken goes to a word that is not on this list. Give ${count} words that`,
       "are all absent from it:",
       avoid.join("、"),
@@ -164,17 +170,15 @@ function promptFor(request: string, count: number, avoid: string[]): string {
 }
 
 /**
- * The words the model must not offer, biggest overlap first: what is
- * already in THIS deck (a themed request collides with its own deck far
- * more than with the rest), then everything the model already offered
- * this session (it escaped the ban once, so it gets named explicitly),
- * then the rest of the collection. Capped well under the server's request
- * limit, so a huge collection trims the tail rather than the rules — and
- * capped in BYTES, which is what the server counts: a kanji is three of
- * them, so a character cap three times the size would blow the request
- * apart exactly for the collections that need the ban most.
+ * The words the model must not offer: what THIS deck already holds — no
+ * other deck's contents, since the same word is welcome in two decks —
+ * plus everything the model already offered this session (it slipped the
+ * ban once, so it gets named explicitly). Capped well under the server's
+ * request limit, and capped in BYTES, which is what the server counts: a
+ * kanji is three of them, so a character cap three times the size would
+ * blow the request apart exactly for the decks that need the ban most.
  */
-function avoidList(have: Map<string, Card>, deckId: string, offered: Set<string>): string[] {
+function avoidList(have: Map<string, Card>, offered: Set<string>): string[] {
   const encoder = new TextEncoder();
   const seen = new Set<string>();
   const list: string[] = [];
@@ -187,10 +191,8 @@ function avoidList(have: Map<string, Card>, deckId: string, offered: Set<string>
     list.push(term);
     length += cost;
   };
-  const cards = [...have.values()];
-  for (const card of cards) if (deckOf(card) === deckId) push(card.term);
+  for (const card of have.values()) push(card.term);
   for (const term of offered) push(term);
-  for (const card of cards) push(card.term);
   return list;
 }
 
@@ -217,13 +219,13 @@ async function askOnce(request: string, count: number, avoid: string[]): Promise
  * model's — with the model's kept for words the dictionary does not have, and
  * those marked so nobody publishes them without a look.
  *
- * Every word offered is new by construction. The model is told what the
- * collection already holds and asked not to repeat it; anything held that
- * slips through anyway is dropped rather than shown, and the asking
- * repeats — with the slipped words now named in the ban — until the
- * requested number of genuinely new words is reached, or a round brings
- * nothing new and the well is declared dry. Asking for thirty words and
- * being shown ten, three of them already yours, was not an answer.
+ * Every word offered is new TO THIS DECK by construction. The model is
+ * told what the deck already holds and asked not to repeat it; anything
+ * of the deck's that slips through anyway is dropped rather than shown,
+ * and the asking repeats — with the slipped words now named in the ban —
+ * until the requested number of new words is reached, or a round brings
+ * nothing new and the well is declared dry. Only this deck's own words
+ * count: a word studied in another deck too is a fine offer here.
  */
 export async function draftsFromRequest(
   request: string,
@@ -231,7 +233,7 @@ export async function draftsFromRequest(
   deckId: string,
 ): Promise<Draft[]> {
   const dictionary = await activeDictionary();
-  const have = await existingCards();
+  const have = await existingCards(deckId);
   const what = request.trim().slice(0, 2000);
   /** Every term the model has offered this session, held or not: banned
    * by name from the next round, since the broad ban missed it once. */
@@ -242,7 +244,7 @@ export async function draftsFromRequest(
   for (let round = 0; round < 4 && fresh.length < count; round++) {
     let cards: unknown[];
     try {
-      cards = await askOnce(what, count - fresh.length, avoidList(have, deckId, offered));
+      cards = await askOnce(what, count - fresh.length, avoidList(have, offered));
     } catch (err) {
       // The first round failing is a failure; a later one failing means
       // the words already gathered are the answer.
@@ -281,8 +283,8 @@ export async function draftsFromRequest(
           : {}),
         ...(typeof card.notes === "string" && card.notes.trim() ? { notes: card.notes.trim() } : {}),
       };
-      markHeld(draft, have, deckId);
-      // A word already held anywhere is not an offer at all.
+      markHeld(draft, have);
+      // A word this deck already studies is not an offer at all.
       if (draft.have) continue;
       fresh.push(draft);
       gained++;
@@ -301,17 +303,16 @@ export interface AddResult {
   added: number;
   /** Words already in this deck, left alone. */
   here: number;
-  /** Words held in another deck; a word lives in one place, so they stay put. */
-  elsewhere: number;
 }
 
 /**
  * Add drafts to a deck, at the end of it.
  *
  * Cards go in through the same door as every other import, which is what
- * keeps one word to one card: a word already in the collection is not
- * duplicated into a second deck, and the caller is told how many that was
- * rather than left to wonder where they went.
+ * keeps one word to one card PER DECK: a word this deck already has is
+ * not doubled, and the caller is told how many that was rather than left
+ * to wonder where they went. Other decks have no say — the same word may
+ * be studied in several decks at once, each on its own schedule.
  */
 export async function addDrafts(drafts: Draft[], deckId: string): Promise<AddResult> {
   const wanted = drafts.filter((draft) => !draft.have);
@@ -338,7 +339,6 @@ export async function addDrafts(drafts: Draft[], deckId: string): Promise<AddRes
   return {
     added,
     here: drafts.filter((d) => d.have === "here").length,
-    elsewhere: drafts.filter((d) => d.have === "elsewhere").length,
   };
 }
 

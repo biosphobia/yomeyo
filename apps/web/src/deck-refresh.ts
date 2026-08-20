@@ -80,8 +80,9 @@ async function refreshOne(
   const updates: Card[] = [];
 
   // Words the owner added since the last pull — through the same deduping
-  // door the Add button uses, so a word the learner already holds under
-  // another id (mined by hand, say) is never doubled by an update.
+  // door the Add button uses, so a word this deck already holds under
+  // another id is never doubled by an update. Other decks have no say: a
+  // word the learner also mined by hand stays a separate card there.
   const fresh = shared.filter((card) => !byKey.has(cardKey(card.term, card.reading)));
   const added = fresh.length > 0 ? await importCards(fromSharedCards(fresh, deck.id, now)) : 0;
 
