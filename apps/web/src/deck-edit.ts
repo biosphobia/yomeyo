@@ -127,7 +127,8 @@ export async function renderDeckEditor(
         ? `<div class="card-panel">
              <b>Ask for a word list</b>
              <div class="glosses">Describe the deck and Claude drafts it. Every word it
-               gives back is checked against the dictionary before it can become a card.</div>
+               gives back is checked against the dictionary before it can become a card,
+               and words you already have anywhere are skipped, not offered again.</div>
              <input type="text" id="deck-ask" placeholder="e.g. 40 kitchen and cooking words, N4 level" />
              <div class="row-actions" style="margin-top:10px">
                <label class="unseen-toggle">How many
@@ -265,7 +266,9 @@ export async function renderDeckEditor(
     const count = Math.max(5, Math.min(60, Number(body.querySelector<HTMLInputElement>("#deck-ask-count")!.value) || 30));
     await withBusy(ev.currentTarget as HTMLButtonElement, "Writing…", async () => {
       state.drafts = await draftsFromRequest(request, count, deck.id);
-      if (state.drafts.length === 0) toast("Nothing usable came back.", "error");
+      if (state.drafts.length === 0) {
+        toast("Nothing new came back. Everything it offered, you already have.", "error");
+      }
       redraw();
     });
   });

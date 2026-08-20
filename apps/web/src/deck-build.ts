@@ -128,9 +128,9 @@ export function generatorAvailable(): Promise<boolean> {
   return available;
 }
 
-function promptFor(request: string, count: number): string {
-  return [
-    `Build a Japanese vocabulary deck of about ${count} cards.`,
+function promptFor(request: string, count: number, avoid: string[]): string {
+  const lines = [
+    `Build a Japanese vocabulary deck of ${count} cards.`,
     "",
     "What it should contain:",
     request,
@@ -149,7 +149,58 @@ function promptFor(request: string, count: number): string {
     "- No duplicates, and no word you are not certain of. A shorter deck of",
     "  words you are sure about is better than a long one with a wrong reading",
     "  in it, because every card here is studied as fact.",
-  ].join("\n");
+  ];
+  if (avoid.length > 0) {
+    lines.push(
+      "",
+      "The learner already has cards for every word below. Do NOT include any",
+      "of them, in any spelling or form; each slot one of them would have",
+      `taken goes to a word that is not on this list. Give ${count} words that`,
+      "are all absent from it:",
+      avoid.join("、"),
+    );
+  }
+  return lines.join("\n");
+}
+
+/**
+ * The words the model must not offer, biggest overlap first: what is
+ * already in THIS deck (a themed request collides with its own deck far
+ * more than with the rest), then everything the model already offered
+ * this session (it escaped the ban once, so it gets named explicitly),
+ * then the rest of the collection. Capped well under the server's prompt
+ * limit, so a huge collection trims the tail rather than the rules.
+ */
+function avoidList(have: Map<string, Card>, deckId: string, offered: Set<string>): string[] {
+  const seen = new Set<string>();
+  const list: string[] = [];
+  let length = 0;
+  const push = (term: string): void => {
+    if (!term || seen.has(term) || length + term.length > 7000) return;
+    seen.add(term);
+    list.push(term);
+    length += term.length + 1;
+  };
+  const cards = [...have.values()];
+  for (const card of cards) if (deckOf(card) === deckId) push(card.term);
+  for (const term of offered) push(term);
+  for (const card of cards) push(card.term);
+  return list;
+}
+
+/** One request to the model, parsed but not yet checked. */
+async function askOnce(request: string, count: number, avoid: string[]): Promise<unknown[]> {
+  const res = await fetch(assetUrl("grammar.php"), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ mode: "deck", prompt: promptFor(request, count, avoid) }),
+  });
+  if (!res.ok) throw new Error("The word list could not be written just now.");
+  const { raw } = (await res.json()) as { raw?: string };
+  if (!raw) throw new Error("The word list came back empty.");
+  const parsed = JSON.parse(raw) as { cards?: unknown };
+  if (!Array.isArray(parsed.cards)) throw new Error("The word list came back in the wrong shape.");
+  return parsed.cards;
 }
 
 /**
@@ -159,62 +210,83 @@ function promptFor(request: string, count: number): string {
  * is looked up, and the reading it comes back with is preferred over the
  * model's — with the model's kept for words the dictionary does not have, and
  * those marked so nobody publishes them without a look.
+ *
+ * Every word offered is new by construction. The model is told what the
+ * collection already holds and asked not to repeat it; anything held that
+ * slips through anyway is dropped rather than shown, and the asking
+ * repeats — with the slipped words now named in the ban — until the
+ * requested number of genuinely new words is reached, or a round brings
+ * nothing new and the well is declared dry. Asking for thirty words and
+ * being shown ten, three of them already yours, was not an answer.
  */
 export async function draftsFromRequest(
   request: string,
   count: number,
   deckId: string,
 ): Promise<Draft[]> {
-  const res = await fetch(assetUrl("grammar.php"), {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ mode: "deck", prompt: promptFor(request.trim().slice(0, 2000), count) }),
-  });
-  if (!res.ok) throw new Error("The word list could not be written just now.");
-  const { raw } = (await res.json()) as { raw?: string };
-  if (!raw) throw new Error("The word list came back empty.");
-
-  const parsed = JSON.parse(raw) as { cards?: unknown };
-  if (!Array.isArray(parsed.cards)) throw new Error("The word list came back in the wrong shape.");
-
   const dictionary = await activeDictionary();
   const have = await existingCards();
-  const drafts: Draft[] = [];
+  const what = request.trim().slice(0, 2000);
+  /** Every term the model has offered this session, held or not: banned
+   * by name from the next round, since the broad ban missed it once. */
+  const offered = new Set<string>();
+
+  const fresh: Draft[] = [];
   const seen = new Set<string>();
+  for (let round = 0; round < 4 && fresh.length < count; round++) {
+    let cards: unknown[];
+    try {
+      cards = await askOnce(what, count - fresh.length, avoidList(have, deckId, offered));
+    } catch (err) {
+      // The first round failing is a failure; a later one failing means
+      // the words already gathered are the answer.
+      if (round === 0) throw err;
+      break;
+    }
 
-  for (const value of parsed.cards) {
-    const card = value as Partial<Draft>;
-    const term = typeof card.term === "string" ? card.term.trim() : "";
-    if (!term) continue;
-    const entry = lookup(dictionary, term);
-    const reading =
-      entry?.reading ?? (typeof card.reading === "string" ? card.reading.trim() : "") ?? "";
-    const glosses = (Array.isArray(card.glosses) ? card.glosses : [])
-      .filter((g): g is string => typeof g === "string" && g.trim().length > 0)
-      .map((g) => g.trim())
-      .slice(0, 4);
-    if (glosses.length === 0) continue;
-    const key = cardKey(term, reading);
-    if (seen.has(key)) continue;
-    seen.add(key);
+    let gained = 0;
+    for (const value of cards) {
+      const card = value as Partial<Draft>;
+      const term = typeof card.term === "string" ? card.term.trim() : "";
+      if (!term) continue;
+      offered.add(term);
+      const entry = lookup(dictionary, term);
+      const reading =
+        entry?.reading ?? (typeof card.reading === "string" ? card.reading.trim() : "") ?? "";
+      const glosses = (Array.isArray(card.glosses) ? card.glosses : [])
+        .filter((g): g is string => typeof g === "string" && g.trim().length > 0)
+        .map((g) => g.trim())
+        .slice(0, 4);
+      if (glosses.length === 0) continue;
+      const key = cardKey(term, reading);
+      if (seen.has(key)) continue;
+      seen.add(key);
 
-    const draft: Draft = {
-      term,
-      reading,
-      glosses,
-      known: entry !== null,
-      ...(typeof card.sentence === "string" && card.sentence.trim()
-        ? { sentence: card.sentence.trim() }
-        : {}),
-      ...(typeof card.sentenceMeaning === "string" && card.sentenceMeaning.trim()
-        ? { sentenceMeaning: card.sentenceMeaning.trim() }
-        : {}),
-      ...(typeof card.notes === "string" && card.notes.trim() ? { notes: card.notes.trim() } : {}),
-    };
-    markHeld(draft, have, deckId);
-    drafts.push(draft);
+      const draft: Draft = {
+        term,
+        reading,
+        glosses,
+        known: entry !== null,
+        ...(typeof card.sentence === "string" && card.sentence.trim()
+          ? { sentence: card.sentence.trim() }
+          : {}),
+        ...(typeof card.sentenceMeaning === "string" && card.sentenceMeaning.trim()
+          ? { sentenceMeaning: card.sentenceMeaning.trim() }
+          : {}),
+        ...(typeof card.notes === "string" && card.notes.trim() ? { notes: card.notes.trim() } : {}),
+      };
+      markHeld(draft, have, deckId);
+      // A word already held anywhere is not an offer at all.
+      if (draft.have) continue;
+      fresh.push(draft);
+      gained++;
+      if (fresh.length >= count) break;
+    }
+    // A whole round with nothing new in it: the topic is exhausted, and
+    // asking again would only get the same words a third time.
+    if (gained === 0) break;
   }
-  return drafts;
+  return fresh;
 }
 
 // ---------------- turning drafts into cards ----------------
