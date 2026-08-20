@@ -1,5 +1,6 @@
 import {
   MINING_DECK_ID,
+  createCard,
   orderOf,
   positionBetween,
   type Card,
@@ -142,7 +143,10 @@ export async function renderDeckEditor(
     <div id="deck-drafts"></div>
 
     <div class="card-panel">
-      <b>Words</b>
+      <div class="row-actions" style="justify-content:space-between;align-items:center">
+        <b>Words</b>
+        <button id="deck-new-card" class="secondary">＋ New card</button>
+      </div>
       <input type="search" id="deck-filter" placeholder="Search this deck…"
         value="${escapeAttr(state.filter)}" style="margin:8px 0" />
       <div id="deck-cards" style="padding:0"></div>
@@ -269,6 +273,23 @@ export async function renderDeckEditor(
   drawDrafts(body.querySelector<HTMLDivElement>("#deck-drafts")!, deck, redraw);
 
   // ---------------- the words ----------------
+
+  body.querySelector<HTMLButtonElement>("#deck-new-card")!.addEventListener("click", () => {
+    const list = body.querySelector<HTMLDivElement>("#deck-cards");
+    if (!list || list.querySelector(".new-card-row")) return; // one at a time
+    // Every field open, nothing saved until Save: cancelling a blank card
+    // must leave no trace in the deck.
+    const blank: Card = {
+      ...createCard({ term: "", reading: "", glosses: [] }, Date.now()),
+      ...(deck.id === MINING_DECK_ID ? {} : { deckId: deck.id }),
+    };
+    const row = document.createElement("div");
+    row.className = "word-row new-card-row";
+    list.prepend(row);
+    editRow(row, blank, null, deck, redraw, () => row.remove());
+    row.querySelector<HTMLInputElement>(".edit-term")?.focus();
+    row.scrollIntoView({ block: "center", behavior: "smooth" });
+  });
 
   const search = body.querySelector<HTMLInputElement>("#deck-filter")!;
   search.addEventListener("input", () => {
@@ -399,7 +420,7 @@ function cardRow(card: Card, ordered: Card[] | null, deck: DeckInfo, redraw: () 
       ordered
         ? `<div class="card-move">
              <button class="ghost move-up" title="Move up" ${at === 0 ? "disabled" : ""}>▲</button>
-             <span class="card-index">${at + 1}</span>
+             <button class="ghost card-index" title="Move to a position…">${at + 1}</button>
              <button class="ghost move-down" title="Move down" ${
                at === ordered.length - 1 ? "disabled" : ""
              }>▼</button>
@@ -423,6 +444,20 @@ function cardRow(card: Card, ordered: Card[] | null, deck: DeckInfo, redraw: () 
   });
   row.querySelector<HTMLButtonElement>(".move-down")?.addEventListener("click", async () => {
     await move(ordered!, at, 1);
+    touchSharedDeck(deck.id);
+    redraw();
+  });
+  // One place at a time is fine for neighbours and hopeless for a
+  // two-thousand-card deck: the number itself takes a destination.
+  row.querySelector<HTMLButtonElement>(".card-index")?.addEventListener("click", async () => {
+    const answer = prompt(`Move “${card.term}” to position (1–${ordered!.length}):`, String(at + 1));
+    if (answer === null) return;
+    const target = Math.round(Number(answer));
+    if (!Number.isFinite(target) || target < 1 || target > ordered!.length) {
+      toast(`A position between 1 and ${ordered!.length}.`, "error");
+      return;
+    }
+    await moveTo(ordered!, at, target - 1);
     touchSharedDeck(deck.id);
     redraw();
   });
@@ -457,6 +492,17 @@ async function move(ordered: Card[], at: number, delta: number): Promise<void> {
   await saveCard({ ...card, order: positionBetween(before, after), updatedAt: Date.now() });
 }
 
+/** Move one card to any position, in one write. */
+async function moveTo(ordered: Card[], from: number, to: number): Promise<void> {
+  if (from === to) return;
+  const cards = await ensureSpread(ordered);
+  const card = cards[from];
+  const rest = cards.filter((_, i) => i !== from);
+  const before = rest[to - 1];
+  const after = rest[to];
+  await saveCard({ ...card, order: positionBetween(before, after), updatedAt: Date.now() });
+}
+
 /** Give every card in the deck room to move between, if it has none. */
 async function ensureSpread(cards: Card[]): Promise<Card[]> {
   let tight = false;
@@ -480,6 +526,7 @@ function editRow(
   ordered: Card[] | null,
   deck: DeckInfo,
   redraw: () => void,
+  onCancel?: () => void,
 ): void {
   row.innerHTML = `
     <div class="word" style="flex:1">
@@ -493,6 +540,8 @@ function editRow(
       <input type="text" class="edit-sentence" lang="ja" value="${escapeAttr(card.sentence ?? "")}" />
       <label>Sentence meaning</label>
       <input type="text" class="edit-sentence-meaning" value="${escapeAttr(card.sentenceMeaning ?? "")}" />
+      <label>Sentence furigana <span class="glosses">(Anki style: 漢字[かんじ])</span></label>
+      <input type="text" class="edit-furigana" lang="ja" value="${escapeAttr(card.sentenceFurigana ?? "")}" />
       <label>Notes</label>
       <textarea class="edit-notes">${escapeHtml(card.notes ?? "")}</textarea>
       <div class="row-actions" style="margin-top:8px">
@@ -511,8 +560,9 @@ function editRow(
     }
     const sentence = value(".edit-sentence");
     const sentenceMeaning = value(".edit-sentence-meaning");
+    const sentenceFurigana = value(".edit-furigana");
     const notes = row.querySelector<HTMLTextAreaElement>(".edit-notes")!.value.trim();
-    const { sentence: _s, sentenceMeaning: _m, notes: _n, ...rest } = card;
+    const { sentence: _s, sentenceMeaning: _m, sentenceFurigana: _f, notes: _n, ...rest } = card;
     await saveCard({
       ...rest,
       term,
@@ -522,6 +572,7 @@ function editRow(
         .filter(Boolean),
       ...(sentence ? { sentence } : {}),
       ...(sentenceMeaning ? { sentenceMeaning } : {}),
+      ...(sentenceFurigana ? { sentenceFurigana } : {}),
       ...(notes ? { notes } : {}),
       updatedAt: Date.now(),
     });
@@ -529,7 +580,8 @@ function editRow(
     redraw();
   });
   row.querySelector<HTMLButtonElement>(".cancel-edit")!.addEventListener("click", () => {
-    row.replaceWith(cardRow(card, ordered, deck, redraw));
+    if (onCancel) onCancel();
+    else row.replaceWith(cardRow(card, ordered, deck, redraw));
   });
 }
 
