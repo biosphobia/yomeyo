@@ -26,6 +26,13 @@ import { getDailyCounts, getDeckConfig, recordReview, unrecordReview } from "./d
 const DECK_CHOICE_KEY = "reviewDeck";
 
 export async function renderReview(main: HTMLElement, isCurrent: () => boolean = () => true): Promise<void> {
+  // Publishers update their decks; holders should not have to visit the
+  // Decks screen to receive it. Quietly, at most hourly, off this path —
+  // anything it brings joins the next queue build rather than this one.
+  void import("./deck-refresh.js")
+    .then((mod) => mod.refreshSharedDecks())
+    .catch(() => undefined);
+
   const deckChoice = await getDeckChoice(DECK_CHOICE_KEY);
   const everything = await liveCards();
   const cards = everything.filter((card) => cardInDeck(card, deckChoice));

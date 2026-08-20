@@ -52,6 +52,15 @@ export async function renderDecks(main: HTMLElement, isCurrent: () => boolean = 
     })
     .catch(() => undefined);
 
+  // And whether any added deck's publisher has updated it. Same manner:
+  // while the screen draws, redrawing if the library brought anything.
+  void import("./deck-refresh.js")
+    .then((mod) => mod.refreshSharedDecks())
+    .then((changed) => {
+      if (changed && isCurrent()) void renderDecks(main, isCurrent);
+    })
+    .catch(() => undefined);
+
   main.innerHTML = `
     ${screenHeader("Decks")}
     <div class="segmented" id="deck-tabs">
