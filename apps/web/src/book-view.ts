@@ -597,6 +597,49 @@ function offerOcr(
   // remembered, so it stays up while flipping pages.
   let sheetOpen = false;
 
+  // Whose text is it to correct by hand? A private book is its reader's
+  // own. A shared book is the uploader's — their uid signs the share's id
+  // — and a fix they make travels to every reader through the share.
+  let mayEditText = !shared;
+  if (shared) {
+    void import("./books.js")
+      .then(async (books) => {
+        const account = await books.shelfAccount();
+        if (account && shared.id.startsWith(`${account.uid}__`)) {
+          mayEditText = true;
+          renderSheet();
+        }
+      })
+      .catch(() => undefined);
+  }
+
+  /**
+   * Retype one line. OCR reads most lines right and some lines almost
+   * right, and "almost" is poison in a dictionary lookup — so the human
+   * who can see the page gets the last word, on the text and the
+   * furigana both. On a shared book the correction is published, and
+   * every reader's device takes it over its own cached copy.
+   */
+  const editLineText = (line: OcrWord): void => {
+    const text = window.prompt("Correct this line's text:", line.text);
+    if (text === null) return;
+    const trimmed = text.trim();
+    if (!trimmed) {
+      ui.status.textContent = "Left unchanged. To remove a line, use Edit boxes.";
+      return;
+    }
+    const furigana = window.prompt("Its furigana, if any (leave empty for none):", line.furigana ?? "");
+    line.text = trimmed;
+    if (furigana !== null) {
+      const cleaned = furigana.trim();
+      if (cleaned) line.furigana = cleaned;
+      else delete line.furigana;
+    }
+    overlay(lines, true);
+    persist();
+    ui.status.textContent = shared ? "Corrected, for every reader of this book." : "Corrected.";
+  };
+
   /** Point at one line's box on the page, from its row in the sheet. */
   const flashLine = (at: number): void => {
     const el = layer.querySelectorAll<HTMLElement>(":scope > .bk-ocr-word")[at];
@@ -653,6 +696,14 @@ function offerOcr(
       renderTappableText(text, line.text, ui.status);
       body.appendChild(text);
       row.append(num, body);
+      if (mayEditText) {
+        const fix = document.createElement("button");
+        fix.className = "bk-ocr-sheet-fix";
+        fix.textContent = "✎";
+        fix.title = "Correct this line by hand";
+        fix.addEventListener("click", () => editLineText(line));
+        row.appendChild(fix);
+      }
       sheet.appendChild(row);
     });
     ui.body.appendChild(sheet);
@@ -745,6 +796,18 @@ function offerOcr(
         });
         el.addEventListener("pointerdown", (ev) => grab(ev, line, el, "move"));
         el.append(handle, drop);
+        if (mayEditText) {
+          const fix = document.createElement("button");
+          fix.className = "bk-ocr-fix";
+          fix.textContent = "✎";
+          fix.title = "Correct this line's text";
+          fix.addEventListener("pointerdown", (ev) => ev.stopPropagation());
+          fix.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            editLineText(line);
+          });
+          el.appendChild(fix);
+        }
       } else {
         el.addEventListener("click", (ev) => {
           ev.stopPropagation();

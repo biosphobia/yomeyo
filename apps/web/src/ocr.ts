@@ -88,6 +88,26 @@ export interface OcrWord {
 // Versioned: results from the old estimate-the-box pipeline are not worth
 // keeping, so a prefix bump quietly retires them.
 const CACHE_PREFIX = "bookOcr4:";
+/** The revision this device holds of a page, for taking later corrections. */
+const REV_PREFIX = "bookOcrRev:";
+/** When the share was last asked about a page this device already holds. */
+const SEEN_PREFIX = "bookOcrSeen:";
+/** How long a held page trusts itself before glancing at the share again. */
+const RECHECK_MS = 10 * 60 * 1000;
+
+/** A page's result and its revision, cached together. */
+async function stampLocal(cacheKey: string, words: OcrWord[], rev: number): Promise<void> {
+  await setMeta(CACHE_PREFIX + cacheKey, words);
+  await setMeta(REV_PREFIX + cacheKey, rev);
+}
+
+/** Only the entries a words array is supposed to contain. */
+function cleanWords(value: unknown): OcrWord[] {
+  if (!Array.isArray(value)) return [];
+  return (value as OcrWord[]).filter(
+    (w) => w && typeof w.text === "string" && w.text.trim() !== "" && Number.isFinite(w.x) && Number.isFinite(w.y),
+  );
+}
 
 /**
  * "Ask again in a moment", not "this cannot be read".
@@ -122,20 +142,39 @@ export interface SharedOcrRef {
  * An empty result counts as read: a page of pure artwork has no text on
  * it, and finding that out once is enough. Only a page never read at all
  * comes back null.
+ *
+ * A held page of a SHARED book still glances at the share now and then:
+ * the book's owner can correct a page's text after this device cached
+ * it, and a correction that only its author ever sees is not a
+ * correction. The share's copy wins exactly when its revision is newer
+ * than the one held here — including a copy with fewer boxes, since
+ * removing a wrong box is as much a fix as retyping a line.
  */
 export async function cachedOcr(cacheKey: string, shared?: SharedOcrRef): Promise<OcrWord[] | null> {
   const held = await getMeta<OcrWord[]>(CACHE_PREFIX + cacheKey);
-  if (Array.isArray(held)) return held;
+  if (Array.isArray(held)) {
+    if (!shared) return held;
+    const lastLook = (await getMeta<number>(SEEN_PREFIX + cacheKey)) ?? 0;
+    if (Date.now() - lastLook < RECHECK_MS) return held;
+    await setMeta(SEEN_PREFIX + cacheKey, Date.now());
+    const books = await bookCloud();
+    if (!books) return held;
+    const remote = await books.fetchSharedOcr(shared.id, shared.page).catch(() => null);
+    if (!remote) return held;
+    const heldRev = (await getMeta<number>(REV_PREFIX + cacheKey)) ?? 0;
+    if (remote.rev <= heldRev) return held;
+    const words = cleanWords(remote.words);
+    await stampLocal(cacheKey, words, remote.rev);
+    return words;
+  }
   if (!shared) return null;
   const books = await bookCloud();
   if (!books) return null;
   const remote = await books.fetchSharedOcr(shared.id, shared.page);
-  if (!Array.isArray(remote)) return null;
-  const words = (remote as OcrWord[]).filter(
-    (w) => w && typeof w.text === "string" && w.text.trim() !== "" && Number.isFinite(w.x) && Number.isFinite(w.y),
-  );
+  if (!remote) return null;
+  const words = cleanWords(remote.words);
   if (words.length === 0) return null;
-  await setMeta(CACHE_PREFIX + cacheKey, words);
+  await stampLocal(cacheKey, words, remote.rev);
   return words;
 }
 
@@ -1155,11 +1194,13 @@ export async function ocrPage(
     if (held) return held;
   }
 
-  /** A fresh result also joins the shared book, for everyone after. */
-  const contribute = (words: OcrWord[]): void => {
+  /** A fresh result also joins the shared book, for everyone after — under
+   * the same revision cached here, so this device never mistakes its own
+   * contribution for somebody's later correction. */
+  const contribute = (words: OcrWord[], rev: number): void => {
     if (!shared || words.length === 0) return;
     void bookCloud()
-      .then((books) => books?.publishOcr(shared.id, shared.page, words))
+      .then((books) => books?.publishOcr(shared.id, shared.page, words, rev))
       .catch(() => undefined);
   };
 
@@ -1175,8 +1216,9 @@ export async function ocrPage(
   if (isCanvas(image)) {
     const viaClaude = await claudeOcr(image, onStatus);
     if (viaClaude) {
-      await setMeta(CACHE_PREFIX + cacheKey, viaClaude);
-      contribute(viaClaude);
+      const rev = Date.now();
+      await stampLocal(cacheKey, viaClaude, rev);
+      contribute(viaClaude, rev);
       return viaClaude;
     }
   }
@@ -1198,8 +1240,9 @@ export async function ocrPage(
       h: Math.max(0.004, (box.y1 - box.y0) / size.height),
     });
   }
-  await setMeta(CACHE_PREFIX + cacheKey, words);
-  contribute(words);
+  const rev = Date.now();
+  await stampLocal(cacheKey, words, rev);
+  contribute(words, rev);
   return words;
 }
 
@@ -1219,6 +1262,9 @@ export async function clearBookOcr(bookId: string, sharedId?: string): Promise<n
   const books = sharedId ? await bookCloud() : null;
   for (const [key] of held) {
     await deleteMeta(key).catch(() => undefined);
+    const cacheKey = key.slice(CACHE_PREFIX.length);
+    await deleteMeta(REV_PREFIX + cacheKey).catch(() => undefined);
+    await deleteMeta(SEEN_PREFIX + cacheKey).catch(() => undefined);
     const page = Number(key.slice(key.lastIndexOf(":") + 1));
     if (books && sharedId && Number.isFinite(page)) {
       await books.deleteSharedOcr(sharedId, page).catch(() => undefined);
@@ -1236,10 +1282,11 @@ export async function clearBookOcr(bookId: string, sharedId?: string): Promise<n
  * settle on is what everybody downstream gets.
  */
 export async function saveOcr(cacheKey: string, words: OcrWord[], shared?: SharedOcrRef): Promise<void> {
-  await setMeta(CACHE_PREFIX + cacheKey, words);
+  const rev = Date.now();
+  await stampLocal(cacheKey, words, rev);
   if (!shared) return;
   const books = await bookCloud();
-  await books?.publishOcr(shared.id, shared.page, words).catch(() => false);
+  await books?.publishOcr(shared.id, shared.page, words, rev).catch(() => false);
 }
 
 /**
@@ -1284,6 +1331,8 @@ export async function readRegion(
 export async function clearOcr(cacheKey: string, shared?: SharedOcrRef): Promise<void> {
   const { deleteMeta } = await import("./db.js");
   await deleteMeta(CACHE_PREFIX + cacheKey).catch(() => undefined);
+  await deleteMeta(REV_PREFIX + cacheKey).catch(() => undefined);
+  await deleteMeta(SEEN_PREFIX + cacheKey).catch(() => undefined);
   if (shared) {
     void bookCloud()
       .then((books) => books?.deleteSharedOcr(shared.id, shared.page))

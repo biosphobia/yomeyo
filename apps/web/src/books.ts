@@ -556,12 +556,18 @@ export async function shelfAccount(): Promise<AccountInfo | null> {
  */
 const ocrDocId = (page: number): string => `v4-${page}`;
 
-export async function fetchSharedOcr(sharedId: string, page: number): Promise<unknown | null> {
+export async function fetchSharedOcr(
+  sharedId: string,
+  page: number,
+): Promise<{ words: unknown; rev: number } | null> {
   try {
     const { db, storeApi } = await firestoreApi();
     const snapshot = await storeApi.getDoc(storeApi.doc(db, "books", sharedId, "ocr", ocrDocId(page)));
     const data = snapshot.exists?.() ? snapshot.data?.() : null;
-    return Array.isArray(data?.words) ? data.words : null;
+    if (!Array.isArray(data?.words)) return null;
+    // rev marks hand corrections; pages written before it existed are 0,
+    // which correctly never beats anything.
+    return { words: data.words, rev: typeof data.rev === "number" ? data.rev : 0 };
   } catch {
     return null;
   }
@@ -585,11 +591,19 @@ export async function deleteSharedOcr(sharedId: string, page: number): Promise<v
  * how a whole book's worth of reading could be marked as shared without a
  * single page of it arriving.
  */
-export async function publishOcr(sharedId: string, page: number, words: unknown): Promise<boolean> {
+export async function publishOcr(
+  sharedId: string,
+  page: number,
+  words: unknown,
+  rev = Date.now(),
+): Promise<boolean> {
   try {
     if (!(await currentAccount().catch(() => null))) return false;
     const { db, storeApi } = await firestoreApi();
-    await storeApi.setDoc(storeApi.doc(db, "books", sharedId, "ocr", ocrDocId(page)), { words });
+    // rev is what carries a correction to devices that already hold this
+    // page: they take the share's copy again whenever its rev is newer
+    // than the one they cached.
+    await storeApi.setDoc(storeApi.doc(db, "books", sharedId, "ocr", ocrDocId(page)), { words, rev });
     return true;
   } catch {
     /* the local cache still stands; the next sweep tries again */

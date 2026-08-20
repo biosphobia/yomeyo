@@ -6016,7 +6016,24 @@ button.gram-swap-line:hover {
 }
 .bk-ocr-sheet-num:hover { background: color-mix(in srgb, var(--accent) 25%, transparent); color: var(--text); }
 
-.bk-ocr-sheet-body { min-width: 0; }
+.bk-ocr-sheet-body { min-width: 0; flex: 1; }
+
+/* The owner's pen: retype a line the reader got almost right. */
+.bk-ocr-sheet-fix {
+  all: unset;
+  cursor: pointer;
+  flex: none;
+  min-width: 22px;
+  height: 22px;
+  margin-top: 2px;
+  border-radius: 7px;
+  text-align: center;
+  line-height: 22px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  background: var(--panel-2);
+}
+.bk-ocr-sheet-fix:hover { background: color-mix(in srgb, var(--accent) 25%, transparent); color: var(--text); }
 
 #bk-ocr-text.on {
   background: color-mix(in srgb, var(--accent) 45%, transparent);
@@ -6080,6 +6097,24 @@ button.gram-swap-line:hover {
 #bk-ocr-edit.on {
   background: color-mix(in srgb, var(--accent) 45%, transparent);
   color: var(--text);
+}
+
+/* Retyping a line while editing boxes: the pen sits opposite the cross. */
+.bk-ocr-fix {
+  position: absolute;
+  right: -10px;
+  top: -10px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  font-size: 0.7rem;
+  line-height: 20px;
+  text-align: center;
+  cursor: pointer;
+  touch-action: none;
 }
 
 /* The same face the deck wears on its tab, so the two lists read as one. */
