@@ -83,6 +83,12 @@ export interface OcrWord {
    * dictionary lookup on the line.
    */
   furigana?: string;
+  /**
+   * The uploader's own note about this line — a translation gloss, a
+   * warning about slang, whatever they want every reader to see. Travels
+   * with the page's OCR like everything else here.
+   */
+  memo?: string;
 }
 
 // Versioned: results from the old estimate-the-box pipeline are not worth

@@ -1,4 +1,6 @@
 import { isJapaneseChar, lookup, openZip } from "@yomeyo/core";
+import { askPage, cachedAnalysis, explainPage, pageJpeg, type PageAnalysis } from "./book-ai.js";
+import { generatorAvailable } from "./deck-build.js";
 import { activeDictionary } from "./store.js";
 import { closePopup, showLookupPopup } from "./popup.js";
 import { getBookFile, type BookInfo } from "./books.js";
@@ -489,6 +491,12 @@ function openOcrStrip(layer: HTMLDivElement, line: OcrWord, status: HTMLElement 
   text.lang = "ja";
   renderTappableText(text, line.text, status);
   strip.appendChild(text);
+  if (line.memo) {
+    const memo = document.createElement("div");
+    memo.className = "bk-ocr-memo";
+    memo.textContent = line.memo;
+    strip.appendChild(memo);
+  }
   strip.addEventListener("click", (ev) => ev.stopPropagation());
   layer.appendChild(strip);
 }
@@ -640,6 +648,85 @@ function offerOcr(
     ui.status.textContent = shared ? "Corrected, for every reader of this book." : "Corrected.";
   };
 
+  /**
+   * The uploader's memo on a line: a translation note every reader sees,
+   * travelling with the page's OCR the same way corrections do.
+   */
+  const editLineMemo = (line: OcrWord): void => {
+    const memo = window.prompt("Memo about this line, shown to every reader (empty removes it):", line.memo ?? "");
+    if (memo === null) return;
+    const cleaned = memo.trim();
+    if (cleaned) line.memo = cleaned;
+    else delete line.memo;
+    overlay(lines, true);
+    persist();
+    ui.status.textContent = cleaned
+      ? shared
+        ? "Memo saved, for every reader of this book."
+        : "Memo saved."
+      : "Memo removed.";
+  };
+
+  // ---------------- the reading tutor ----------------
+  //
+  // The sheet's other half: the page image and its transcription sent to
+  // Claude together, either for a walkthrough of every line (kept, so a
+  // page is paid for once) or to answer whatever the learner typed. The
+  // image rides along because half the meaning is in the picture.
+  let aiReady = false;
+  let aiBusy = false;
+  let aiNote = "";
+  let askDraft = "";
+  let analysis: PageAnalysis | null = null;
+  const askLog: { q: string; a: string }[] = [];
+  void generatorAvailable().then((ok) => {
+    if (ok) {
+      aiReady = true;
+      renderSheet();
+    }
+  });
+  void cachedAnalysis(cacheKey).then((held) => {
+    if (held) {
+      analysis = held;
+      renderSheet();
+    }
+  });
+
+  const runExplain = async (force: boolean): Promise<void> => {
+    if (aiBusy) return;
+    aiBusy = true;
+    aiNote = "The tutor is reading the page…";
+    renderSheet();
+    try {
+      analysis = await explainPage(cacheKey, pageJpeg(sourceCanvas()), lines, force);
+      aiNote = "";
+    } catch (err) {
+      aiNote = err instanceof Error ? err.message : "The tutor could not look at this page.";
+    } finally {
+      aiBusy = false;
+      renderSheet();
+    }
+  };
+
+  const runAsk = async (): Promise<void> => {
+    const question = askDraft.trim();
+    if (aiBusy || !question) return;
+    aiBusy = true;
+    aiNote = "The tutor is thinking…";
+    renderSheet();
+    try {
+      const answer = await askPage(pageJpeg(sourceCanvas()), lines, question);
+      askLog.push({ q: question, a: answer });
+      askDraft = "";
+      aiNote = "";
+    } catch (err) {
+      aiNote = err instanceof Error ? err.message : "The tutor had no answer.";
+    } finally {
+      aiBusy = false;
+      renderSheet();
+    }
+  };
+
   /** Point at one line's box on the page, from its row in the sheet. */
   const flashLine = (at: number): void => {
     const el = layer.querySelectorAll<HTMLElement>(":scope > .bk-ocr-word")[at];
@@ -648,6 +735,101 @@ function offerOcr(
     layer.querySelectorAll(".hl").forEach((held) => held.classList.remove("hl"));
     el.classList.add("hl");
     el.scrollIntoView({ block: "center", behavior: "smooth" });
+  };
+
+  /**
+   * The tutor's corner of the sheet: the walkthrough, the answers so
+   * far, and the ask box. Rebuilt with the sheet, from state that lives
+   * in this page's closure.
+   */
+  const buildTutor = (): HTMLDivElement => {
+    const box = document.createElement("div");
+    box.className = "bk-ai";
+    const controls = document.createElement("div");
+    controls.className = "bk-ai-controls";
+    const explain = document.createElement("button");
+    explain.className = "secondary";
+    explain.textContent = analysis ? "↻ Explain again" : "✨ Explain this page";
+    explain.disabled = aiBusy;
+    explain.title = "The page and its text, taken apart line by line for a beginner";
+    explain.addEventListener("click", () => void runExplain(analysis !== null));
+    controls.appendChild(explain);
+    box.appendChild(controls);
+    if (aiNote) {
+      const note = document.createElement("div");
+      note.className = "glosses bk-ai-note";
+      note.textContent = aiNote;
+      box.appendChild(note);
+    }
+    if (analysis) {
+      const walk = document.createElement("div");
+      walk.className = "bk-ai-walk";
+      if (analysis.scene) {
+        const scene = document.createElement("div");
+        scene.className = "bk-ai-scene";
+        scene.textContent = analysis.scene;
+        walk.appendChild(scene);
+      }
+      for (const entry of analysis.lines) {
+        const item = document.createElement("div");
+        item.className = "bk-ai-line";
+        const jp = document.createElement("div");
+        jp.className = "bk-ai-jp";
+        jp.lang = "ja";
+        jp.textContent = entry.jp;
+        item.appendChild(jp);
+        if (entry.reading) {
+          const reading = document.createElement("div");
+          reading.className = "bk-ai-reading";
+          reading.lang = "ja";
+          reading.textContent = entry.reading;
+          item.appendChild(reading);
+        }
+        const en = document.createElement("div");
+        en.className = "bk-ai-en";
+        en.textContent = entry.en;
+        item.appendChild(en);
+        const how = document.createElement("div");
+        how.className = "bk-ai-how";
+        how.textContent = entry.how;
+        item.appendChild(how);
+        walk.appendChild(item);
+      }
+      box.appendChild(walk);
+    }
+    for (const { q, a } of askLog) {
+      const qa = document.createElement("div");
+      qa.className = "bk-ai-qa";
+      const question = document.createElement("div");
+      question.className = "bk-ai-q";
+      question.textContent = q;
+      const answer = document.createElement("div");
+      answer.className = "bk-ai-a";
+      answer.textContent = a;
+      qa.append(question, answer);
+      box.appendChild(qa);
+    }
+    const ask = document.createElement("div");
+    ask.className = "bk-ai-ask";
+    const input = document.createElement("input");
+    input.type = "text";
+    input.placeholder = "Ask about this page…";
+    input.value = askDraft;
+    input.disabled = aiBusy;
+    input.addEventListener("input", () => {
+      askDraft = input.value;
+    });
+    input.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") void runAsk();
+    });
+    const send = document.createElement("button");
+    send.className = "secondary";
+    send.textContent = "Ask";
+    send.disabled = aiBusy;
+    send.addEventListener("click", () => void runAsk());
+    ask.append(input, send);
+    box.appendChild(ask);
+    return box;
   };
 
   const renderSheet = (): void => {
@@ -673,6 +855,7 @@ function offerOcr(
     });
     head.append(title, note, close);
     sheet.appendChild(head);
+    if (aiReady) sheet.appendChild(buildTutor());
     lines.forEach((line, at) => {
       const row = document.createElement("div");
       row.className = "bk-ocr-sheet-line";
@@ -695,6 +878,12 @@ function offerOcr(
       text.lang = "ja";
       renderTappableText(text, line.text, ui.status);
       body.appendChild(text);
+      if (line.memo) {
+        const memo = document.createElement("div");
+        memo.className = "bk-ocr-memo";
+        memo.textContent = line.memo;
+        body.appendChild(memo);
+      }
       row.append(num, body);
       if (mayEditText) {
         const fix = document.createElement("button");
@@ -702,7 +891,12 @@ function offerOcr(
         fix.textContent = "✎";
         fix.title = "Correct this line by hand";
         fix.addEventListener("click", () => editLineText(line));
-        row.appendChild(fix);
+        const note = document.createElement("button");
+        note.className = "bk-ocr-sheet-fix";
+        note.textContent = "📝";
+        note.title = "Memo about this line, shown to every reader";
+        note.addEventListener("click", () => editLineMemo(line));
+        row.append(fix, note);
       }
       sheet.appendChild(row);
     });

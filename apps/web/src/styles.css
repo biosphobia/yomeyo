@@ -6035,6 +6035,61 @@ button.gram-swap-line:hover {
 }
 .bk-ocr-sheet-fix:hover { background: color-mix(in srgb, var(--accent) 25%, transparent); color: var(--text); }
 
+/* The uploader's memo on a line, shown to every reader. */
+.bk-ocr-memo {
+  margin-top: 4px;
+  padding: 4px 8px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  border-left: 3px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  border-radius: 0 6px 6px 0;
+}
+
+/* ---------------- the reading tutor ----------------
+   Claude looking at the same page: a line-by-line walkthrough, and the
+   learner's own questions answered with the picture in view. */
+
+.bk-ai {
+  margin: 6px 0 8px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+
+.bk-ai-controls { display: flex; gap: 8px; }
+.bk-ai-note { margin-top: 6px; }
+
+.bk-ai-scene {
+  margin: 8px 0 2px;
+  font-size: 0.8rem;
+  font-style: italic;
+  color: var(--muted);
+}
+
+.bk-ai-line {
+  padding: 7px 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+.bk-ai-walk .bk-ai-line:first-of-type { border-top: none; }
+.bk-ai-jp { font-weight: 600; }
+.bk-ai-reading { font-size: 0.76rem; color: var(--accent); }
+.bk-ai-en { font-size: 0.85rem; margin-top: 2px; }
+.bk-ai-how { font-size: 0.78rem; color: var(--muted); margin-top: 3px; }
+
+.bk-ai-qa { margin-top: 8px; }
+.bk-ai-q { font-size: 0.82rem; font-weight: 600; }
+.bk-ai-q::before { content: "Q  "; color: var(--accent); }
+.bk-ai-a { font-size: 0.82rem; margin-top: 3px; white-space: pre-wrap; }
+
+.bk-ai-ask {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.bk-ai-ask input { flex: 1; min-width: 0; }
+
 #bk-ocr-text.on {
   background: color-mix(in srgb, var(--accent) 45%, transparent);
   color: var(--text);

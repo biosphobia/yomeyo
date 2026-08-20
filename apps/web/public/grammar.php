@@ -15,6 +15,9 @@
  *   POST grammar.php {prompt, mode:translate} one built word, translated
  *   POST grammar.php {prompt, mode:explain}   why a quiz answer was right/wrong
  *   POST grammar.php {mode:ocr, image, media} a page image read into text blocks
+ *   POST grammar.php {mode:reading, image, media, text, question?}
+ *                                             a page explained to a beginner,
+ *                                             or their question about it answered
  *
  * On a host without the key file the app notices and simply uses the
  * sentences that ship with it, so nothing here is ever load-bearing.
@@ -48,13 +51,16 @@ if (!is_array($req)) {
   exit;
 }
 $isOcrRequest = (($req["mode"] ?? "") === "ocr");
+// The reading tutor carries a page image like OCR does; both are exempt
+// from the small-request rule and need no prompt of their own.
+$carriesImage = $isOcrRequest || (($req["mode"] ?? "") === "reading");
 // Roomy enough for a deck request carrying a ban list of everything the
-// learner already holds; still nowhere near the OCR allowance above.
-if (!$isOcrRequest && strlen($raw) > 64000) {
+// learner already holds; still nowhere near the image allowance above.
+if (!$carriesImage && strlen($raw) > 64000) {
   http_response_code(400);
   exit;
 }
-if (!$isOcrRequest && (!isset($req["prompt"]) || !is_string($req["prompt"]))) {
+if (!$carriesImage && (!isset($req["prompt"]) || !is_string($req["prompt"]))) {
   http_response_code(400);
   exit;
 }
@@ -98,6 +104,32 @@ $deck = ($mode === "deck");
 $translate = ($mode === "translate");
 $explain = ($mode === "explain");
 $ocr = ($mode === "ocr");
+$reading = ($mode === "reading");
+
+// The reading tutor: one page image, its transcription, and optionally a
+// learner's question about it. Without a question it explains the page.
+$readingImage = "";
+$readingMedia = "";
+$readingText = "";
+$readingQuestion = "";
+if ($reading) {
+  $readingMedia = is_string($req["media"] ?? null) ? $req["media"] : "";
+  if (!in_array($readingMedia, ["image/jpeg", "image/png", "image/webp"], true)) {
+    http_response_code(400);
+    exit;
+  }
+  $readingImage = is_string($req["image"] ?? null) ? $req["image"] : "";
+  if ($readingImage === "" || strlen($readingImage) > 5000000) {
+    http_response_code(400);
+    exit;
+  }
+  $readingText = is_string($req["text"] ?? null) ? $req["text"] : "";
+  $readingQuestion = is_string($req["question"] ?? null) ? $req["question"] : "";
+  if (strlen($readingText) > 12000 || strlen($readingQuestion) > 4000) {
+    http_response_code(400);
+    exit;
+  }
+}
 
 // OCR arrives one of two ways. The good way: `images`, an array of small
 // crops the app cut out itself, one per detected text block — Claude only
@@ -197,6 +229,39 @@ $ocrCropSchema = [
   "additionalProperties" => false,
 ];
 
+// The reading tutor's page walkthrough: one entry per line of the
+// transcription, each taken apart for a beginner, plus the scene.
+$readingSchema = [
+  "type" => "object",
+  "properties" => [
+    "scene" => ["type" => "string"],
+    "lines" => [
+      "type" => "array",
+      "items" => [
+        "type" => "object",
+        "properties" => [
+          "jp" => ["type" => "string"],
+          "reading" => ["type" => "string"],
+          "en" => ["type" => "string"],
+          "how" => ["type" => "string"],
+        ],
+        "required" => ["jp", "en", "how"],
+        "additionalProperties" => false,
+      ],
+    ],
+  ],
+  "required" => ["lines"],
+  "additionalProperties" => false,
+];
+
+// And its answer to a direct question: one field, plain words.
+$readingAskSchema = [
+  "type" => "object",
+  "properties" => ["answer" => ["type" => "string"]],
+  "required" => ["answer"],
+  "additionalProperties" => false,
+];
+
 // A page read into text blocks: the text exactly as printed, and a tight
 // box per block in thousandths of the image, so the overlay lands true.
 $ocrSchema = [
@@ -224,6 +289,8 @@ $ocrSchema = [
 
 $schema = $ocr
   ? ($ocrCrops ? $ocrCropSchema : $ocrSchema)
+  : ($reading
+  ? ($readingQuestion !== "" ? $readingAskSchema : $readingSchema)
   : ($explain
   ? $explainSchema
   : ($translate
@@ -266,20 +333,42 @@ $schema = $ocr
       ],
       "required" => ["sentences"],
       "additionalProperties" => false,
-    ]))));
+    ])))));
 
 $body = [
   // Feedback has to land while the answer still stings, so it rides the
   // fastest model; everything else keeps the careful one.
   "model" => $explain ? "claude-haiku-4-5-20251001" : "claude-sonnet-5",
-  "max_tokens" => $explain ? 300 : ($ocr ? 8000 : 16000),
+  "max_tokens" => $explain ? 300 : ($ocr ? 8000 : ($reading ? 6000 : 16000)),
   "output_config" => $explain
     ? ["format" => ["type" => "json_schema", "schema" => $schema]]
     : [
         "effort" => $parse ? "high" : ($translate || $ocr ? "low" : "medium"),
         "format" => ["type" => "json_schema", "schema" => $schema],
       ],
-  "system" => ($ocr && $ocrCrops)
+  "system" => $reading
+    ? "You are a Japanese reading tutor sitting with a beginner over one " .
+      "page of a comic or scanned book. You see the page image and a " .
+      "transcription of its text in reading order. Ground everything in " .
+      "what the page actually shows: who is speaking, to whom, in what " .
+      "situation, in what tone. Plain everyday words; if a grammar term " .
+      "is unavoidable, explain it in a few words on the spot. Never use " .
+      "an em dash. Never invent text that is not on the page. " .
+      ($readingQuestion !== ""
+        ? "Answer the learner's question about this page in \"answer\": " .
+          "directly, concretely, and briefly enough to read on a phone, " .
+          "quoting the page's own Japanese where it helps."
+        : "Walk the page: one \"lines\" entry per line of the " .
+          "transcription, in the same order. \"jp\" is the line exactly " .
+          "as transcribed. \"reading\" is the whole line in kana, left " .
+          "out when the line is already all kana. \"en\" is a natural " .
+          "English translation. \"how\" is two or three short sentences " .
+          "taking the Japanese apart: name each word and particle and " .
+          "what it does here, spell out casual contractions with their " .
+          "plain textbook forms, and note politeness or tone worth " .
+          "knowing. \"scene\" is one or two sentences on what is " .
+          "happening in the picture and how it shapes the meaning.")
+    : (($ocr && $ocrCrops)
     ? "You transcribe Japanese print from small numbered crops of a page, " .
       "usually manga. Each crop is ONE LINE of text: a single column read " .
       "top to bottom when it is marked vertical, a single row read left to " .
@@ -331,7 +420,7 @@ $body = [
       "Follow the model and the wording rules in the request exactly."
     : "You write practice sentences for a beginner Japanese course. " .
       "Follow the rules in the request exactly; every sentence is shown to a " .
-      "learner as fact, so a wrong label teaches something wrong."))))),
+      "learner as fact, so a wrong label teaches something wrong.")))))),
   "messages" => [[
     "role" => "user",
     "content" => $ocrCrops
@@ -358,7 +447,16 @@ $body = [
             "y downward from the TOP edge, and x, y, w, h are all thousandths (0-1000) of the image's " .
             "width and height. Take a moment per block to check its box really sits on the text."],
         ]
-      : $prompt),
+      : ($reading
+      ? [
+          ["type" => "image", "source" => ["type" => "base64", "media_type" => $readingMedia, "data" => $readingImage]],
+          ["type" => "text", "text" =>
+            "The page's transcription, in reading order, one line per line:\n" . $readingText],
+          ["type" => "text", "text" => $readingQuestion !== ""
+            ? "The learner asks: " . $readingQuestion
+            : "Walk this page for the learner."],
+        ]
+      : $prompt)),
   ]],
 ];
 
