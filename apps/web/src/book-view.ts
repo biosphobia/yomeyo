@@ -476,11 +476,19 @@ function openOcrStrip(layer: HTMLDivElement, line: OcrWord, status: HTMLElement 
     ev.stopPropagation();
     strip.remove();
   });
+  strip.appendChild(close);
+  if (line.furigana) {
+    const furi = document.createElement("div");
+    furi.className = "bk-strip-furi";
+    furi.lang = "ja";
+    furi.textContent = line.furigana;
+    strip.appendChild(furi);
+  }
   const text = document.createElement("div");
   text.className = "bk-strip-text";
   text.lang = "ja";
   renderTappableText(text, line.text, status);
-  strip.append(close, text);
+  strip.appendChild(text);
   strip.addEventListener("click", (ev) => ev.stopPropagation());
   layer.appendChild(strip);
 }
@@ -501,6 +509,8 @@ function offerOcr(
 ): void {
   ui.controls.querySelector("#bk-ocr-btn")?.remove();
   ui.controls.querySelector("#bk-ocr-manage")?.remove();
+  // The last page's text sheet, if one is up: its lines are not this page's.
+  ui.body.querySelector(".bk-ocr-sheet")?.remove();
   const button = document.createElement("button");
   button.id = "bk-ocr-btn";
   button.className = "secondary";
@@ -522,11 +532,21 @@ function offerOcr(
     manage.id = "bk-ocr-manage";
     manage.className = "row-actions bk-ocr-manage";
     manage.innerHTML = `
+      <button class="secondary" id="bk-ocr-text" title="All the page's text as a list, in manga reading order">☰ Text</button>
       <button class="secondary" id="bk-ocr-boxes"></button>
       <button class="secondary" id="bk-ocr-edit" title="Move, resize, remove or add boxes by hand">✎ Edit boxes</button>
       <button class="secondary" id="bk-ocr-redo" title="Read this page again, replacing its OCR">↻ Redo</button>
       <button class="secondary" id="bk-ocr-clear" title="Forget this page's OCR">✕ Clear</button>
     `;
+    const textButton = manage.querySelector<HTMLButtonElement>("#bk-ocr-text")!;
+    textButton.classList.toggle("on", sheetOpen);
+    textButton.addEventListener("click", () => {
+      sheetOpen = !sheetOpen;
+      void setMeta("ocrTextSheet", sheetOpen);
+      textButton.classList.toggle("on", sheetOpen);
+      renderSheet();
+      if (sheetOpen && lines.length === 0) ui.status.textContent = "No text on this page yet.";
+    });
     const editButton = manage.querySelector<HTMLButtonElement>("#bk-ocr-edit")!;
     editButton.addEventListener("click", () => {
       const on = !layer.classList.contains("editing");
@@ -549,7 +569,9 @@ function offerOcr(
     manage.querySelector("#bk-ocr-redo")!.addEventListener("click", () => void run(true));
     manage.querySelector("#bk-ocr-clear")!.addEventListener("click", () => {
       void clearOcr(cacheKey, shared).then(() => {
+        lines = [];
         layer.innerHTML = "";
+        renderSheet();
         manage.remove();
         ui.controls.appendChild(button);
         button.disabled = false;
@@ -563,6 +585,85 @@ function offerOcr(
   /** The page's lines as they stand, which editing changes in place. */
   let lines: OcrWord[] = [];
   let editing = false;
+
+  // ---------------- the text sheet ----------------
+  //
+  // Every line the page yielded, as a list in manga reading order: right
+  // to left, top to bottom, the way the page is read. This is the honest
+  // answer to a page whose boxes came out badly placed — the text is
+  // right there, every character tappable, no rectangle to hunt for. The
+  // number beside a line points back at its box on the page, and a line's
+  // furigana sits above it in small print. Whether the sheet is open is
+  // remembered, so it stays up while flipping pages.
+  let sheetOpen = false;
+
+  /** Point at one line's box on the page, from its row in the sheet. */
+  const flashLine = (at: number): void => {
+    const el = layer.querySelectorAll<HTMLElement>(":scope > .bk-ocr-word")[at];
+    if (!el) return;
+    layer.classList.add("show-boxes");
+    layer.querySelectorAll(".hl").forEach((held) => held.classList.remove("hl"));
+    el.classList.add("hl");
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+  };
+
+  const renderSheet = (): void => {
+    ui.body.querySelector(".bk-ocr-sheet")?.remove();
+    if (!sheetOpen || lines.length === 0) return;
+    const sheet = document.createElement("div");
+    sheet.className = "bk-ocr-sheet";
+    const head = document.createElement("div");
+    head.className = "bk-ocr-sheet-head";
+    const title = document.createElement("b");
+    title.textContent = "Page text";
+    const note = document.createElement("span");
+    note.className = "glosses";
+    note.textContent = "reading order";
+    const close = document.createElement("button");
+    close.className = "bk-strip-close";
+    close.textContent = "✕";
+    close.addEventListener("click", () => {
+      sheetOpen = false;
+      void setMeta("ocrTextSheet", false);
+      ui.controls.querySelector("#bk-ocr-text")?.classList.remove("on");
+      renderSheet();
+    });
+    head.append(title, note, close);
+    sheet.appendChild(head);
+    lines.forEach((line, at) => {
+      const row = document.createElement("div");
+      row.className = "bk-ocr-sheet-line";
+      const num = document.createElement("button");
+      num.className = "bk-ocr-sheet-num";
+      num.textContent = String(at + 1);
+      num.title = "Show this line on the page";
+      num.addEventListener("click", () => flashLine(at));
+      const body = document.createElement("div");
+      body.className = "bk-ocr-sheet-body";
+      if (line.furigana) {
+        const furi = document.createElement("div");
+        furi.className = "bk-strip-furi";
+        furi.lang = "ja";
+        furi.textContent = line.furigana;
+        body.appendChild(furi);
+      }
+      const text = document.createElement("div");
+      text.className = "bk-strip-text";
+      text.lang = "ja";
+      renderTappableText(text, line.text, ui.status);
+      body.appendChild(text);
+      row.append(num, body);
+      sheet.appendChild(row);
+    });
+    ui.body.appendChild(sheet);
+  };
+
+  void getMeta<boolean>("ocrTextSheet").then((held) => {
+    if (held !== true) return;
+    sheetOpen = true;
+    ui.controls.querySelector("#bk-ocr-text")?.classList.add("on");
+    renderSheet();
+  });
 
   const place = (el: HTMLElement, line: OcrWord): void => {
     el.style.left = `${(line.x * 100).toFixed(2)}%`;
@@ -665,6 +766,7 @@ function offerOcr(
       }
       layer.appendChild(el);
     }
+    renderSheet();
     if (!quiet) ui.status.textContent = lines.length === 0 ? "OCR found no Japanese on this page." : "";
   };
 

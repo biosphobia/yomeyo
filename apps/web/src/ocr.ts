@@ -77,6 +77,12 @@ export interface OcrWord {
    * which is how individual words become tappable.
    */
   vertical?: boolean;
+  /**
+   * The line's furigana, read separately from the ruby beside it. Kept
+   * apart from `text` on purpose: mixed in, it would corrupt every
+   * dictionary lookup on the line.
+   */
+  furigana?: string;
 }
 
 // Versioned: results from the old estimate-the-box pipeline are not worth
@@ -220,29 +226,38 @@ async function claudeOcr(canvas: AnyCanvas, onStatus?: (line: string) => void): 
  * characters can then be placed along it.
  */
 async function transcribeBlocks(frame: AnyCanvas, boxes: DetectedLine[]): Promise<OcrWord[] | null> {
-  const images: string[] = [];
+  // Every rectangle of text on the page — the lines, and each line's
+  // furigana — so a crop can paint out everything that is not its own.
+  const rects: Room[] = [];
   for (const box of boxes) {
+    rects.push(box);
+    if (box.furi) rects.push(box.furi);
+  }
+
+  /**
+   * One rectangle, cropped clean. Every OTHER piece of text that reaches
+   * into the crop is painted out.
+   *
+   * Furigana sits a hair away from the column it belongs to, so even a
+   * few pixels of margin catch it — and a crop holding two columns is
+   * read as one, which is where 「ここ家が」 came back as 「ここ家がしえ」.
+   * The neighbours go white and this rectangle's own pixels are then
+   * drawn back on top, so nothing of its own is lost to the erasing.
+   */
+  const cropOf = async (rect: Room): Promise<string> => {
     const pad = 4;
-    const x = Math.max(0, box.x - pad);
-    const y = Math.max(0, box.y - pad);
-    const cw = Math.min(frame.width - x, box.w + pad * 2);
-    const ch = Math.min(frame.height - y, box.h + pad * 2);
+    const x = Math.max(0, rect.x - pad);
+    const y = Math.max(0, rect.y - pad);
+    const cw = Math.min(frame.width - x, rect.w + pad * 2);
+    const ch = Math.min(frame.height - y, rect.h + pad * 2);
     // Tiny crops read badly; double them so the strokes survive JPEG.
     const up = Math.max(cw, ch) < 120 ? 2 : 1;
     const crop = newCanvas(Math.max(1, cw * up), Math.max(1, ch * up));
     const ctx = context2d(crop);
     ctx.drawImage(frame as CanvasImageSource, x, y, cw, ch, 0, 0, crop.width, crop.height);
-
-    // Paint out every OTHER line that reaches into this crop.
-    //
-    // Furigana sits a hair away from the column it belongs to, so even a
-    // few pixels of margin catch it — and a crop holding two columns is
-    // read as one, which is where 「ここ家が」 came back as 「ここ家がしえ」.
-    // The neighbours go white and this line's own pixels are then drawn
-    // back on top, so nothing of its own is lost to the erasing.
     ctx.fillStyle = "#ffffff";
-    for (const other of boxes) {
-      if (other === box) continue;
+    for (const other of rects) {
+      if (other === rect) continue;
       const ox = Math.max(x, other.x);
       const oy = Math.max(y, other.y);
       const ow = Math.min(x + cw, other.x + other.w) - ox;
@@ -252,16 +267,37 @@ async function transcribeBlocks(frame: AnyCanvas, boxes: DetectedLine[]): Promis
     }
     ctx.drawImage(
       frame as CanvasImageSource,
-      box.x,
-      box.y,
-      box.w,
-      box.h,
-      (box.x - x) * up,
-      (box.y - y) * up,
-      box.w * up,
-      box.h * up,
+      rect.x,
+      rect.y,
+      rect.w,
+      rect.h,
+      (rect.x - x) * up,
+      (rect.y - y) * up,
+      rect.w * up,
+      rect.h * up,
     );
-    images.push(await jpegBase64(crop, 0.85));
+    return jpegBase64(crop, 0.85);
+  };
+
+  // The lines first, then the furigana — each furigana crop remembering
+  // whose reading it is. Every crop says which way it reads, so a
+  // horizontal row is never announced to the model as a column.
+  const images: string[] = [];
+  const verticals: boolean[] = [];
+  for (const box of boxes) {
+    images.push(await cropOf(box));
+    verticals.push(box.vertical);
+  }
+  const furiOwners: number[] = [];
+  for (let at = 0; at < boxes.length; at++) {
+    const furi = boxes[at].furi;
+    if (!furi) continue;
+    // The server takes eighty crops at most; a page that somehow needs
+    // more keeps its lines and lets the last readings go.
+    if (images.length >= 80) break;
+    furiOwners.push(at);
+    images.push(await cropOf(furi));
+    verticals.push(boxes[at].vertical);
   }
 
   // Hundreds of pages in a row will meet a rate limit. Wait the time the
@@ -272,7 +308,7 @@ async function transcribeBlocks(frame: AnyCanvas, boxes: DetectedLine[]): Promis
     res = await fetch(assetUrl("grammar.php"), {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ mode: "ocr", images, media: "image/jpeg" }),
+      body: JSON.stringify({ mode: "ocr", images, media: "image/jpeg", vertical: verticals }),
     }).catch(() => null);
     if (res?.ok) break;
     const busy = !res || res.status === 429 || res.status >= 500;
@@ -301,21 +337,27 @@ async function transcribeBlocks(frame: AnyCanvas, boxes: DetectedLine[]): Promis
     const i = Number(block.i);
     if (Number.isInteger(i) && typeof block.text === "string") textOf.set(i, block.text.trim());
   }
-  const words: OcrWord[] = [];
-  boxes.forEach((box, at) => {
+  const perBox: (OcrWord | null)[] = boxes.map((box, at) => {
     const text = textOf.get(at + 1) ?? "";
     // Crops that were artwork after all come back empty and vanish here.
-    if (!text || !hasJapanese(text)) return;
-    words.push({
+    if (!text || !hasJapanese(text)) return null;
+    return {
       text,
       x: box.x / frame.width,
       y: box.y / frame.height,
       w: box.w / frame.width,
       h: box.h / frame.height,
       vertical: box.vertical,
-    });
+    };
   });
-  return words;
+  // The furigana crops came after the lines, in owner order; each reading
+  // joins its own line rather than standing anywhere as text of its own.
+  furiOwners.forEach((ownerAt, k) => {
+    const reading = textOf.get(boxes.length + k + 1) ?? "";
+    const word = perBox[ownerAt];
+    if (word && reading && hasJapanese(reading)) word.furigana = reading;
+  });
+  return perBox.filter((word): word is OcrWord => word !== null);
 }
 
 // ---------------- finding the text blocks ourselves ----------------
@@ -332,6 +374,8 @@ interface DetectedBox {
 /** One line of print: a column of vertical text, or a row of horizontal. */
 interface DetectedLine extends DetectedBox {
   vertical: boolean;
+  /** The line's furigana, when a ruby line was found standing beside it. */
+  furi?: Room;
 }
 
 /** One mark on the page: a character, a speck, a stroke of a drawing. */
@@ -417,18 +461,90 @@ function detectTextLines(frame: AnyCanvas): DetectedLine[] {
   const reversed = linesOfText(light, w, h).filter(
     (line) => !insideAny(line, inRooms) && !insideAny(line, outside),
   );
-  const kept = dropDuplicates([...inRooms, ...outside, ...reversed]);
+  const kept = pairFurigana(dropDuplicates([...inRooms, ...outside, ...reversed]));
   ordered(kept);
 
   const inv = 1 / s;
+  const grow = (box: Room): Room => ({
+    x: Math.max(0, Math.round((box.x - 1) * inv)),
+    y: Math.max(0, Math.round((box.y - 1) * inv)),
+    w: Math.min(frame.width, Math.round((box.w + 2) * inv)),
+    h: Math.min(frame.height, Math.round((box.h + 2) * inv)),
+  });
   return kept.slice(0, 60).map((line) => ({
-    x: Math.max(0, Math.round((line.x - 1) * inv)),
-    y: Math.max(0, Math.round((line.y - 1) * inv)),
-    w: Math.min(frame.width, Math.round((line.w + 2) * inv)),
-    h: Math.min(frame.height, Math.round((line.h + 2) * inv)),
+    ...grow(line),
     vertical: line.vertical,
     ink: line.ink,
+    ...(line.furi ? { furi: grow(line.furi) } : {}),
   }));
+}
+
+/**
+ * Furigana, recognised as what it is and married to its line.
+ *
+ * A ruby is a line of half-size kana standing hard against the column it
+ * explains — to its right in vertical text, above it in horizontal. Left
+ * as a line of its own, it did two kinds of damage: its kana turned up in
+ * the page's text as a stray "word" nobody printed, and any bleed into
+ * the main line's crop corrupted the transcription. Recognised, it does
+ * neither — it is removed from the lines and carried on its column as the
+ * reading, transcribed from its own clean crop.
+ *
+ * The tests are all relative, so they hold at any page size: much thinner
+ * than its base (real neighbouring columns are the same size and refuse
+ * each other), standing just off the correct side, and running alongside
+ * for at least half its own length.
+ */
+function pairFurigana(lines: DetectedLine[]): DetectedLine[] {
+  const besides = (furi: DetectedLine, base: DetectedLine): number => {
+    if (base.vertical) {
+      if (furi.w > base.w * 0.72) return 0;
+      const gap = furi.x - (base.x + base.w);
+      if (gap < -furi.w * 0.6 || gap > base.w * 0.9) return 0;
+      const along = Math.min(base.y + base.h, furi.y + furi.h) - Math.max(base.y, furi.y);
+      return along >= Math.min(furi.h, base.h) * 0.5 ? along : 0;
+    }
+    if (furi.h > base.h * 0.72) return 0;
+    const gap = base.y - (furi.y + furi.h);
+    if (gap < -furi.h * 0.6 || gap > base.h * 0.9) return 0;
+    const along = Math.min(base.x + base.w, furi.x + furi.w) - Math.max(base.x, furi.x);
+    return along >= Math.min(furi.w, base.w) * 0.5 ? along : 0;
+  };
+
+  const owner = new Map<DetectedLine, DetectedLine>();
+  for (const line of lines) {
+    let best: DetectedLine | null = null;
+    let bestAlong = 0;
+    for (const base of lines) {
+      if (base === line) continue;
+      const along = besides(line, base);
+      if (along > bestAlong) {
+        bestAlong = along;
+        best = base;
+      }
+    }
+    if (best) owner.set(line, best);
+  }
+  // A ruby's base is a real line: anything claimed as furigana OF a
+  // furigana was a false claim, and stays a line in its own right.
+  for (const [line, base] of owner) {
+    if (owner.has(base)) owner.delete(line);
+  }
+
+  for (const [line, base] of owner) {
+    // Two runs of ruby along one column (one per word) join as their
+    // union: a thin strip down the column's side, read top to bottom.
+    const held = base.furi;
+    base.furi = held
+      ? {
+          x: Math.min(held.x, line.x),
+          y: Math.min(held.y, line.y),
+          w: Math.max(held.x + held.w, line.x + line.w) - Math.min(held.x, line.x),
+          h: Math.max(held.y + held.h, line.y + line.h) - Math.min(held.y, line.y),
+        }
+      : { x: line.x, y: line.y, w: line.w, h: line.h };
+  }
+  return lines.filter((line) => !owner.has(line));
 }
 
 /** A region of the page, in detection pixels. */
