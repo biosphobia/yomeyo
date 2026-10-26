@@ -357,13 +357,14 @@ jobs:
             echo "Meanwhile the extension zip is downloadable from this run's Artifacts."
           } >> $GITHUB_STEP_SUMMARY
 
+          echo "::warning::GitHub Pages is not enabled — see the job summary for the one setting to flip."
+
       # GitHub Pages is the site that matters; the own host is optional. A
       # failed upload there is reported as a warning, not a red run.
       - name: Report a failed upload to your own host
         if: steps.cpanel.outcome == 'failure'
         run: |
           echo "::warning::The upload to your own host (cPanel FTP) failed, so that site still serves an older build. GitHub Pages was published as normal. To stop trying, delete the CPANEL_FTP_HOST repository secret."
-          echo "::warning::GitHub Pages is not enabled — see the job summary for the one setting to flip."
 
   deploy:
     needs: build
