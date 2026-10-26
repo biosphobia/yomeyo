@@ -196,8 +196,13 @@ jobs:
       # changed files are transferred after the first run (the action keeps a
       # sync-state file on the server), so pushes that touch no assets are
       # quick even though the dictionary is tens of megabytes.
+      # A refused upload (a changed FTP password, a host that is down) must
+      # not take GitHub Pages down with it, so this step does not stop the
+      # job. The last step of the job still turns the run red when it failed.
       - name: Publish site to your own host (cPanel)
+        id: cpanel
         if: env.CPANEL_FTP_HOST != ''
+        continue-on-error: true
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.CPANEL_FTP_HOST }}
@@ -220,7 +225,7 @@ jobs:
       # URL does not serve this exact build. -k because a host mid-AutoSSL
       # setup has no valid certificate yet; the check is about placement.
       - name: Check the site actually serves the upload
-        if: env.CPANEL_FTP_HOST != ''
+        if: env.CPANEL_FTP_HOST != '' && steps.cpanel.outcome == 'success'
         env:
           SITE_URL: ${{ secrets.CPANEL_SITE_URL }}
         run: |
@@ -312,6 +317,14 @@ jobs:
             echo ""
             echo "Meanwhile the extension zip is downloadable from this run's Artifacts."
           } >> $GITHUB_STEP_SUMMARY
+
+      # Everything public has been published by now; a failed upload to the
+      # own host still makes the run red, with the reason in plain words.
+      - name: Report a failed upload to your own host
+        if: steps.cpanel.outcome == 'failure'
+        run: |
+          echo "::error::The upload to your own host (cPanel FTP) failed, so that site still serves the previous build. GitHub Pages was published anyway. The step log above has the server's reason; '530 Login authentication failed' means the CPANEL_FTP_USER / CPANEL_FTP_PASSWORD secrets no longer match the FTP account in cPanel."
+          exit 1
           echo "::warning::GitHub Pages is not enabled — see the job summary for the one setting to flip."
 
   deploy:
@@ -320,7 +333,10 @@ jobs:
     # branch; from anywhere else the job is rejected before it even starts, so
     # skip it rather than show a red build. On other branches the gh-pages
     # publish in the build job is the delivery path.
+    # !cancelled(): a build that published everything public but then
+    # reported a failed own-host upload still deploys to Pages.
     if: >-
+      !cancelled() &&
       needs.build.outputs.pages_ready == 'true' &&
       github.ref_name == github.event.repository.default_branch
     # Best-effort: the real site lives on the cPanel host, published by the
