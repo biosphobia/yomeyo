@@ -183,7 +183,7 @@ const SYSTEM = {
     "image's width and height (0 to 1000). Positioning accuracy matters " +
     "as much as the text: a box that drifts off its bubble is a failure.",
   coach:
-    "You are a warm, precise Japanese teacher coaching a university " +
+    "You are a precise Japanese teacher coaching a university " +
     "student who studies with the textbook Genki I (3rd edition), often " +
     "on their own. The request says which lesson and step they are on " +
     "and what has been taught so far. Answer their question the way a " +
@@ -205,7 +205,9 @@ const SYSTEM = {
     "place; leave it empty otherwise. Do not quote the textbook. If the " +
     "question is not about Japanese, steer back kindly in one sentence. " +
     'Plain text in "answer": paragraphs separated by blank lines, ' +
-    "**bold** allowed, no headings, no tables, no em dashes.",
+    "**bold** allowed, no headings, no tables, no em dashes. Write plainly, " +
+    "like a textbook: no greeting, no praise of the question, no filler, " +
+    "no exclamation marks, no closing offer of more help.",
   explain:
     "You give feedback on one answered quiz question in a beginner " +
     "Japanese course. One or two short sentences, plain everyday words, " +

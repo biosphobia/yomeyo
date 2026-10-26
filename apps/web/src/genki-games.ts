@@ -296,8 +296,8 @@ const YEARS = ["", "いちねんせい", "にねんせい", "さんねんせい"
 export const GAMES: Record<string, GameDef> = {
   "greet-situations": {
     id: "greet-situations",
-    title: "What do you say?",
-    blurb: "A moment of the day, and the greeting that fits it.",
+    title: "Greetings",
+    blurb: "Pick the greeting for each situation.",
     icon: "👋",
     build: () =>
       shuffle(GREETINGS)
@@ -314,8 +314,8 @@ export const GAMES: Record<string, GameDef> = {
 
   "numbers-read": {
     id: "numbers-read",
-    title: "Number reader",
-    blurb: "See a number, pick how it's said. Watch the 4s, 7s and 9s.",
+    title: "Number readings",
+    blurb: "Pick the reading of each number.",
     icon: "🔢",
     build: () =>
       Array.from({ length: 10 }, () => {
@@ -332,8 +332,8 @@ export const GAMES: Record<string, GameDef> = {
 
   "numbers-listen": {
     id: "numbers-listen",
-    title: "Number catcher",
-    blurb: "Listen and type the number you hear (0–100).",
+    title: "Number dictation",
+    blurb: "Type the number you hear (0–100).",
     icon: "👂",
     build: () =>
       Array.from({ length: 8 }, () => {
@@ -351,8 +351,8 @@ export const GAMES: Record<string, GameDef> = {
 
   "wa-desu-builder": {
     id: "wa-desu-builder",
-    title: "Sentence builder",
-    blurb: "Put the pieces in order. The ending always comes last.",
+    title: "Sentence order",
+    blurb: "Put the pieces in order.",
     icon: "🧱",
     build: () =>
       shuffle<[string[], string]>([
@@ -373,8 +373,8 @@ export const GAMES: Record<string, GameDef> = {
 
   "jin-or-go": {
     id: "jin-or-go",
-    title: "Person or language?",
-    blurb: "〜じん for people, 〜ご for languages, and a couple of traps.",
+    title: "〜じん or 〜ご",
+    blurb: "Person from a country, or its language.",
     icon: "🌏",
     build: () => {
       const countries: [string, string, string][] = [
@@ -400,8 +400,8 @@ export const GAMES: Record<string, GameDef> = {
 
   "question-words": {
     id: "question-words",
-    title: "Which question?",
-    blurb: "Here's the answer. What was the question?",
+    title: "Question words",
+    blurb: "Pick the question for each answer.",
     icon: "❓",
     build: () =>
       shuffle<[string, string]>([
@@ -423,7 +423,7 @@ export const GAMES: Record<string, GameDef> = {
   "ages-years": {
     id: "ages-years",
     title: "Ages and years",
-    blurb: "〜さい and 〜ねんせい, with the little sound changes.",
+    blurb: "〜さい and 〜ねんせい, with sound changes.",
     icon: "🎂",
     build: () => {
       const qs: GameQuestion[] = [];
@@ -443,7 +443,7 @@ export const GAMES: Record<string, GameDef> = {
   "no-chain": {
     id: "no-chain",
     title: "の order",
-    blurb: "The main thing comes last. Pick the right order.",
+    blurb: "Pick the correct order.",
     icon: "🔗",
     build: () =>
       shuffle<[string, string, string]>([
@@ -464,8 +464,8 @@ export const GAMES: Record<string, GameDef> = {
 
   clock: {
     id: "clock",
-    title: "Clock reader",
-    blurb: "Read the clock. よじ, しちじ and くじ will try to trip you.",
+    title: "Clock",
+    blurb: "Read the time.",
     icon: "🕘",
     build: () =>
       Array.from({ length: 10 }, (_, i) => {
@@ -486,7 +486,7 @@ export const GAMES: Record<string, GameDef> = {
   "phone-listen": {
     id: "phone-listen",
     title: "Phone number dictation",
-    blurb: "Listen to a phone number and type the digits.",
+    blurb: "Type the phone number you hear.",
     icon: "📞",
     build: () =>
       Array.from({ length: 5 }, () => {
@@ -507,8 +507,8 @@ export const GAMES: Record<string, GameDef> = {
 
   "prices-read": {
     id: "prices-read",
-    title: "Price tags",
-    blurb: "Read the price. 300, 600, 800, 3,000 and 8,000 change their sound.",
+    title: "Price readings",
+    blurb: "Pick the reading of each price.",
     icon: "🏷️",
     build: () =>
       Array.from({ length: 10 }, () => {
@@ -522,8 +522,8 @@ export const GAMES: Record<string, GameDef> = {
 
   "prices-listen": {
     id: "prices-listen",
-    title: "How much was that?",
-    blurb: "Listen to a price and type it in yen.",
+    title: "Price dictation",
+    blurb: "Type the price you hear.",
     icon: "💴",
     build: () =>
       Array.from({ length: 8 }, () => {
@@ -541,8 +541,8 @@ export const GAMES: Record<string, GameDef> = {
 
   "kosoado-things": {
     id: "kosoado-things",
-    title: "Point it out",
-    blurb: "Whose side is it on? これ, それ, あれ, or どれ.",
+    title: "これ・それ・あれ・どれ",
+    blurb: "Pick the word for each picture.",
     icon: "👉",
     build: () => {
       const qs: GameQuestion[] = [];
@@ -582,8 +582,8 @@ export const GAMES: Record<string, GameDef> = {
 
   "kono-or-kore": {
     id: "kono-or-kore",
-    title: "この or これ?",
-    blurb: "A noun after it? Then it's the の word.",
+    title: "この or これ",
+    blurb: "この / その / あの before a noun, これ / それ / あれ alone.",
     icon: "🪧",
     build: () =>
       Array.from({ length: 10 }, () => {
@@ -604,8 +604,8 @@ export const GAMES: Record<string, GameDef> = {
 
   "kosoado-places": {
     id: "kosoado-places",
-    title: "Where is it?",
-    blurb: "ここ, そこ, あそこ, どこ for places.",
+    title: "ここ・そこ・あそこ・どこ",
+    blurb: "Places, from a picture.",
     icon: "📍",
     build: () => {
       const qs: GameQuestion[] = [];
@@ -629,8 +629,8 @@ export const GAMES: Record<string, GameDef> = {
 
   whose: {
     id: "whose",
-    title: "Lost and found",
-    blurb: "Answer \"whose is this?\" with だれの.",
+    title: "だれの",
+    blurb: "Answer \"whose is this?\"",
     icon: "🧳",
     build: () =>
       Array.from({ length: 8 }, () => {
@@ -645,8 +645,8 @@ export const GAMES: Record<string, GameDef> = {
 
   "mo-or-wa": {
     id: "mo-or-wa",
-    title: "は or も?",
-    blurb: "Same fact again? That's も. Different? Keep は.",
+    title: "は or も",
+    blurb: "Same fact or a different one.",
     icon: "➕",
     build: () =>
       Array.from({ length: 10 }, () => {
@@ -667,8 +667,8 @@ export const GAMES: Record<string, GameDef> = {
 
   negate: {
     id: "negate",
-    title: "No, it isn't",
-    blurb: "Deny it with じゃないです, then say what's true.",
+    title: "じゃないです",
+    blurb: "Deny, then give the correct fact.",
     icon: "🙅",
     build: () =>
       Array.from({ length: 8 }, () => {
@@ -688,8 +688,8 @@ export const GAMES: Record<string, GameDef> = {
 
   "ne-or-yo": {
     id: "ne-or-yo",
-    title: "ね or よ?",
-    blurb: "Shared feeling, or news for them?",
+    title: "ね or よ",
+    blurb: "Shared, or new to the listener.",
     icon: "💬",
     build: () =>
       shuffle<[string, string, "ね" | "よ"]>([
@@ -713,7 +713,7 @@ export const GAMES: Record<string, GameDef> = {
   "flea-market": {
     id: "flea-market",
     title: "Flea market",
-    blurb: "Talk your way through a purchase. Pick what you'd say.",
+    blurb: "Buy something, one line at a time.",
     icon: "🛍️",
     scripted: true,
     build: () => [
@@ -748,8 +748,8 @@ export const GAMES: Record<string, GameDef> = {
 
   restaurant: {
     id: "restaurant",
-    title: "Lunch order",
-    blurb: "From the door to the toilet question.",
+    title: "Restaurant",
+    blurb: "Order lunch, one line at a time.",
     icon: "🍜",
     scripted: true,
     build: () => [
@@ -801,8 +801,8 @@ export const GAMES: Record<string, GameDef> = {
 for (const lesson of GENKI_LESSONS) {
   GAMES[`vocab-${lesson.id}`] = {
     id: `vocab-${lesson.id}`,
-    title: `Lesson ${lesson.num} words`,
-    blurb: "Match the words to their meanings.",
+    title: `Unit ${lesson.num} vocabulary`,
+    blurb: "Match each word to its meaning.",
     icon: "🃏",
     pairs: () =>
       lesson.vocab
@@ -889,12 +889,12 @@ export function runGame(host: HTMLElement, id: string, options: RunOptions): voi
         <div class="big">${score >= 80 ? "🎉" : score >= 50 ? "👍" : "🌱"}</div>
         <div class="kana-score">${firstTry} / ${total}</div>
         <div class="glosses">${
-          score >= 80 ? "Lovely. That one's sinking in." : score >= 50 ? "Getting there. One more round makes a difference." : "Early days. Reread the step, then try again."
+          `${score}% first try`
         }</div>
         <div class="yen-line">${earned > 0 ? `<b>+${earned}</b> · ` : ""}${formatYennies(balance)}</div>
         <div class="row-actions" style="justify-content:center;margin-top:12px">
           <button id="gk-again">Play again</button>
-          <button id="gk-back" class="secondary">Back to the lesson</button>
+          <button id="gk-back" class="secondary">Back</button>
         </div>
       </div>`;
     host.querySelector("#gk-again")!.addEventListener("click", () => runGame(host, id, options));
@@ -948,7 +948,7 @@ export function runGame(host: HTMLElement, id: string, options: RunOptions): voi
       feedback.innerHTML = `${good ? `<span class="ok-text">✓</span>` : `<span class="err-text">✗</span>`}
         <span lang="ja">${escapeHtml(shown)}</span>
         ${why && why !== shown ? `<div class="glosses">${escapeHtml(why)}</div>` : ""}
-        <div class="glosses">${game.scripted && !good ? "Try that one again — Enter or tap" : "Enter or tap to continue"}</div>`;
+        <div class="glosses">${game.scripted && !good ? "Try again: Enter or tap" : "Enter or tap to continue"}</div>`;
       void showReaction(host.querySelector("#gk-cheer"), good ? "correct" : "wrong");
       if (say && /[ぁ-ゟァ-ヿ]/.test(say)) void speak(say.replace(/＿/g, ""), { rate: 0.85 }).catch(() => undefined);
       const panel = host.querySelector<HTMLDivElement>(".gk-game")!;
@@ -1060,11 +1060,11 @@ function runMatch(host: HTMLElement, game: GameDef, options: RunOptions): void {
       <div class="card-panel kana-quiz">
         <div class="big">${misses === 0 ? "🎉" : "👍"}</div>
         <div class="kana-score">${matched} pairs</div>
-        <div class="glosses">${misses === 0 ? "Not a single miss." : `${misses} miss${misses === 1 ? "" : "es"} along the way.`}</div>
+        <div class="glosses">${misses === 0 ? "No misses." : `${misses} miss${misses === 1 ? "" : "es"}.`}</div>
         <div class="yen-line"><b>+${matched}</b> · ${formatYennies(balance)}</div>
         <div class="row-actions" style="justify-content:center;margin-top:12px">
           <button id="gk-again">Play again</button>
-          <button id="gk-back" class="secondary">Back to the lesson</button>
+          <button id="gk-back" class="secondary">Back</button>
         </div>
       </div>`;
     host.querySelector("#gk-again")!.addEventListener("click", () => runMatch(host, game, options));

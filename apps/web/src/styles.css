@@ -6425,16 +6425,32 @@ button.gram-swap-line:hover {
  * Genki companion
  * ================================================================ */
 
-.gk-hero-title {
-  font-size: 1.1rem;
-  font-weight: 700;
-  margin-bottom: 8px;
+.gk-book-row {
+  padding: 9px 0;
+  border-top: 1px solid #ffffff0d;
+  font-size: 0.9rem;
 }
 
-.gk-hero p {
-  font-size: 0.92rem;
-  line-height: 1.55;
-  margin-bottom: 8px;
+.gk-book-row:first-of-type {
+  border-top: none;
+}
+
+.gk-book-sum {
+  margin-top: 2px;
+  line-height: 1.5;
+}
+
+.gk-book-solo {
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+.gk-practice-games {
+  margin-top: 8px;
+}
+
+.gk-practice-games .gk-game-card {
+  padding: 8px 12px;
 }
 
 .gk-map-row {

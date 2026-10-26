@@ -196,18 +196,10 @@ function mountCoach(body: HTMLElement, lesson: GenkiLesson, step: GenkiStep | nu
 
 function drawHome(body: HTMLDivElement, all: Progress, go: (p: Page) => void): void {
   body.innerHTML = `
-    <div class="card-panel gk-hero">
-      <div class="gk-hero-title">📗 Genki I, with a teacher</div>
-      <p>A lesson-by-lesson companion to <b>Genki I (3rd edition)</b>. Each lesson follows the book's order and
-        page numbers, explains every point the way a teacher would in class, checks you straight away, and gives
-        you short games for anything that needs drilling. Stuck? <b>Ask Coach</b> at the bottom of every page.</p>
-      <p class="glosses">Keep the book open beside it: this course explains and drills, the book has the full
-        dialogues, audio and workbook. Kana is skipped here; the Kana tab covers it.</p>
-    </div>
     <div id="gk-lessons"></div>
     <div class="card-panel gk-map">
-      <b>The rest of Genki I</b>
-      <div class="glosses" style="margin:4px 0 8px">Lessons 3–12 follow the same shape. They aren't built yet.</div>
+      <b>Units 3–12</b>
+      <div class="glosses" style="margin:4px 0 8px">Not built yet.</div>
       ${GENKI_MAP.filter((m) => m.num > GENKI_LESSONS.length)
         .map(
           (m) => `<div class="gk-map-row"><span class="gk-map-num">${m.num}</span><div><span lang="ja">${escapeHtml(m.jp)}</span>
@@ -227,10 +219,10 @@ function drawHome(body: HTMLDivElement, all: Progress, go: (p: Page) => void): v
       <div class="lesson-row-main">
         <div class="lesson-row-num">${done ? "✓" : lesson.num}</div>
         <div>
-          <div class="lesson-row-title"><span lang="ja">${escapeHtml(lesson.jp)}</span> · ${escapeHtml(lesson.en)}</div>
-          <div class="glosses">${escapeHtml(lesson.goals.slice(0, 3).join(" · "))}</div>
-          <div class="glosses lesson-row-marks">${ticked}/${core.length} steps checked${
-            mine.test !== undefined ? ` · 🏅 test ${mine.test}%` : ""
+          <div class="lesson-row-title">Unit ${lesson.num} · <span lang="ja">${escapeHtml(lesson.jp)}</span></div>
+          <div class="glosses">${escapeHtml(lesson.en)} · ${escapeHtml(lesson.pages)}</div>
+          <div class="glosses lesson-row-marks">${ticked}/${core.length} checked${
+            mine.test !== undefined ? ` · test ${mine.test}%` : ""
           }</div>
         </div>
       </div>
@@ -241,27 +233,29 @@ function drawHome(body: HTMLDivElement, all: Progress, go: (p: Page) => void): v
 }
 
 // ====================================================================
-// a lesson's overview
+// a unit's overview
 // ====================================================================
 
 function drawLesson(body: HTMLDivElement, lesson: GenkiLesson, index: number, mine: LessonProgress, go: (p: Page) => void): void {
   const tick = (on: boolean): string => `<span class="gk-tick${on ? " on" : ""}">${on ? "✓" : ""}</span>`;
+  const section = (b: { ref: string; pages: string; summary: string }): string =>
+    `<div class="gk-book-row"><div><b>${escapeHtml(b.ref)}</b> <span class="glosses">${escapeHtml(b.pages)}</span></div>
+      <div class="gk-book-sum">${escapeHtml(b.summary)}</div></div>`;
   body.innerHTML = `
-    ${backButton("All lessons")}
+    ${backButton("All units")}
     <div class="lesson-head">
-      <div class="glosses">Lesson ${lesson.num} · ${escapeHtml(lesson.pages)}</div>
+      <div class="glosses">Unit ${lesson.num} · Genki Lesson ${lesson.num} · ${escapeHtml(lesson.pages)}</div>
       <h2><span lang="ja">${escapeHtml(lesson.jp)}</span> · ${escapeHtml(lesson.en)}</h2>
     </div>
     <div class="card-panel lesson-section">
-      <h3>By the end of this lesson you can…</h3>
+      <h3>Goals</h3>
       <ul class="gk-goals">${lesson.goals.map((g) => `<li>${escapeHtml(g)}</li>`).join("")}</ul>
-      ${prose(lesson.intro)}
-      <details class="gk-plan"><summary>A plan for the week</summary>
+      <details class="gk-plan"><summary>Study order</summary>
         <ul>${lesson.plan.map((p) => `<li>${escapeHtml(p)}</li>`).join("")}</ul>
       </details>
     </div>
     <div class="card-panel gk-contents">
-      <button class="gk-entry" data-go="vocab">${tick(!!mine.vocab)}<span><b>Vocabulary</b><span class="glosses"> · learn the ★ words first</span></span><span class="gk-arrow">›</span></button>
+      <button class="gk-entry" data-go="vocab">${tick(!!mine.vocab)}<span><b>Vocabulary</b></span><span class="gk-arrow">›</span></button>
       ${lesson.steps
         .map(
           (s, i) => `<button class="gk-entry" data-step="${i}">${tick(mine.checks.includes(s.id))}<span>
@@ -269,12 +263,31 @@ function drawLesson(body: HTMLDivElement, lesson: GenkiLesson, index: number, mi
             <b lang="ja">${escapeHtml(s.title)}</b><span class="glosses"> · ${escapeHtml(s.name)}</span></span><span class="gk-arrow">›</span></button>`,
         )
         .join("")}
-      <button class="gk-entry" data-go="together">${tick(false)}<span><b>Put it together</b><span class="glosses"> · the conversation${
-        lesson.together.includes("self-intro") ? ", your self-introduction" : ", role-plays"
+      <button class="gk-entry" data-go="together">${tick(false)}<span><b>Put it together</b><span class="glosses"> · conversation${
+        lesson.together.includes("self-intro") ? ", self-introduction" : ", role plays"
       }</span></span><span class="gk-arrow">›</span></button>
-      <button class="gk-entry" data-go="test">${tick((mine.test ?? 0) >= PASS)}<span><b>Lesson test</b><span class="glosses"> · ${
+      <button class="gk-entry" data-go="test">${tick((mine.test ?? 0) >= PASS)}<span><b>Unit ${lesson.num} test</b><span class="glosses"> · ${
         lesson.test.length
-      } questions, ${PASS}% passes${mine.test !== undefined ? ` · best ${mine.test}%` : ""}</span></span><span class="gk-arrow">›</span></button>
+      } questions, pass ${PASS}%${mine.test !== undefined ? ` · best ${mine.test}%` : ""}</span></span><span class="gk-arrow">›</span></button>
+    </div>
+    <div class="card-panel lesson-section">
+      <h3>In the book</h3>
+      ${lesson.book.dialogues.map(section).join("")}
+      ${lesson.book.notes.map(section).join("")}
+    </div>
+    <div class="card-panel lesson-section">
+      <h3>Book practice</h3>
+      <div class="glosses" style="margin-bottom:6px">Each exercise in the book's Practice section, and how to do it without a partner.</div>
+      ${lesson.book.practice
+        .map(
+          (p, i) => `<div class="gk-book-row">
+            <div><b lang="ja">${escapeHtml(p.ref)}</b> <span class="glosses">${escapeHtml(p.pages)}</span></div>
+            <div class="gk-book-sum">${escapeHtml(p.drills)}</div>
+            <div class="gk-book-solo"><span class="glosses">Alone:</span> ${escapeHtml(p.solo)}</div>
+            ${p.games?.length ? `<div class="gk-games gk-practice-games" data-practice="${i}"></div>` : ""}
+          </div>`,
+        )
+        .join("")}
     </div>`;
   body.querySelector("#gk-back")!.addEventListener("click", () => go({ kind: "home" }));
   for (const entry of body.querySelectorAll<HTMLButtonElement>(".gk-entry")) {
@@ -285,6 +298,10 @@ function drawLesson(body: HTMLDivElement, lesson: GenkiLesson, index: number, mi
       else if (target === "together") go({ kind: "together", lesson: index });
       else if (target === "test") go({ kind: "test", lesson: index });
     });
+  }
+  for (const host of body.querySelectorAll<HTMLDivElement>(".gk-practice-games")) {
+    const item = lesson.book.practice[Number(host.dataset.practice)];
+    void drawGameButtons(host, item.games ?? [], (game) => go({ kind: "game", lesson: index, game, back: page }));
   }
   mountCoach(body, lesson, null);
 }
@@ -297,8 +314,7 @@ function drawVocab(body: HTMLDivElement, lesson: GenkiLesson, index: number, go:
   void updateLesson(lesson.id, (p) => (p.vocab = true));
   const group = (g: GenkiLesson["vocab"][number]): string => `
     <div class="card-panel gk-vocab-group">
-      <h3>${escapeHtml(g.title)}${g.extra ? ` <span class="glosses">· make it yours</span>` : ""}</h3>
-      ${g.extra ? `<div class="glosses" style="margin-bottom:6px">Learn the ones that describe you; skip the rest.</div>` : ""}
+      <h3>${escapeHtml(g.title)}${g.extra ? ` <span class="glosses">· additional</span>` : ""}</h3>
       ${g.words
         .map(
           (w) => `<div class="gk-word" data-say="${escapeHtml(w.jp.replace(/[〜／].*$/, (m) => (m.startsWith("〜") ? m.slice(1) : "")))}">
@@ -311,11 +327,11 @@ function drawVocab(body: HTMLDivElement, lesson: GenkiLesson, index: number, go:
         .join("")}
     </div>`;
   body.innerHTML = `
-    ${backButton(`Lesson ${lesson.num}`)}
+    ${backButton(`Unit ${lesson.num}`)}
     <div class="lesson-head">
-      <div class="glosses">Lesson ${lesson.num} · vocabulary</div>
-      <h2>Words for this lesson</h2>
-      <div class="glosses">★ = used in the lesson's main conversation; learn those first. Tap 🔊 to hear any word.</div>
+      <div class="glosses">Unit ${lesson.num}</div>
+      <h2>Vocabulary</h2>
+      <div class="glosses">★ appears in the book's dialogue.</div>
     </div>
     <div class="row-actions gk-vocab-actions">
       <button id="gk-vocab-game">🃏 Match game</button>
@@ -323,9 +339,8 @@ function drawVocab(body: HTMLDivElement, lesson: GenkiLesson, index: number, go:
     </div>
     ${lesson.vocab.filter((g) => !g.extra).map(group).join("")}
     ${lesson.vocab.filter((g) => g.extra).map(group).join("")}
-    <div class="card-panel glosses">How to learn these: five or six at a time, out loud, a few times a day. Say the
-      Japanese, then cover it and say it from the English. Words stick when you use them, so try to put each one
-      into a sentence about yourself.</div>`;
+    <div class="card-panel glosses">Learn five or six at a time. Say each one aloud, then cover the Japanese and
+      recall it from the English.</div>`;
   wireSpeakers(body);
   body.querySelector("#gk-back")!.addEventListener("click", () => go({ kind: "lesson", lesson: index }));
   body.querySelector("#gk-vocab-game")!.addEventListener("click", () =>
@@ -352,7 +367,7 @@ function drawStep(
   const next = stepIndex + 1 < lesson.steps.length ? lesson.steps[stepIndex + 1] : null;
   const passed = mine.checks.includes(step.id);
   body.innerHTML = `
-    ${backButton(`Lesson ${lesson.num}`)}
+    ${backButton(`Unit ${lesson.num}`)}
     <div class="lesson-head">
       <div class="glosses"><span class="gk-kind gk-kind-${step.kind}">${KIND_LABEL[step.kind]}${
         step.optional ? " · optional" : ""
@@ -393,7 +408,7 @@ function drawStep(
     }
     ${
       step.watch?.length
-        ? `<div class="card-panel lesson-section gk-watch"><h3>⚠️ Watch out</h3><ul>${step.watch
+        ? `<div class="card-panel lesson-section gk-watch"><h3>Common mistakes</h3><ul>${step.watch
             .map((w) => `<li>${escapeHtml(w)}</li>`)
             .join("")}</ul></div>`
         : ""
@@ -401,8 +416,8 @@ function drawStep(
     ${
       step.uni || step.life
         ? `<div class="card-panel lesson-section gk-tips">
-            ${step.uni ? `<div><b>🎓 In class</b><p>${escapeHtml(step.uni)}</p></div>` : ""}
-            ${step.life ? `<div><b>🗾 In real life</b><p>${escapeHtml(step.life)}</p></div>` : ""}
+            ${step.uni ? `<div><b>Exam tip</b><p>${escapeHtml(step.uni)}</p></div>` : ""}
+            ${step.life ? `<div><b>Usage</b><p>${escapeHtml(step.life)}</p></div>` : ""}
           </div>`
         : ""
     }
@@ -412,7 +427,7 @@ function drawStep(
     </div>
     ${
       step.games.length
-        ? `<div class="card-panel lesson-section"><h3>Play it ${step.optional ? "" : "<span class=\"glosses\">· optional, for extra practice</span>"}</h3>
+        ? `<div class="card-panel lesson-section"><h3>Games <span class="glosses">· optional</span></h3>
             <div class="gk-games" id="gk-games"></div></div>`
         : ""
     }
@@ -478,11 +493,11 @@ function drawChecks(host: HTMLDivElement, checks: GenkiCheck[], onPass: () => Pr
         if (results.every((r) => r !== null)) {
           const right = results.filter(Boolean).length;
           if (right === checks.length) {
-            result.innerHTML = `<div class="ok-text">All right — this step is ticked off.</div>`;
+            result.innerHTML = `<div class="ok-text">All correct.</div>`;
             void onPass();
           } else {
-            result.innerHTML = `<div class="glosses">${right}/${checks.length}. Read the why under each miss, then</div>
-              <button class="secondary" id="gk-check-retry">Try the check again</button>`;
+            result.innerHTML = `<div class="glosses">${right}/${checks.length} correct.</div>
+              <button class="secondary" id="gk-check-retry">Try again</button>`;
             result.querySelector("#gk-check-retry")!.addEventListener("click", () => drawChecks(host, checks, onPass));
           }
         }
@@ -570,17 +585,16 @@ async function drawTogether(body: HTMLDivElement, lesson: GenkiLesson, index: nu
   const hasIntro = lesson.together.includes("self-intro");
   const games = lesson.together.filter((g) => GAMES[g]);
   body.innerHTML = `
-    ${backButton(`Lesson ${lesson.num}`)}
+    ${backButton(`Unit ${lesson.num}`)}
     <div class="lesson-head">
-      <div class="glosses">Lesson ${lesson.num} · put it together</div>
+      <div class="glosses">Unit ${lesson.num} · put it together</div>
       <h2>${escapeHtml(d.title)}</h2>
       <div class="glosses">${escapeHtml(d.setting)}</div>
     </div>
     <div class="card-panel lesson-section">
-      <div class="gk-section-head"><h3>The conversation</h3>${romajiToggle()}</div>
-      <div class="glosses" style="margin-bottom:8px">Read each line, guess the meaning, then tap it to check. Then play it and
-        repeat out loud right after each line (shadowing): it's the closest thing to a speaking partner.</div>
-      <div class="row-actions"><button class="secondary" id="gk-play-all">▶ Play the whole thing</button>
+      <div class="gk-section-head"><h3>Conversation</h3>${romajiToggle()}</div>
+      <div class="glosses" style="margin-bottom:8px">Tap a line to show the English. Play it and repeat each line in the pause.</div>
+      <div class="row-actions"><button class="secondary" id="gk-play-all">▶ Play all</button>
         <button class="ghost" id="gk-show-all">Show all English</button></div>
       <div class="gk-dialogue">${d.lines
         .map(
@@ -597,18 +611,17 @@ async function drawTogether(body: HTMLDivElement, lesson: GenkiLesson, index: nu
     ${
       hasIntro
         ? `<div class="card-panel lesson-section" id="gk-intro">
-            <h3>Your self-introduction</h3>
-            <div class="glosses" style="margin-bottom:8px">Fill in your details and you'll have the intro you'll give on the first day of class.
-              Write your name in katakana if you can (ask the coach if you're unsure how).</div>
+            <h3>Self-introduction</h3>
+            <div class="glosses" style="margin-bottom:8px">Fill in your details. Write your name in katakana.</div>
             <div class="gk-intro-form"></div>
             <div class="gk-intro-out"></div>
           </div>`
         : ""
     }
-    ${games.length ? `<div class="card-panel lesson-section"><h3>Role-play it</h3><div class="gk-games" id="gk-games"></div></div>` : ""}
+    ${games.length ? `<div class="card-panel lesson-section"><h3>Role plays</h3><div class="gk-games" id="gk-games"></div></div>` : ""}
     <div class="card-panel lesson-test-cta">
-      <b>Ready?</b><div class="glosses">${lesson.test.length} questions across the whole lesson. ${PASS}% passes.</div>
-      <div class="row-actions" style="justify-content:center;margin-top:6px"><button id="gk-to-test">🏅 Take the lesson test</button></div>
+      <b>Unit ${lesson.num} test</b><div class="glosses">${lesson.test.length} questions. Pass: ${PASS}%.</div>
+      <div class="row-actions" style="justify-content:center;margin-top:6px"><button id="gk-to-test">Start the test</button></div>
     </div>`;
   wireSpeakers(body);
   wireRomaji(body, () => go({ kind: "together", lesson: index }));
@@ -677,8 +690,8 @@ async function drawIntroBuilder(host: HTMLDivElement): Promise<void> {
     const latin = /[a-z]/i.test(f.name + f.school);
     out.innerHTML = `
       <div class="gk-intro-script">${lines.map(([jp, en]) => exampleRow(jp, en)).join("")}</div>
-      ${latin ? `<div class="glosses gk-note">Tip: names and schools are written in kana in Japanese. Try katakana for your name.</div>` : ""}
-      <div class="row-actions"><button id="gi-play">▶ Hear it all</button></div>`;
+      ${latin ? `<div class="glosses gk-note">Write names in kana: katakana for a foreign name.</div>` : ""}
+      <div class="row-actions"><button id="gi-play">▶ Play</button></div>`;
     wireSpeakers(out);
     out.querySelector("#gi-play")!.addEventListener("click", () =>
       void speak(lines.map(([jp]) => jp).join(""), { rate: 0.85 }).catch(() => undefined),
@@ -719,20 +732,20 @@ function runTest(body: HTMLDivElement, lesson: GenkiLesson, index: number, mine:
         <div class="big">${passed ? "🎉" : "📖"}</div>
         <div class="kana-score">${right} / ${total}</div>
         <div class="glosses">${
-          passed ? `Passed. Lesson ${lesson.num} is yours.` : `Not quite: ${PASS}% passes. Look over what you missed, then try again.`
+          passed ? "Passed." : `Not passed. ${PASS}% needed.`
         }</div>
         <div class="yen-line">${earned > 0 ? `<b>+${earned}</b> · ` : ""}${formatYennies(balance)}</div>
         ${
           missed.length
-            ? `<div class="gk-missed"><b>To look at again</b>${missed
+            ? `<div class="gk-missed"><b>Missed</b>${missed
                 .map((q) => `<div class="gk-missed-row"><span>${escapeHtml(q.q)}</span><span lang="ja" class="ok-text">${escapeHtml(q.choices[q.answer])}</span><span class="glosses">${escapeHtml(q.why)}</span></div>`)
                 .join("")}</div>`
             : ""
         }
         <div class="row-actions" style="justify-content:center;margin-top:12px">
-          ${passed && next ? `<button id="gt-next">Next: Lesson ${next.num}</button>` : ""}
+          ${passed && next ? `<button id="gt-next">Next: Unit ${next.num}</button>` : ""}
           <button id="gt-retry" class="secondary">Retake</button>
-          <button id="gt-lesson" class="ghost">Back to the lesson</button>
+          <button id="gt-lesson" class="ghost">Back to the unit</button>
         </div>
       </div>`;
     body.querySelector("#gt-next")?.addEventListener("click", () => go({ kind: "lesson", lesson: index + 1 }));
@@ -746,7 +759,7 @@ function runTest(body: HTMLDivElement, lesson: GenkiLesson, index: number, mine:
       <div class="card-panel kana-quiz gram-quiz">
         <div class="kana-quiz-top">
           <button id="gt-quit" class="quiz-stop" title="Stop" aria-label="Stop">✕</button>
-          <span class="glosses">Lesson ${lesson.num} — test</span>
+          <span class="glosses">Unit ${lesson.num} test</span>
           <span class="glosses">${at}/${total}</span>
         </div>
         <div class="kana-bar"><div class="kana-bar-fill" style="width:${Math.round((at / total) * 100)}%"></div></div>

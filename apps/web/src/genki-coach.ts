@@ -56,7 +56,7 @@ function promptFor(lesson: GenkiLesson, step: GenkiStep | null, question: string
     .map((e) => `Learner: ${e.q}\nCoach: ${e.a.answer}`)
     .join("\n\n");
   return [
-    `The learner is studying Genki I (3rd edition), Lesson ${lesson.num}: ${lesson.jp} (${lesson.en}).`,
+    `The learner is studying Genki I (3rd edition), Lesson ${lesson.num}: ${lesson.jp} (${lesson.en}). The app calls it Unit ${lesson.num}.`,
     step ? `They are on the step "${step.title}" — ${step.name} (${step.genki}).` : "They are on the lesson overview.",
     "",
     "Taught so far:",
@@ -89,7 +89,7 @@ function validAnswer(raw: unknown): CoachAnswer | null {
 export async function askCoach(lesson: GenkiLesson, step: GenkiStep | null, question: string): Promise<CoachAnswer> {
   const q = question.trim().slice(0, MAX_QUESTION);
   if (!(await generationAvailable())) {
-    throw new Error("Ask Coach needs the site's Claude key, which isn't set up on this copy of Yomeyo.");
+    throw new Error("Claude isn't set up on this copy of Yomeyo.");
   }
   const past = await history(lesson.id);
   let res: Response;
@@ -100,19 +100,19 @@ export async function askCoach(lesson: GenkiLesson, step: GenkiStep | null, ques
       body: JSON.stringify({ mode: "coach", prompt: promptFor(lesson, step, q, past) }),
     });
   } catch {
-    throw new Error("Couldn't reach the coach. Check your connection and try again.");
+    throw new Error("No connection. Try again.");
   }
-  if (res.status === 429) throw new Error("The coach is busy for a moment. Try again in a few seconds.");
-  if (!res.ok) throw new Error("The coach couldn't answer that one. Try asking it a different way.");
+  if (res.status === 429) throw new Error("Busy. Try again in a few seconds.");
+  if (!res.ok) throw new Error("No answer. Try rephrasing the question.");
   const { raw } = (await res.json()) as { raw?: string };
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw ?? "");
   } catch {
-    throw new Error("The coach's answer came back garbled. Try again.");
+    throw new Error("The answer didn't come through. Try again.");
   }
   const answer = validAnswer(parsed);
-  if (!answer) throw new Error("The coach's answer came back empty. Try again.");
+  if (!answer) throw new Error("The answer was empty. Try again.");
   const kept = [...past, { q, a: answer, at: Date.now() }].slice(-KEEP);
   await setMeta(HISTORY_PREFIX + lesson.id, kept);
   return answer;
@@ -174,7 +174,7 @@ export async function renderCoach(
   host.innerHTML = `
     <div class="card-panel gk-coach">
       <div class="gk-coach-head"><b>🧑‍🏫 Ask Coach</b>
-        <span class="glosses">Stuck on something in Lesson ${lesson.num}? Ask in English (or Japanese).</span></div>
+        <span class="glosses">Questions about Unit ${lesson.num}, in English or Japanese.</span></div>
       <div class="gk-coach-log" id="gk-coach-log">${past.slice(-4).map(answerHtml).join("")}</div>
       ${
         ready
@@ -186,8 +186,8 @@ export async function renderCoach(
                <textarea id="gk-coach-q" maxlength="${MAX_QUESTION}" rows="2" placeholder="e.g. Why is it よじ and not よんじ?"></textarea>
                <button type="submit">Ask</button>
              </form>
-             <div class="glosses gk-coach-note">Answers come from Claude and follow Genki's order. Double-check anything surprising with your teacher or the book.</div>`
-          : `<div class="glosses">Ask Coach uses the same Claude connection as the other AI features, which isn't set up on this copy of Yomeyo.</div>`
+             <div class="glosses gk-coach-note">Answers come from Claude. Check anything surprising against the book.</div>`
+          : `<div class="glosses">Not available: Claude isn't set up on this copy of Yomeyo.</div>`
       }
     </div>`;
   const log = host.querySelector<HTMLDivElement>("#gk-coach-log")!;
@@ -216,7 +216,7 @@ export async function renderCoach(
     const submit = form.querySelector<HTMLButtonElement>("button")!;
     submit.disabled = true;
     const pending = document.createElement("div");
-    pending.innerHTML = `<div class="gk-coach-q">${escapeHtml(q)}</div><div class="gk-coach-a glosses">Thinking…</div>`;
+    pending.innerHTML = `<div class="gk-coach-q">${escapeHtml(q)}</div><div class="gk-coach-a glosses">…</div>`;
     log.appendChild(pending);
     pending.scrollIntoView({ block: "nearest", behavior: "smooth" });
     void askCoach(lesson, stepOf(), q)

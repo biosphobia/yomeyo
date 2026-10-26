@@ -1,24 +1,21 @@
 /**
- * The Genki companion: a teacher's guide that walks beside Genki I (3rd
- * edition), lesson by lesson.
+ * The Genki companion: Genki I (3rd edition), unit by unit.
  *
- * Genki is written for a classroom. Half of every practice section is pair
- * work, the grammar notes are short, and the "why" is left for the teacher
- * to say out loud. This course is that teacher: it follows the book's order
- * and points at its pages, but every explanation, example sentence,
- * dialogue and drill here is written fresh for the app. Nothing is copied
- * from the book; it is meant to be used WITH it, not instead of it.
+ * Each unit follows one Genki lesson: the book's vocabulary lists, its
+ * grammar points in its order and numbering, page references for every
+ * section, short summaries of what the book's dialogues and culture notes
+ * cover, and a map of its practice exercises with a way to do each one
+ * alone. The explanations, example sentences, practice conversation and
+ * drills here are written for the app; the book's own text is not
+ * reproduced, so the unit is used next to the book, not instead of it.
  *
- * The cast is our own too: レナ (Lena, a first-year from Germany), はると
- * (Haruto, a Japanese third-year), ミン (Min, a Korean second-year), ノア
- * (Noah, a Canadian), and やまもとせんせい, their teacher.
+ * Example sentences use a small cast of our own: レナ (Lena, a first-year
+ * from Germany), はると (Haruto, a Japanese third-year), ミン (Min, a Korean
+ * second-year), ノア (Noah, a Canadian), and やまもとせんせい.
  *
  * Everything is kana, as in Genki lessons 1 and 2. Romaji is a toggle on
- * screen, computed, never stored.
- *
- * Steps marked `optional` (greetings, numbers, the classroom phrases) are
- * warm-ups: worth a few minutes, never in the way. A lesson counts as done
- * when its test is passed; nothing is ever locked.
+ * screen, computed, never stored. Steps marked `optional` never count
+ * against finishing a unit; a unit is done when its test is passed.
  */
 
 export interface GenkiExample {
@@ -40,13 +37,13 @@ export interface GenkiCheck {
 export interface VocabWord {
   jp: string;
   en: string;
-  /** Appears in the lesson's main conversation, so worth learning first. */
+  /** Marked in the book as appearing in the dialogue. */
   star?: boolean;
 }
 
 export interface VocabGroup {
   title: string;
-  /** "Make it yours" words: learn the ones that describe your life. */
+  /** The book's "additional vocabulary": learn the ones that apply to you. */
   extra?: boolean;
   words: VocabWord[];
 }
@@ -62,25 +59,25 @@ export type StepKind = "warmup" | "grammar" | "expressions" | "culture";
 export interface GenkiStep {
   id: string;
   kind: StepKind;
-  /** Warm-ups never count against finishing a lesson. */
+  /** Warm-ups never count against finishing a unit. */
   optional?: boolean;
-  /** The pattern as Genki prints it: "X は Y です". */
+  /** The pattern as the book heads it: "X は Y です". */
   title: string;
   /** What it does, in plain words. */
   name: string;
-  /** Where to look in the book. */
+  /** Where it is in the book. */
   genki: string;
-  /** The teacher talking. Blank lines split paragraphs; **bold** works. */
+  /** The explanation. Blank lines split paragraphs; **bold** works. */
   teach: string;
   /** The pattern box: a template and what it means. */
   pattern?: [jp: string, en: string][];
   examples?: GenkiExample[];
   table?: GenkiTable;
-  /** The mistakes students actually make. */
+  /** Common mistakes. */
   watch?: string[];
-  /** What a university class will expect. */
+  /** What class quizzes tend to check. */
   uni?: string;
-  /** How it sounds outside the classroom. */
+  /** How it's used outside class. */
   life?: string;
   /** Three or four questions straight after reading. */
   checks: GenkiCheck[];
@@ -88,6 +85,25 @@ export interface GenkiStep {
   games: string[];
   /** Starter questions for Ask Coach. */
   ask: string[];
+}
+
+/** A section of the book, summarised: what it is and where. */
+export interface BookSection {
+  ref: string;
+  pages: string;
+  summary: string;
+}
+
+/** One of the book's practice exercises, and how to do it without a class. */
+export interface PracticeItem {
+  ref: string;
+  pages: string;
+  /** What it drills. */
+  drills: string;
+  /** How to do it alone. */
+  solo: string;
+  /** In-app games that cover the same ground. */
+  games?: string[];
 }
 
 export interface DialogueLine {
@@ -104,28 +120,32 @@ export interface GenkiDialogue {
 
 export interface GenkiLesson {
   id: string;
+  /** Unit number, the same as the Genki lesson number. */
   num: number;
   jp: string;
   en: string;
-  /** Book pages the lesson spans. */
+  /** Book pages the unit covers. */
   pages: string;
-  /** "By the end you can…" */
   goals: string[];
-  /** The teacher's opening words. */
-  intro: string;
-  /** A suggested week, for a class that meets daily or a self-studier. */
+  /** A suggested order over five study sessions. */
   plan: string[];
+  /** The book's own sections, summarised, with pages. */
+  book: {
+    dialogues: BookSection[];
+    notes: BookSection[];
+    practice: PracticeItem[];
+  };
   vocab: VocabGroup[];
   steps: GenkiStep[];
-  /** An original scene using everything, read and shadowed at the end. */
+  /** A practice conversation using the unit's grammar. */
   dialogue: GenkiDialogue;
-  /** Games for the "put it together" stage. */
+  /** Games for the "put it together" page. */
   together: string[];
   test: GenkiCheck[];
 }
 
 // ====================================================================
-// Lesson 1 — あたらしいともだち (New Friends)
+// Unit 1 · Genki Lesson 1 · あたらしいともだち (New Friends)
 // ====================================================================
 
 const L1: GenkiLesson = {
@@ -133,72 +153,132 @@ const L1: GenkiLesson = {
   num: 1,
   jp: "あたらしいともだち",
   en: "New Friends",
-  pages: "Genki I pp. 30–55 (greetings and numbers pp. 30–35, the lesson pp. 36–55)",
+  pages: "Genki I pp. 30–55",
   goals: [
-    "Greet people properly at any time of day, at home and at school",
+    "Use the everyday greetings",
     "Count from 0 to 100",
-    "Introduce yourself: name, where you're from, school, year, major, age",
-    "Ask other people the same things, and understand their answers",
+    "Introduce yourself: name, nationality, school, year, major, age",
+    "Ask other people the same questions",
     "Tell the time and give a phone number",
   ],
-  intro:
-    "Lesson 1 is small on paper (three grammar points) but it is the floor everything else stands on. " +
-    "By Friday you should be able to walk into a room of strangers and get through the first two minutes " +
-    "of conversation entirely in Japanese.\n\n" +
-    "Genki assumes a teacher will explain why the sentences work. That is my job here. Read a step, " +
-    "answer its quick check, play its game if you want more, and move on. The warm-ups are optional; if " +
-    "you already know your greetings and numbers, skip straight to vocabulary.",
   plan: [
-    "Day 1 · Greetings and numbers warm-ups (10–15 min each) · start the vocabulary",
-    "Day 2 · Vocabulary again · X は Y です",
-    "Day 3 · Questions with か · the の link",
-    "Day 4 · Time and phone numbers · names and politeness",
-    "Day 5 · The conversation, your own self-introduction, then the lesson test",
+    "1 · Greetings and numbers (pp. 30–35), start the vocabulary",
+    "2 · Vocabulary, Grammar 1: X は Y です",
+    "3 · Grammar 2: questions, Grammar 3: の",
+    "4 · Time and phone numbers, names and titles",
+    "5 · Practice conversation, self-introduction, unit test",
   ],
+  book: {
+    dialogues: [
+      {
+        ref: "Dialogue I",
+        pages: "p. 36",
+        summary:
+          "Mary, an exchange student who has just arrived in Japan, meets Takeshi at orientation. She asks whether he is an international student (he is Japanese) and what year he is in.",
+      },
+      {
+        ref: "Dialogue II",
+        pages: "p. 37",
+        summary: "Mary introduces herself to the group: her university, her year, her major and her age.",
+      },
+    ],
+    notes: [
+      { ref: "Greetings", pages: "pp. 30–32", summary: "The everyday greetings with pictures, and a table with romaji and English." },
+      { ref: "Culture Notes: Greetings and Bowing", pages: "p. 32", summary: "Bowing and how deep it goes, handshakes, and exchanging business cards." },
+      { ref: "Expression Notes 1", pages: "p. 33", summary: "Short vs. polite greetings, the different goodbyes, the uses of すみません and いいえ, and the leaving/coming-home pairs." },
+      { ref: "Numbers", pages: "p. 35", summary: "0 to 100 with the alternative readings of 4, 7 and 9." },
+      { ref: "Expression Notes 2", pages: "pp. 44–45", summary: "あのう, そうですか, how each number's reading changes in compounds, why not to call yourself せんせい, さん and other titles, avoiding あなた." },
+      { ref: "Culture Notes: Japanese Names", pages: "p. 45", summary: "Family name first, common family and given names, and names written in kanji." },
+      { ref: "Useful Expressions: Time", pages: "p. 55", summary: "Hours 1–12 and minutes 1–30 with their sound changes." },
+    ],
+    practice: [
+      {
+        ref: "I メアリーさんは アメリカじんです",
+        pages: "pp. 46–47",
+        drills: "X は Y です: nationality, year and age from a chart; D is group work.",
+        solo: "Do A–C aloud from the chart. For D, say your own name, nationality, year and age.",
+        games: ["wa-desu-builder", "ages-years"],
+      },
+      {
+        ref: "II メアリーさんは アメリカじんですか",
+        pages: "pp. 47–49",
+        drills: "Yes/no questions and question words (なんさい, なんねんせい) from cues and a host-family chart.",
+        solo: "Ask the question and answer it yourself, out loud, for every cue.",
+        games: ["question-words"],
+      },
+      {
+        ref: "III にほんごの がくせいです",
+        pages: "pp. 50–51",
+        drills: "の phrases: translating, describing school and major, answering questions; D is group work.",
+        solo: "Do A–C. For D, answer the C questions about yourself.",
+        games: ["no-chain"],
+      },
+      {
+        ref: "IV でんわばんごう",
+        pages: "p. 51",
+        drills: "Asking for and reading back phone numbers (pair work).",
+        solo: "Read your own number and three made-up ones aloud, digit by digit.",
+        games: ["phone-listen"],
+      },
+      {
+        ref: "V じかん",
+        pages: "pp. 52–53",
+        drills: "Telling time from clocks, asking the time, times around the world.",
+        solo: "Do A and C. For B, ask and answer the time for each clock yourself.",
+        games: ["clock"],
+      },
+      {
+        ref: "VI まとめの れんしゅう",
+        pages: "p. 54",
+        drills: "Class interview, role play from Dialogue I, self-introduction from Dialogue II.",
+        solo: "Use the self-introduction builder on the Put it together page and say it aloud.",
+      },
+    ],
+  },
   vocab: [
     {
       title: "School",
       words: [
-        { jp: "だいがく", en: "university, college", star: true },
+        { jp: "だいがく", en: "college, university", star: true },
         { jp: "こうこう", en: "high school" },
         { jp: "がくせい", en: "student", star: true },
-        { jp: "だいがくせい", en: "university student" },
-        { jp: "りゅうがくせい", en: "international (exchange) student", star: true },
+        { jp: "だいがくせい", en: "college student" },
+        { jp: "りゅうがくせい", en: "international student", star: true },
         { jp: "せんせい", en: "teacher, professor" },
         { jp: "〜ねんせい", en: "…-year student", star: true },
         { jp: "いちねんせい", en: "first-year student" },
-        { jp: "せんこう", en: "major (subject)", star: true },
+        { jp: "せんこう", en: "major", star: true },
       ],
     },
     {
-      title: "People",
+      title: "Person",
       words: [
-        { jp: "わたし", en: "I, me" },
+        { jp: "わたし", en: "I" },
         { jp: "ともだち", en: "friend" },
-        { jp: "〜さん", en: "Mr./Ms. … (never for yourself)" },
-        { jp: "〜じん", en: "a person from …", star: true },
-        { jp: "にほんじん", en: "a Japanese person" },
+        { jp: "〜さん", en: "Mr./Ms. …" },
+        { jp: "〜じん", en: "… people", star: true },
+        { jp: "にほんじん", en: "Japanese people" },
       ],
     },
     {
       title: "Time",
       words: [
         { jp: "いま", en: "now" },
-        { jp: "ごぜん", en: "a.m. (comes before the time)" },
-        { jp: "ごご", en: "p.m. (comes before the time)" },
+        { jp: "ごぜん", en: "a.m." },
+        { jp: "ごご", en: "p.m." },
         { jp: "〜じ", en: "… o'clock" },
         { jp: "いちじ", en: "one o'clock" },
-        { jp: "はん", en: "half (past)" },
+        { jp: "はん", en: "half" },
         { jp: "にじはん", en: "half past two" },
       ],
     },
     {
-      title: "Everything else",
+      title: "Others",
       words: [
         { jp: "にほん", en: "Japan", star: true },
-        { jp: "アメリカ", en: "the USA" },
+        { jp: "アメリカ", en: "USA" },
         { jp: "〜ご", en: "… language", star: true },
-        { jp: "にほんご", en: "Japanese (the language)" },
+        { jp: "にほんご", en: "Japanese language" },
         { jp: "〜さい", en: "… years old", star: true },
         { jp: "でんわ", en: "telephone" },
         { jp: "〜ばん", en: "number …" },
@@ -208,64 +288,67 @@ const L1: GenkiLesson = {
       ],
     },
     {
-      title: "Little words you'll say constantly",
+      title: "Expressions",
       words: [
-        { jp: "あのう", en: "um… (polite hesitation)", star: true },
+        { jp: "あのう", en: "um…", star: true },
         { jp: "はい", en: "yes" },
         { jp: "そうです", en: "that's right" },
-        { jp: "そうですか", en: "I see / oh, really?", star: true },
+        { jp: "そうですか", en: "I see. / Is that so?", star: true },
       ],
     },
     {
-      title: "Where you're from",
+      title: "Countries",
       extra: true,
       words: [
-        { jp: "アメリカ", en: "the USA" },
-        { jp: "イギリス", en: "the UK" },
-        { jp: "カナダ", en: "Canada" },
+        { jp: "イギリス", en: "Britain" },
         { jp: "オーストラリア", en: "Australia" },
-        { jp: "ドイツ", en: "Germany" },
-        { jp: "フランス", en: "France" },
-        { jp: "かんこく", en: "South Korea" },
+        { jp: "かんこく", en: "Korea" },
+        { jp: "カナダ", en: "Canada" },
         { jp: "ちゅうごく", en: "China" },
-        { jp: "ベトナム", en: "Vietnam" },
         { jp: "インド", en: "India" },
-        { jp: "ブラジル", en: "Brazil" },
-        { jp: "トルコ", en: "Türkiye" },
+        { jp: "エジプト", en: "Egypt" },
+        { jp: "フィリピン", en: "Philippines" },
       ],
     },
     {
-      title: "What you study",
+      title: "Majors",
       extra: true,
       words: [
+        { jp: "アジアけんきゅう", en: "Asian studies" },
         { jp: "けいざい", en: "economics" },
-        { jp: "れきし", en: "history" },
-        { jp: "ぶんがく", en: "literature" },
         { jp: "こうがく", en: "engineering" },
+        { jp: "こくさいかんけい", en: "international relations" },
+        { jp: "コンピューター", en: "computer" },
         { jp: "せいじ", en: "politics" },
-        { jp: "コンピューター", en: "computer science" },
+        { jp: "せいぶつがく", en: "biology" },
         { jp: "ビジネス", en: "business" },
-        { jp: "いがく", en: "medicine" },
-        { jp: "ほうがく", en: "law" },
-        { jp: "しんりがく", en: "psychology" },
-        { jp: "すうがく", en: "mathematics" },
-        { jp: "えいご", en: "English" },
+        { jp: "ぶんがく", en: "literature" },
+        { jp: "れきし", en: "history" },
       ],
     },
     {
-      title: "Family and jobs",
+      title: "Occupations",
       extra: true,
       words: [
-        { jp: "おかあさん", en: "(someone's) mother" },
-        { jp: "おとうさん", en: "(someone's) father" },
-        { jp: "おにいさん", en: "older brother" },
+        { jp: "いしゃ", en: "doctor" },
+        { jp: "かいしゃいん", en: "office worker" },
+        { jp: "かんごし", en: "nurse" },
+        { jp: "こうこうせい", en: "high school student" },
+        { jp: "しゅふ", en: "housewife / homemaker" },
+        { jp: "だいがくいんせい", en: "graduate student" },
+        { jp: "べんごし", en: "lawyer" },
+      ],
+    },
+    {
+      title: "Family",
+      extra: true,
+      words: [
+        { jp: "おかあさん", en: "mother" },
+        { jp: "おとうさん", en: "father" },
         { jp: "おねえさん", en: "older sister" },
+        { jp: "おにいさん", en: "older brother" },
         { jp: "いもうと", en: "younger sister" },
         { jp: "おとうと", en: "younger brother" },
-        { jp: "かいしゃいん", en: "office worker" },
-        { jp: "いしゃ", en: "doctor" },
-        { jp: "こうこうせい", en: "high-school student" },
-        { jp: "だいがくいんせい", en: "graduate student" },
       ],
     },
   ],
@@ -276,73 +359,62 @@ const L1: GenkiLesson = {
       kind: "warmup",
       optional: true,
       title: "あいさつ",
-      name: "Greetings for every part of the day",
-      genki: "Genki pp. 30–34 · Greetings, Culture Notes, Expression Notes 1",
+      name: "Greetings",
+      genki: "Genki pp. 30–34",
       teach:
-        "Japanese greetings are less about the words and more about the **moment**: what time it is, who " +
-        "you're talking to, and whether someone is leaving or coming home. Learn them as pairs of " +
-        "situation + phrase, not as a vocabulary list.\n\n" +
-        "**Two levels of politeness.** Several greetings have a short form for friends and family and a " +
-        "longer one for everyone else: おはよう / おはようございます, ありがとう / ありがとうございます. " +
-        "A good rule: if you'd call them by their first name, the short one is fine. Teachers, staff, " +
-        "strangers and anyone older get the long one.\n\n" +
-        "**Leaving and coming home** come in pairs that the two sides say to each other. The one leaving " +
-        "says いってきます (\"I'll go and come back\"), the family answers いってらっしゃい. Coming home, " +
-        "you say ただいま and they answer おかえりなさい.\n\n" +
-        "**Meals.** いただきます before you eat, ごちそうさまでした after. Say them even when eating alone; " +
-        "people do.\n\n" +
-        "**Goodbye.** さようなら is real Japanese, but it sounds final, almost like \"farewell\". " +
-        "Between friends who'll meet again soon, じゃあ、また is the everyday goodbye. Leaving a " +
-        "professor's office, say しつれいします.",
+        "Which greeting to use depends on the time of day, who you're talking to, and whether someone is leaving or arriving.\n\n" +
+        "**Short and long forms.** おはよう / おはようございます and ありがとう / ありがとうございます. Use the short form with friends and family, the long form with teachers, staff, strangers and anyone older.\n\n" +
+        "**Leaving and coming home.** The person leaving says いってきます; the people staying answer いってらっしゃい. Coming back: ただいま, answered with おかえりなさい.\n\n" +
+        "**Meals.** いただきます before eating, ごちそうさまでした after.\n\n" +
+        "**Goodbye.** さようなら sounds final. Between friends who'll meet again soon, use じゃあ、また. Leaving a teacher's office, use しつれいします.",
       examples: [
         { jp: "おはようございます。", en: "Good morning. (polite)" },
-        { jp: "こんにちは。", en: "Hello. / Good afternoon.", note: "The last sound is written は but said \"wa\"." },
+        { jp: "こんにちは。", en: "Good afternoon. / Hello.", note: "The last kana is は, read \"wa\"." },
         { jp: "こんばんは。", en: "Good evening." },
-        { jp: "すみません。", en: "Excuse me. / Sorry. / Thanks (for the trouble)." },
-        { jp: "いいえ。", en: "No. / Not at all (when someone thanks you)." },
-        { jp: "はじめまして。レナです。よろしくおねがいします。", en: "Nice to meet you. I'm Lena. Please treat me well." },
+        { jp: "すみません。", en: "Excuse me. / I'm sorry." },
+        { jp: "いいえ。", en: "No. / Not at all." },
+        { jp: "はじめまして。レナです。よろしくおねがいします。", en: "How do you do? I'm Lena. Nice to meet you." },
       ],
       table: {
-        caption: "The pairs",
+        caption: "Pairs",
         rows: [
-          ["Leaving home (you)", "いってきます"],
-          ["…and the family", "いってらっしゃい"],
-          ["Back home (you)", "ただいま"],
-          ["…and the family", "おかえりなさい"],
+          ["Leaving home", "いってきます"],
+          ["…the reply", "いってらっしゃい"],
+          ["Coming home", "ただいま"],
+          ["…the reply", "おかえりなさい"],
           ["Before eating", "いただきます"],
           ["After eating", "ごちそうさまでした"],
           ["Going to bed", "おやすみなさい"],
         ],
       },
       watch: [
-        "こんにちは and こんばんは end in は, pronounced \"wa\". Writing こんにちわ is a classic beginner mistake that teachers mark wrong.",
-        "Don't say こんにちは to your own family at home. It sounds like you're greeting a neighbour.",
-        "すみません is not only \"sorry\". You'll use it most to call a waiter or get past someone.",
+        "こんにちは and こんばんは are written with は, not わ.",
+        "こんにちは is not used with your own family.",
+        "すみません is also how you call a waiter or get past someone.",
       ],
-      uni: "Expect a short oral check where the teacher describes a situation in English and you say the right phrase. Spelling こんにちは / こんばんは with は is a common written-quiz item.",
-      life: "Shop staff will say いらっしゃいませ when you walk in. You don't reply to it; a small nod is plenty.",
+      uni: "Oral checks often give a situation in English and ask for the greeting. Spelling こんにちは / こんばんは with は is a common written item.",
       checks: [
         {
-          q: "You're leaving your host family's house for class. What do YOU say?",
+          q: "You're leaving the house for class. What do you say?",
           choices: ["いってきます", "いってらっしゃい", "ただいま", "おかえりなさい"],
           answer: 0,
-          why: "いってきます is the one leaving. The family answers いってらっしゃい.",
+          why: "The person leaving says いってきます.",
         },
         {
-          q: "It's 9 a.m. and you meet your professor in the corridor.",
+          q: "9 a.m., you meet your professor.",
           choices: ["おはようございます", "おはよう", "こんばんは", "おやすみなさい"],
           answer: 0,
-          why: "Morning + someone you'd call by title = the long, polite form.",
+          why: "Morning, and a teacher: the long form.",
         },
         {
-          q: "A stranger holds the door and you thank them. They reply:",
+          q: "Someone thanks you for holding the door. You reply:",
           choices: ["いいえ。", "すみません。", "いただきます。", "ただいま。"],
           answer: 0,
-          why: "いいえ here means \"not at all, don't mention it\".",
+          why: "いいえ here means \"not at all\".",
         },
       ],
       games: ["greet-situations"],
-      ask: ["When can I use さようなら without sounding dramatic?", "Is すみません or ごめんなさい better for apologizing?"],
+      ask: ["When is さようなら appropriate?", "すみません or ごめんなさい?"],
     },
     // ------------------------------------------------ warm-up: numbers
     {
@@ -350,154 +422,135 @@ const L1: GenkiLesson = {
       kind: "warmup",
       optional: true,
       title: "すうじ",
-      name: "Numbers from 0 to 100",
-      genki: "Genki p. 35 · Numbers; Expression Notes 2 (p. 44)",
+      name: "Numbers 0–100",
+      genki: "Genki p. 35; Expression Notes 2, p. 44",
       teach:
-        "Good news: Japanese numbers are completely regular once you know 1 to 10. " +
-        "Eleven is \"ten one\" (じゅういち), twenty is \"two ten\" (にじゅう), forty-five is \"four ten five\" " +
-        "(よんじゅうご). That's the whole system up to 99.\n\n" +
-        "Bad news: **4, 7 and 9 have two readings each.** For plain counting and most numbers, use " +
-        "**よん, なな, きゅう**. The other readings (し, しち, く) show up in fixed words you'll learn as " +
-        "you go, most importantly the clock: four o'clock is よじ, seven o'clock is しちじ, nine o'clock is くじ.\n\n" +
-        "Zero is ゼロ in everyday speech; れい is more formal and appears in weather forecasts and scores.",
+        "Above ten the numbers are built from 1–10: 11 is じゅういち (10 + 1), 20 is にじゅう (2 × 10), 45 is よんじゅうご (4 × 10 + 5).\n\n" +
+        "4, 7 and 9 have two readings. In counting and in most numbers use **よん, なな, きゅう**. The other readings (し, しち, く) appear in set words, most often in times: 4 o'clock is よじ, 7 o'clock is しちじ, 9 o'clock is くじ.\n\n" +
+        "Zero is ゼロ or れい.",
       table: {
-        caption: "The ten you need",
+        caption: "0–10 and how bigger numbers are built",
         rows: [
           ["0", "ゼロ／れい"],
           ["1", "いち"],
           ["2", "に"],
           ["3", "さん"],
-          ["4", "よん／し", "use よん"],
+          ["4", "よん／し", "usually よん"],
           ["5", "ご"],
           ["6", "ろく"],
-          ["7", "なな／しち", "use なな"],
+          ["7", "なな／しち", "usually なな"],
           ["8", "はち"],
-          ["9", "きゅう／く", "use きゅう"],
+          ["9", "きゅう／く", "usually きゅう"],
           ["10", "じゅう"],
-          ["11", "じゅういち", "ten + one"],
-          ["20", "にじゅう", "two tens"],
-          ["45", "よんじゅうご", "four tens + five"],
+          ["11", "じゅういち"],
+          ["20", "にじゅう"],
+          ["45", "よんじゅうご"],
           ["100", "ひゃく"],
         ],
       },
       watch: [
-        "Don't say いちじゅう for 10 or いちひゃく for 100. Ten and a hundred stand alone: じゅう, ひゃく.",
-        "40, 70 and 90 are よんじゅう, ななじゅう, きゅうじゅう. The し/しち/く readings are not used for the tens.",
+        "10 is じゅう and 100 is ひゃく, not いちじゅう or いちひゃく.",
+        "40, 70, 90: よんじゅう, ななじゅう, きゅうじゅう.",
       ],
-      uni: "Numbers come back in every lesson: prices (L2), times (L1, L3), dates (L4), counters (L5 onwards). A few minutes a day now pays off for months.",
       checks: [
         {
-          q: "How do you read 47?",
+          q: "47",
           choices: ["よんじゅうなな", "しじゅうしち", "よんななじゅう", "しちじゅうよん"],
           answer: 0,
-          why: "Four tens (よんじゅう) + seven (なな).",
+          why: "4 × 10 + 7.",
         },
         {
-          q: "How do you read 90?",
+          q: "90",
           choices: ["きゅうじゅう", "くじゅう", "じゅうきゅう", "きゅうひゃく"],
           answer: 0,
-          why: "Nine tens. じゅうきゅう would be 19.",
+          why: "9 × 10. じゅうきゅう is 19.",
         },
         {
-          q: "Which is 100?",
+          q: "100",
           choices: ["ひゃく", "いちひゃく", "じゅうじゅう", "せん"],
           answer: 0,
-          why: "One hundred is just ひゃく. せん is 1,000.",
+          why: "ひゃく on its own. せん is 1,000.",
         },
       ],
       games: ["numbers-read", "numbers-listen"],
-      ask: ["Why does 4 have two readings?", "When do people say れい instead of ゼロ?"],
+      ask: ["Why does 4 have two readings?", "When is れい used instead of ゼロ?"],
     },
     // ------------------------------------------------ grammar 1
     {
       id: "wa-desu",
       kind: "grammar",
       title: "X は Y です",
-      name: "Saying what something or someone is",
-      genki: "Genki p. 41 · Grammar 1; Expression Notes 2 (pp. 44–45)",
+      name: "Grammar 1 · X is Y",
+      genki: "Genki p. 41",
       teach:
-        "**です** is the polite way to say \"is / am / are\" after a noun. がくせいです. \"(I) am a student.\" " +
-        "That's already a complete, polite sentence.\n\n" +
-        "Notice there's no \"I\" in it. Japanese leaves out anything the listener can already guess, and " +
-        "in a conversation about you, \"you\" is obvious. Getting comfortable with sentences that have no " +
-        "subject is one of the biggest mindset shifts in Japanese.\n\n" +
-        "When you DO need to say what you're talking about, put it in front and mark it with **は**: " +
-        "わたしは がくせいです. Think of は as \"as for…\": \"As for me, (I) am a student.\" It sets the " +
-        "topic; everything after it is about that topic.\n\n" +
-        "Two spelling notes. The particle は is **pronounced \"wa\"** but always **written は**. And " +
-        "Japanese has no \"a\" or \"the\" and usually no plural: がくせい can be \"a student\", \"the " +
-        "student\" or \"students\". Context decides.",
+        "**です** after a noun means \"is / am / are\". がくせいです is a complete sentence: \"(I) am a student.\"\n\n" +
+        "There is no \"I\" in it. Japanese leaves out whatever the listener already knows, which is often the subject.\n\n" +
+        "When the topic needs saying, put it first and mark it with **は**: わたしは がくせいです. は means roughly \"as for…\". It is written は but pronounced **wa**.\n\n" +
+        "Japanese has no \"a\" or \"the\" and usually no plural: がくせい can mean \"a student\", \"the student\" or \"students\".",
       pattern: [
-        ["〔X〕は 〔Y〕です。", "As for X, (it) is Y. → X is Y."],
-        ["〔Y〕です。", "(It) is Y. (when X is obvious)"],
+        ["〔X〕は 〔Y〕です。", "X is Y."],
+        ["〔Y〕です。", "(It) is Y. (X understood)"],
       ],
       examples: [
         { jp: "わたしは レナです。", en: "I'm Lena." },
         { jp: "レナさんは ドイツじんです。", en: "Lena is German." },
         { jp: "はるとさんは さんねんせいです。", en: "Haruto is a third-year student." },
-        { jp: "せんこうは れきしです。", en: "(My) major is history.", note: "\"My\" is understood. Nobody says it." },
+        { jp: "せんこうは れきしです。", en: "(My) major is history." },
         { jp: "いちねんせいです。", en: "(I'm) a first-year." },
       ],
       watch: [
-        "Never put さん after your own name. わたしは レナさんです sounds like you're very impressed with yourself.",
-        "Don't start every sentence with わたしは. Say it once to set the topic, then drop it. Repeating it sounds stiff and foreign.",
-        "Avoid あなた (\"you\") with people you know. Use their name + さん: ミンさんは かんこくじんですか.",
-        "Nationality is 〜じん, language is 〜ご: にほんじん = a Japanese person, にほんご = Japanese language.",
-        "Don't call yourself せんせい. It's a title of respect for others.",
+        "No さん after your own name.",
+        "Say わたしは once to set the topic, then leave it out.",
+        "Use the person's name + さん instead of あなた.",
+        "Nationality is 〜じん, language is 〜ご.",
+        "Don't call yourself せんせい; it's a title for others.",
       ],
-      uni: "Your first oral exam is almost always a self-introduction built from X は Y です. Teachers listen for: は pronounced \"wa\", no さん on yourself, and not repeating わたしは.",
-      life: "In real conversation people drop は too: \"せんこう、なに？\" Fine with friends; in class keep it.",
+      uni: "The first oral exam is usually a self-introduction built from this pattern. Teachers listen for は read as \"wa\", no さん on yourself, and not repeating わたしは.",
       checks: [
         {
-          q: "Choose the natural way to say \"I'm Noah.\"",
+          q: "\"I'm Noah.\"",
           choices: ["ノアです。", "ノアさんです。", "あなたは ノアです。", "ノアは です。"],
           answer: 0,
-          why: "No さん for yourself, and わたしは can be left out entirely.",
+          why: "No さん for yourself; わたしは can be left out.",
         },
         {
           q: "How is the は in わたしは pronounced?",
           choices: ["wa", "ha", "ba", "a"],
           answer: 0,
-          why: "As a particle it's always \"wa\", even though it's written は.",
+          why: "As a particle, は is read \"wa\".",
         },
         {
           q: "\"Min is Korean.\"",
           jp: "ミンさんは かんこく＿です。",
           choices: ["じん", "ご", "さん", "の"],
           answer: 0,
-          why: "A person from a country takes 〜じん. 〜ご is the language.",
+          why: "A person from a country: 〜じん.",
         },
       ],
       games: ["wa-desu-builder", "jin-or-go"],
-      ask: ["Why does Japanese leave out 'I' so often?", "Is は the same as 'is'?", "When should I use あなた?"],
+      ask: ["Why is 'I' left out so often?", "Is は the same as 'is'?", "When is あなた used?"],
     },
     // ------------------------------------------------ grammar 2
     {
       id: "questions",
       kind: "grammar",
       title: "〜か",
-      name: "Asking questions",
-      genki: "Genki p. 42 · Grammar 2; Expression Notes 2 (p. 44)",
+      name: "Grammar 2 · Question sentences",
+      genki: "Genki p. 42",
       teach:
-        "Turning a statement into a question is the easiest thing in Japanese: add **か** at the end. " +
-        "りゅうがくせいです (I'm an exchange student) → りゅうがくせいですか (Are you an exchange student?). " +
-        "No word order changes, no \"do\". Your voice goes up a little at the end.\n\n" +
-        "**Answering yes/no.** Yes: はい、そうです. No: いいえ, then say what's actually true: " +
-        "いいえ、にほんじんです. (\"No, I'm Japanese.\")\n\n" +
-        "**Question words** go exactly where the answer will go. Ask with なん, answer by swapping it out:\n" +
+        "Add **か** to the end of a statement to make it a question. Word order doesn't change.\n" +
+        "りゅうがくせいです → りゅうがくせいですか\n\n" +
+        "**Yes:** はい、そうです. **No:** いいえ, followed by what is true: いいえ、にほんじんです.\n\n" +
+        "**Question words** go where the answer goes. To answer, replace the question word:\n" +
         "せんこうは なんですか。→ せんこうは けいざいです。\n\n" +
-        "This lesson's question words are all built on なん (what): なんさい (how old), なんねんせい (what " +
-        "year), なんじ (what time), なんばん (what number), and なにじん (what nationality). " +
-        "なん is used before です and before counters like じ, さい; なに before most other things.\n\n" +
-        "Finally, **そうですか** with falling intonation means \"I see / oh, OK\". It's how you show you're " +
-        "listening.",
+        "This lesson's question words: なん (what), なんさい (how old), なんねんせい (what year), なんじ (what time), なんばん (what number), なにじん (what nationality). なん is used before です and counters; なに before particles and in なにじん.",
       pattern: [
-        ["〔statement〕か。", "Yes/no question"],
+        ["〔statement〕か。", "yes/no question"],
         ["〔X〕は なん〜ですか。", "What … is X?"],
       ],
       examples: [
         { jp: "はるとさんは にほんじんですか。", en: "Is Haruto Japanese?" },
-        { jp: "はい、そうです。", en: "Yes, that's right." },
+        { jp: "はい、そうです。", en: "Yes, he is." },
         { jp: "ノアさんは なんねんせいですか。", en: "What year is Noah in?" },
         { jp: "にねんせいです。", en: "He's a second-year." },
         { jp: "いま なんじですか。", en: "What time is it now?" },
@@ -505,53 +558,48 @@ const L1: GenkiLesson = {
         { jp: "でんわばんごうは なんばんですか。", en: "What's your phone number?" },
       ],
       watch: [
-        "Japanese traditionally writes no question mark: か already does the job. (You'll see ？ in casual texts.)",
-        "Don't answer a question-word question with はい or いいえ. なんさいですか → じゅうきゅうさいです, not \"はい…\".",
-        "\"No, that's not right\" (いいえ、そうじゃないです) comes in Lesson 2. For now: いいえ + the real answer.",
+        "Japanese questions don't normally take a question mark.",
+        "Questions with question words aren't answered with はい / いいえ.",
+        "\"No, that's not right\" (〜じゃないです) is Lesson 2. Here: いいえ + the correct answer.",
       ],
-      uni: "Listening quizzes love \"what year / how old / what time\" questions. Learn to hear the question word first: なんさい → expect a 〜さい answer.",
+      uni: "Listening quizzes use these question words a lot. Catch the question word first: なんさい means the answer ends in 〜さい.",
       checks: [
         {
-          q: "Make it a question: \"Is Lena a first-year?\"",
+          q: "\"Is Lena a first-year?\"",
           jp: "レナさんは いちねんせいです＿。",
           choices: ["か", "は", "の", "ね"],
           answer: 0,
-          why: "か at the end turns any statement into a question.",
+          why: "か at the end makes a question.",
         },
         {
-          q: "Someone asks なんさいですか. Which answer fits?",
+          q: "Reply to なんさいですか.",
           choices: ["にじゅういっさいです。", "はい、そうです。", "さんねんせいです。", "ごご にじです。"],
           answer: 0,
-          why: "なんさい asks age, so the answer ends in 〜さい.",
+          why: "なんさい asks age: 〜さい.",
         },
         {
-          q: "\"Is Haruto an exchange student?\" He isn't; he's Japanese. Best answer:",
+          q: "\"Is Haruto an international student?\" He's Japanese.",
           choices: ["いいえ、にほんじんです。", "はい、にほんじんです。", "いいえ、そうです。", "にほんじんですか。"],
           answer: 0,
-          why: "いいえ, then the true fact.",
+          why: "いいえ, then the fact.",
         },
       ],
       games: ["question-words", "ages-years"],
-      ask: ["When do I use なん and when なに?", "How do I say 'no, that's not right'?"],
+      ask: ["なん or なに?", "How do I say 'no, that's not right'?"],
     },
     // ------------------------------------------------ grammar 3
     {
       id: "no",
       kind: "grammar",
-      title: "Noun の Noun",
-      name: "Linking two nouns",
-      genki: "Genki p. 43 · Grammar 3",
+      title: "Noun₁ の Noun₂",
+      name: "Grammar 3 · Linking two nouns",
+      genki: "Genki p. 43",
       teach:
-        "**の** glues two nouns together into one bigger noun. The rule to remember: **the main thing " +
-        "comes last**. The noun before の narrows it down.\n\n" +
-        "はるとさんの でんわばんごう: the main thing is a phone number; which one? Haruto's. " +
-        "にほんごの せんせい: a teacher; of what? Japanese. Japanese has the opposite order to English " +
-        "\"teacher of Japanese\", so read の phrases from the back.\n\n" +
-        "の covers a lot of English: possession (\"Lena's\"), \"of\", \"at\", \"from\": " +
-        "さくらだいがくの がくせい is a student AT Sakura University.\n\n" +
-        "Because an の phrase acts like one noun, it can go anywhere a noun can, including on both sides " +
-        "of は … です, and you can chain them: わたしの ともだちの なまえ (my friend's name).",
-      pattern: [["〔extra detail〕の 〔main thing〕", "the main thing, narrowed down"]],
+        "**の** joins two nouns. The second noun is the main one; the first narrows it down.\n\n" +
+        "はるとさんの でんわばんごう: a phone number, Haruto's. にほんごの せんせい: a teacher, of Japanese. The order is the reverse of English \"of\".\n\n" +
+        "の covers possession and also \"at\", \"from\" or \"of\": さくらだいがくの がくせい is a student at Sakura University.\n\n" +
+        "A noun-の-noun phrase works as one noun, so it can sit on either side of は … です, and phrases can be chained: わたしの ともだちの なまえ (my friend's name).",
+      pattern: [["〔Noun₁〕の 〔Noun₂〕", "Noun₂, narrowed by Noun₁"]],
       examples: [
         { jp: "わたしの なまえ", en: "my name" },
         { jp: "にほんごの せんせい", en: "a Japanese-language teacher" },
@@ -560,17 +608,16 @@ const L1: GenkiLesson = {
         { jp: "はるとさんの おかあさんは いしゃです。", en: "Haruto's mother is a doctor." },
       ],
       watch: [
-        "Order flips compared to English \"of\": \"a teacher OF Japanese\" = にほんごの せんせい, not せんせいの にほんご.",
-        "\"Japanese person\" is にほんじん, not にほんの ひと in everyday speech (both are understood, but じん is the normal word).",
-        "わたしの = my. There is no separate word; \"me + の\" is it.",
+        "\"Teacher of Japanese\" is にほんごの せんせい, not せんせいの にほんご.",
+        "\"My\" is わたしの.",
       ],
-      uni: "Expect translation items like \"my friend's phone number\". Check yourself by asking: what is the THING here? That word goes last.",
+      uni: "Translation items like \"my friend's phone number\" are common. Find the main noun first; it goes last.",
       checks: [
         {
-          q: "\"A high-school teacher\"",
+          q: "\"a high school teacher\"",
           choices: ["こうこうの せんせい", "せんせいの こうこう", "こうこうせんせいの", "せんせい こうこう"],
           answer: 0,
-          why: "The main thing (teacher) goes last; the detail (high school) before の.",
+          why: "Main noun (teacher) last.",
         },
         {
           q: "\"Noah's major is history.\"",
@@ -580,7 +627,7 @@ const L1: GenkiLesson = {
           why: "Noah's major: ノアさんの せんこう.",
         },
         {
-          q: "What does わたしの ともだちの でんわばんごう mean?",
+          q: "わたしの ともだちの でんわばんごう",
           choices: ["my friend's phone number", "my phone's friend number", "the friend of my phone", "my number is a friend"],
           answer: 0,
           why: "Read from the back: phone number ← friend's ← my.",
@@ -589,26 +636,20 @@ const L1: GenkiLesson = {
       games: ["no-chain"],
       ask: ["Is の always possession?", "How long can an の chain get?"],
     },
-    // ------------------------------------------------ expressions: time & phone
+    // ------------------------------------------------ time & phone numbers
     {
       id: "time",
       kind: "expressions",
       title: "じかん・でんわばんごう",
-      name: "Telling the time and phone numbers",
-      genki: "Genki pp. 52–53, 55 · Practice V and Useful Expressions (Time)",
+      name: "Time and phone numbers",
+      genki: "Genki pp. 51–53, 55 · Practice IV–V, Useful Expressions",
       teach:
-        "Times are number + **じ** (o'clock). Half past is + **はん**. a.m. and p.m. go **in front**: " +
-        "ごぜん くじ (9 a.m.), ごご にじはん (2:30 p.m.).\n\n" +
-        "Three hours are irregular and come up constantly, so drill them until they're automatic: " +
-        "**よじ** (4, not よんじ), **しちじ** (7, not ななじ), **くじ** (9, not きゅうじ).\n\n" +
-        "**Minutes** (bonus for now) use ふん/ぷん and change sound a lot: いっぷん, にふん, さんぷん, " +
-        "よんぷん, ごふん, ろっぷん, ななふん, はっぷん, きゅうふん, じゅっぷん. Genki lists them on p. 55; " +
-        "learn 10, 15, 20, 30 first (じゅっぷん, じゅうごふん, にじゅっぷん, さんじゅっぷん).\n\n" +
-        "**Phone numbers** are read digit by digit. The dash is read **の**: " +
-        "090-1234-5678 → ゼロきゅうゼロの いちにさんよんの ごろくななはち. When reading digits, " +
-        "people often stretch 2 and 5 to にい and ごお so they're easier to hear.",
+        "Hours are number + **じ**. Half past is + **はん**. a.m. and p.m. go in front: ごぜん くじ (9 a.m.), ごご にじはん (2:30 p.m.).\n\n" +
+        "Three hours are irregular: **よじ** (4), **しちじ** (7), **くじ** (9).\n\n" +
+        "Minutes (p. 55) use ふん / ぷん with sound changes: いっぷん, にふん, さんぷん, よんぷん, ごふん, ろっぷん, ななふん, はっぷん, きゅうふん, じゅっぷん.\n\n" +
+        "Phone numbers are read one digit at a time, and the dash is read **の**: 090-1234-5678 → ゼロきゅうゼロの いちにさんよんの ごろくななはち. When reading digits, 2 and 5 are often lengthened to にい and ごお.",
       table: {
-        caption: "The hours",
+        caption: "Hours",
         rows: [
           ["1:00", "いちじ"],
           ["2:00", "にじ"],
@@ -628,94 +669,82 @@ const L1: GenkiLesson = {
       examples: [
         { jp: "いま なんじですか。", en: "What time is it now?" },
         { jp: "ごご よじはんです。", en: "It's 4:30 p.m." },
-        { jp: "ソウルは いま ごぜん しちじです。", en: "It's 7 a.m. in Seoul right now." },
+        { jp: "ソウルは いま ごぜん しちじです。", en: "It's 7 a.m. in Seoul now." },
         { jp: "でんわばんごうは ゼロはちゼロの にいさんよんの ごおろくななはちです。", en: "My number is 080-234-5678." },
       ],
-      watch: [
-        "ごぜん / ごご go BEFORE the time, never after: ごご さんじ, not さんじ ごご.",
-        "よじ, しちじ, くじ. The \"normal\" よん/なな/きゅう sound wrong on the clock.",
-        "はん comes right after じ with no space in meaning: にじはん = 2:30.",
-      ],
-      uni: "Time is a favourite listening item. When you hear よ, しち or く right before じ, you already know the hour.",
-      life: "Train stations and phones use 24-hour time (じゅうよじ = 14:00), but in conversation people say ごご にじ.",
+      watch: ["ごぜん / ごご come before the time.", "よじ, しちじ, くじ, not よんじ, ななじ, きゅうじ."],
+      life: "Timetables use the 24-hour clock (じゅうよじ = 14:00); in conversation people usually say ごご にじ.",
       checks: [
         {
           q: "9:00",
           choices: ["くじ", "きゅうじ", "きゅうじはん", "じゅうくじ"],
           answer: 0,
-          why: "Nine o'clock is くじ, one of the three irregular hours.",
+          why: "9 o'clock is くじ.",
         },
         {
           q: "3:30 p.m.",
           choices: ["ごご さんじはん", "さんじはん ごご", "ごぜん さんじはん", "ごご はんさんじ"],
           answer: 0,
-          why: "p.m. in front, then the hour, then はん.",
+          why: "p.m., hour, はん.",
         },
         {
           q: "How is the dash in a phone number read?",
           choices: ["の", "は", "と", "ばん"],
           answer: 0,
-          why: "People say の between the groups of digits.",
+          why: "The dash is read の.",
         },
       ],
       games: ["clock", "phone-listen"],
-      ask: ["How do I say 4:45?", "Do Japanese people use the 24-hour clock in speech?"],
+      ask: ["How do I say 4:45?", "Is the 24-hour clock used in speech?"],
     },
-    // ------------------------------------------------ culture
+    // ------------------------------------------------ names and titles
     {
       id: "names",
       kind: "culture",
       title: "なまえ・さん",
-      name: "Names, titles and talking to people",
-      genki: "Genki pp. 44–45 · Expression Notes 2, Culture Notes (Japanese Names)",
+      name: "Names and titles",
+      genki: "Genki pp. 44–45 · Expression Notes 2, Culture Notes",
       teach:
-        "**Family name first.** Japanese say the family name, then the given name: やまもと はると. " +
-        "When introducing yourself in Japanese, many foreigners keep their own order; both are understood. " +
-        "There are no middle names.\n\n" +
-        "**さん** works after either name and for anyone, but **never for yourself**. Children get ちゃん " +
-        "(and boys often くん). Teachers, doctors and lawyers get **せんせい** instead of さん: " +
-        "やまもとせんせい.\n\n" +
-        "**Avoid あなた.** It isn't rude by itself, but using it with someone whose name you know sounds " +
-        "distant or even pushy. Use their name + さん, even when speaking to them directly: " +
-        "\"ノアさんは カナダじんですか\" = \"Are YOU Canadian, Noah?\"\n\n" +
-        "**あのう…** at the start of a question is a polite little hesitation, like \"um, excuse me…\". " +
-        "It softens a personal question. Use it.",
+        "**Name order.** Family name first, then given name: やまもと はると. There are no middle names.\n\n" +
+        "**さん** goes after a family or given name, for anyone except yourself. Children are usually ちゃん, boys often くん. Teachers, doctors and lawyers are addressed with **せんせい**: やまもとせんせい.\n\n" +
+        "**あなた** is rarely used for someone whose name you know. Use name + さん, even when talking to them: ノアさんは カナダじんですか = \"Are you Canadian, Noah?\"\n\n" +
+        "**あのう** before a question softens it, like \"um, excuse me…\".",
       examples: [
-        { jp: "あのう、りゅうがくせいですか。", en: "Um… are you an exchange student?" },
+        { jp: "あのう、りゅうがくせいですか。", en: "Um, are you an international student?" },
         { jp: "やまもとせんせいは にほんじんです。", en: "Professor Yamamoto is Japanese." },
       ],
-      watch: ["Using あなた with your teacher is one of the few things that can genuinely sound rude. Use せんせい."],
+      watch: ["Calling your teacher あなた can sound rude. Use せんせい."],
       checks: [
         {
-          q: "You're asking your teacher, Prof. Yamamoto, if she's from Tokyo. How do you say \"you\"?",
+          q: "Asking Prof. Yamamoto if she's from Tokyo, you address her as:",
           choices: ["やまもとせんせいは…", "あなたは…", "やまもとさんは…", "やまもとちゃんは…"],
           answer: 0,
-          why: "Teachers are addressed by name + せんせい; あなた would sound rude here.",
+          why: "Name + せんせい.",
         },
         {
-          q: "Which is a typical Japanese name order?",
-          choices: ["family name, then given name", "given name, then family name", "given, middle, family", "any order"],
+          q: "Japanese name order:",
+          choices: ["family name, given name", "given name, family name", "given, middle, family", "any order"],
           answer: 0,
           why: "やまもと (family) はると (given).",
         },
       ],
       games: [],
-      ask: ["How should I write my own name in Japanese?", "When do people use ちゃん and くん?"],
+      ask: ["How do I write my name in Japanese?", "When are ちゃん and くん used?"],
     },
   ],
   dialogue: {
-    title: "Orientation day",
-    setting: "Lena has just arrived in Japan. At the welcome party she meets Haruto, a student volunteer, and then Min.",
+    title: "Practice conversation: orientation",
+    setting: "Lena, an exchange student, meets Haruto at a welcome event. Min joins them.",
     lines: [
       { who: "はると", jp: "こんにちは。やまもと はるとです。", en: "Hi. I'm Haruto Yamamoto." },
-      { who: "レナ", jp: "はじめまして。レナ・ミュラーです。", en: "Nice to meet you. I'm Lena Müller." },
+      { who: "レナ", jp: "はじめまして。レナ・ミュラーです。", en: "How do you do? I'm Lena Müller." },
       { who: "はると", jp: "レナさんは りゅうがくせいですか。", en: "Are you an exchange student, Lena?" },
-      { who: "レナ", jp: "はい、そうです。ドイツじんです。はるとさんは？", en: "Yes. I'm German. And you, Haruto?" },
+      { who: "レナ", jp: "はい、そうです。ドイツじんです。はるとさんは？", en: "Yes. I'm German. And you?" },
       { who: "はると", jp: "にほんじんです。さくらだいがくの さんねんせいです。", en: "I'm Japanese. A third-year at Sakura University." },
       { who: "レナ", jp: "そうですか。せんこうは なんですか。", en: "I see. What's your major?" },
-      { who: "はると", jp: "れきしです。レナさんの せんこうは？", en: "History. What about yours?" },
+      { who: "はると", jp: "れきしです。レナさんの せんこうは？", en: "History. And yours?" },
       { who: "レナ", jp: "にほんごです。いちねんせいです。", en: "Japanese. I'm a first-year." },
-      { who: "ミン", jp: "あのう、すみません。いま なんじですか。", en: "Um, excuse me. What time is it now?" },
+      { who: "ミン", jp: "あのう、すみません。いま なんじですか。", en: "Um, excuse me. What time is it?" },
       { who: "はると", jp: "ごご よじはんです。", en: "It's 4:30 p.m." },
       { who: "ミン", jp: "ありがとうございます。", en: "Thank you." },
     ],
@@ -723,83 +752,83 @@ const L1: GenkiLesson = {
   together: ["self-intro"],
   test: [
     {
-      q: "Your host mother says いってらっしゃい. What did you just say?",
+      q: "Someone says いってらっしゃい to you. What did you say first?",
       choices: ["いってきます", "ただいま", "おやすみなさい", "いただきます"],
       answer: 0,
       why: "いってらっしゃい answers いってきます.",
     },
     {
-      q: "How do you read 74?",
+      q: "74",
       choices: ["ななじゅうよん", "しちじゅうし", "よんじゅうなな", "ななよんじゅう"],
       answer: 0,
-      why: "Seven tens + four, using the default readings なな and よん.",
+      why: "7 × 10 + 4, with なな and よん.",
     },
     {
       q: "\"I'm a second-year student.\"",
       choices: ["にねんせいです。", "わたしは にねんせいさんです。", "にねんせいですか。", "わたしの にねんせいです。"],
       answer: 0,
-      why: "The plainest correct answer: no さん on yourself, わたしは optional.",
+      why: "No さん on yourself; わたしは optional.",
     },
     {
-      q: "Fill the gap: \"Min is a student at Seoul University.\"",
+      q: "\"Min is a student at Seoul University.\"",
       jp: "ミンさんは ソウルだいがく＿ がくせいです。",
       choices: ["の", "は", "か", "じん"],
       answer: 0,
-      why: "A student AT Seoul University: ソウルだいがくの がくせい.",
+      why: "ソウルだいがくの がくせい.",
     },
     {
-      q: "Which question asks someone's year at university?",
+      q: "Which asks someone's year in school?",
       choices: ["なんねんせいですか。", "なんさいですか。", "なんじですか。", "なんばんですか。"],
       answer: 0,
-      why: "〜ねんせい is \"…-year student\".",
+      why: "〜ねんせい = …-year student.",
     },
     {
       q: "7:30",
       choices: ["しちじはん", "ななじはん", "しちじさんじゅう", "はんしちじ"],
       answer: 0,
-      why: "Seven o'clock is しちじ, and はん follows.",
+      why: "しちじ + はん.",
     },
     {
-      q: "\"A Japanese person\"",
+      q: "\"a Japanese person\"",
       choices: ["にほんじん", "にほんご", "にほんの", "じんにほん"],
       answer: 0,
-      why: "〜じん is a person from a country; 〜ご is the language.",
+      why: "〜じん = person from.",
     },
     {
-      q: "Which word is pronounced differently from how it is spelled?",
+      q: "Which is pronounced differently from its spelling?",
       choices: ["the は in わたしは", "the か in ですか", "the の in わたしの", "the じ in いちじ"],
       answer: 0,
-      why: "The topic particle は is said \"wa\".",
+      why: "Particle は is read \"wa\".",
     },
     {
-      q: "Someone says ありがとうございます to you. A natural reply is:",
+      q: "Reply to ありがとうございます:",
       choices: ["いいえ。", "はい、そうです。", "すみません。", "おかえりなさい。"],
       answer: 0,
-      why: "いいえ = \"not at all / don't mention it\".",
+      why: "いいえ = not at all.",
     },
     {
       q: "\"Haruto's mother\"",
       choices: ["はるとさんの おかあさん", "おかあさんの はるとさん", "はるとさんは おかあさん", "はるとの さん おかあさん"],
       answer: 0,
-      why: "Main thing last: mother, narrowed by Haruto's.",
+      why: "Main noun last.",
     },
     {
       q: "Where does ごご (p.m.) go?",
       choices: ["before the time", "after the time", "after です", "anywhere"],
       answer: 0,
-      why: "ごご さんじ, never さんじ ごご.",
+      why: "ごご さんじ.",
     },
     {
-      q: "\"She is 20 years old\" in the most common way:",
+      q: "\"She's 20.\" Most common form:",
       choices: ["はたちです。", "にじゅうさいです。", "にさいです。", "にじゅっさいです。"],
       answer: 0,
-      why: "20 has its own word, はたち. にじゅっさい is understood, but はたち is what people actually say.",
+      why: "20 years old is はたち (にじゅっさい is also understood).",
     },
   ],
 };
 
 // ====================================================================
-// Lesson 2 — かいもの (Shopping)
+// Unit 2 · Genki Lesson 2 · かいもの (Shopping)
 // ====================================================================
 
 const L2: GenkiLesson = {
@@ -809,40 +838,113 @@ const L2: GenkiLesson = {
   en: "Shopping",
   pages: "Genki I pp. 56–81",
   goals: [
-    "Ask how much things cost and understand prices up to 99,999 yen",
-    "Point to things and places: this, that, that over there, which",
+    "Ask and understand prices up to ¥99,999",
+    "Point to things and places: これ・それ・あれ・どれ and the related words",
     "Buy things and order food",
-    "Say whose something is",
-    "Say \"too\" and \"isn't\"",
-    "Add a friendly ね or a confident よ",
+    "Ask whose something is",
+    "Say \"too\" (も) and \"is not\" (じゃないです)",
+    "Use ね and よ",
   ],
-  intro:
-    "Lesson 2 is the lesson you'll use the first day you're actually in Japan: prices, pointing, buying, " +
-    "ordering, and finding the toilet. It has seven grammar points, but four of them are one idea (the " +
-    "こ・そ・あ・ど words), so it is lighter than it looks.\n\n" +
-    "The single most important picture to hold in your head this week: **こ = near me, そ = near you, " +
-    "あ = far from both of us, ど = which?** Every pointing word in Japanese follows it.",
   plan: [
-    "Day 1 · Big numbers and prices warm-up · vocabulary",
-    "Day 2 · これ・それ・あれ・どれ · この・その・あの・どの",
-    "Day 3 · ここ・そこ・あそこ・どこ · だれの",
-    "Day 4 · も · じゃないです · ね and よ",
-    "Day 5 · Shopping and restaurant role-plays, the conversation, then the lesson test",
+    "1 · Big numbers and prices, vocabulary",
+    "2 · Grammar 1–2: これ・それ・あれ・どれ, この・その・あの・どの",
+    "3 · Grammar 3–4: ここ・そこ・あそこ・どこ, だれの",
+    "4 · Grammar 5–7: も, じゃないです, ね / よ",
+    "5 · Shopping and restaurant role plays, practice conversation, unit test",
   ],
+  book: {
+    dialogues: [
+      {
+        ref: "Dialogue I",
+        pages: "p. 56",
+        summary:
+          "At a flea market Mary asks the price of a few watches, finds two too expensive and buys a cheaper one. Afterwards a stranger finds a wallet and asks whose it is; it's Mary's.",
+      },
+      {
+        ref: "Dialogue II",
+        pages: "p. 57",
+        summary: "At a restaurant Mary asks what a dish on the menu is, learns it's meat rather than fish, orders it, and asks where the restroom is.",
+      },
+    ],
+    notes: [
+      { ref: "Expression Notes 3", pages: "p. 65", summary: "ください vs おねがいします vs どうぞ, sound changes in big numbers, and counting in units of 10,000 (まん)." },
+      { ref: "Culture Notes: Japanese Currency", pages: "p. 66", summary: "The notes and coins in use, who is on each note, and why many people still carry cash." },
+      { ref: "Let's Find Out: Compare the Prices", pages: "p. 78", summary: "Compare prices at a chain restaurant in Japan and in your own country." },
+      { ref: "Useful Expressions: In the Classroom", pages: "p. 81", summary: "Classroom objects and the phrases used in every class (わかりません, もういちど…)." },
+    ],
+    practice: [
+      {
+        ref: "I すうじ",
+        pages: "pp. 67–69",
+        drills: "Reading numbers to 90,000; prices from pictures; C is a pair price-gap exercise.",
+        solo: "Read A and B aloud. For C, read both price sheets (p. 69 and p. 79) aloud.",
+        games: ["prices-read", "prices-listen"],
+      },
+      {
+        ref: "II これは なんですか",
+        pages: "pp. 69–70",
+        drills: "これ / それ / あれ from pictures; C is pair work in the classroom.",
+        solo: "Do A and B. For C, name objects around you with これ, and things across the room with あれ.",
+        games: ["kosoado-things"],
+      },
+      {
+        ref: "III このほんは いくらですか",
+        pages: "pp. 70–72",
+        drills: "この / その / あの + noun with prices; B and C are pair work.",
+        solo: "Do A. For B, play both vendor and customer with cards A (p. 71) and B (p. 80).",
+        games: ["kono-or-kore"],
+      },
+      {
+        ref: "IV ぎんこうは あそこです",
+        pages: "p. 72",
+        drills: "Asking where places are and answering with ここ / そこ / あそこ.",
+        solo: "Do it as written, both parts aloud.",
+        games: ["kosoado-places"],
+      },
+      {
+        ref: "V これは だれの かさですか",
+        pages: "p. 73",
+        drills: "だれの with pictures A and B (pair work).",
+        solo: "Look at picture B (p. 79) and say whose each item is.",
+        games: ["whose"],
+      },
+      {
+        ref: "VI おかあさんも にほんじんです",
+        pages: "pp. 73–74",
+        drills: "も from pairs of pictures.",
+        solo: "Do it as written.",
+        games: ["mo-or-wa"],
+      },
+      {
+        ref: "VII メアリーさんは にほんじんじゃないです",
+        pages: "pp. 74–75",
+        drills: "じゃないです from a chart; B and C are group and pair work.",
+        solo: "Do A. For C, answer yes/no questions about yourself, correcting the wrong ones.",
+        games: ["negate"],
+      },
+      {
+        ref: "VIII まとめの れんしゅう",
+        pages: "pp. 76–77",
+        drills: "Shop and restaurant role plays, photos of friends and family, find someone who….",
+        solo: "Do the flea market and lunch order role plays on the Put it together page.",
+        games: ["flea-market", "restaurant"],
+      },
+    ],
+  },
   vocab: [
     {
-      title: "Pointing words",
+      title: "Words that point",
       words: [
-        { jp: "これ", en: "this one (near me)", star: true },
-        { jp: "それ", en: "that one (near you)", star: true },
-        { jp: "あれ", en: "that one over there", star: true },
+        { jp: "これ", en: "this one", star: true },
+        { jp: "それ", en: "that one", star: true },
+        { jp: "あれ", en: "that one (over there)", star: true },
         { jp: "どれ", en: "which one", star: true },
-        { jp: "この", en: "this … (+ noun)" },
-        { jp: "その", en: "that … (+ noun)", star: true },
-        { jp: "あの", en: "that … over there (+ noun)", star: true },
-        { jp: "どの", en: "which … (+ noun)" },
+        { jp: "この", en: "this …" },
+        { jp: "その", en: "that …", star: true },
+        { jp: "あの", en: "that … (over there)", star: true },
+        { jp: "どの", en: "which …" },
         { jp: "ここ", en: "here" },
-        { jp: "そこ", en: "there (near you)" },
+        { jp: "そこ", en: "there" },
         { jp: "あそこ", en: "over there", star: true },
         { jp: "どこ", en: "where", star: true },
         { jp: "だれ", en: "who", star: true },
@@ -889,7 +991,32 @@ const L2: GenkiLesson = {
       ],
     },
     {
-      title: "Money",
+      title: "Countries",
+      words: [
+        { jp: "イギリス", en: "Britain" },
+        { jp: "かんこく", en: "Korea" },
+        { jp: "ちゅうごく", en: "China" },
+      ],
+    },
+    {
+      title: "Majors",
+      words: [
+        { jp: "えいご", en: "English (language)" },
+        { jp: "けいざい", en: "economics" },
+        { jp: "コンピューター", en: "computer" },
+        { jp: "ビジネス", en: "business" },
+        { jp: "れきし", en: "history" },
+      ],
+    },
+    {
+      title: "Family",
+      words: [
+        { jp: "おかあさん", en: "mother" },
+        { jp: "おとうさん", en: "father" },
+      ],
+    },
+    {
+      title: "Money matters",
       words: [
         { jp: "いくら", en: "how much", star: true },
         { jp: "〜えん", en: "… yen", star: true },
@@ -897,29 +1024,14 @@ const L2: GenkiLesson = {
       ],
     },
     {
-      title: "Shop and restaurant phrases",
+      title: "Expressions",
       words: [
-        { jp: "いらっしゃいませ", en: "welcome (staff to customers)", star: true },
-        { jp: "〜を おねがいします", en: "…, please (ordering)", star: true },
-        { jp: "〜を ください", en: "please give me …", star: true },
-        { jp: "じゃあ", en: "well then, in that case", star: true },
-        { jp: "どうぞ", en: "here you are / please, go ahead", star: true },
-        { jp: "どうも", en: "thanks", star: true },
-      ],
-    },
-    {
-      title: "Review from Lesson 1",
-      extra: true,
-      words: [
-        { jp: "えいご", en: "English (language)" },
-        { jp: "けいざい", en: "economics" },
-        { jp: "ビジネス", en: "business" },
-        { jp: "れきし", en: "history" },
-        { jp: "かんこく", en: "South Korea" },
-        { jp: "ちゅうごく", en: "China" },
-        { jp: "イギリス", en: "the UK" },
-        { jp: "おかあさん", en: "mother" },
-        { jp: "おとうさん", en: "father" },
+        { jp: "いらっしゃいませ", en: "Welcome (to our store)", star: true },
+        { jp: "（〜を）おねがいします", en: "…, please", star: true },
+        { jp: "（〜を）ください", en: "Please give me …", star: true },
+        { jp: "じゃあ", en: "then…; if that is the case", star: true },
+        { jp: "どうぞ", en: "Please. / Here it is.", star: true },
+        { jp: "どうも", en: "Thank you.", star: true },
       ],
     },
   ],
@@ -933,26 +1045,20 @@ const L2: GenkiLesson = {
       name: "Big numbers and prices",
       genki: "Genki pp. 65, 67 · Expression Notes 3, Practice I",
       teach:
-        "To read prices you need three more words: **ひゃく** (100), **せん** (1,000) and **まん** (10,000). " +
-        "They work like じゅう: さんびゃく is \"three hundreds\", ごせん is \"five thousands\".\n\n" +
-        "**Sound changes.** A few combinations are bent so they're easier to say. These are the ones " +
-        "that show up on every price tag, so learn them by ear:\n" +
-        "300 さんびゃく · 600 ろっぴゃく · 800 はっぴゃく · 3,000 さんぜん · 8,000 はっせん.\n\n" +
-        "**10,000 is いちまん**, not just まん (unlike ひゃく and せん, which drop the いち). Japanese counts " +
-        "in blocks of four zeros: 20,000 is にまん (\"two ten-thousands\"), not \"twenty thousand\". " +
-        "This is the biggest mental switch: when you see 35,000, think \"3.5 まん\" → さんまんごせん.\n\n" +
-        "Add **えん** for yen: ¥1,800 = せんはっぴゃくえん. (Yen is えん in Japanese; the \"y\" is an old " +
-        "English spelling.)",
+        "Three more units: **ひゃく** (100), **せん** (1,000), **まん** (10,000). They combine like じゅう: さんびゃく = 3 × 100, ごせん = 5 × 1,000.\n\n" +
+        "**Sound changes** to learn: 300 さんびゃく, 600 ろっぴゃく, 800 はっぴゃく, 3,000 さんぜん, 8,000 はっせん.\n\n" +
+        "**10,000 is いちまん.** Unlike ひゃく and せん, まん keeps the いち. Large numbers are counted in units of 10,000: 20,000 is にまん (2 × 10,000), and 35,000 is さんまんごせん.\n\n" +
+        "Yen is えん: ¥1,800 = せんはっぴゃくえん.",
       table: {
-        caption: "The ones that change",
+        caption: "Sound changes",
         rows: [
-          ["300", "さんびゃく", "h → b"],
-          ["600", "ろっぴゃく", "h → pp"],
-          ["800", "はっぴゃく", "h → pp"],
-          ["3,000", "さんぜん", "s → z"],
-          ["8,000", "はっせん", "doubled s"],
-          ["10,000", "いちまん", "keeps いち"],
-          ["20,000", "にまん", "two ten-thousands"],
+          ["300", "さんびゃく"],
+          ["600", "ろっぴゃく"],
+          ["800", "はっぴゃく"],
+          ["3,000", "さんぜん"],
+          ["8,000", "はっせん"],
+          ["10,000", "いちまん"],
+          ["20,000", "にまん"],
         ],
       },
       examples: [
@@ -961,181 +1067,161 @@ const L2: GenkiLesson = {
         { jp: "いちまんにせんえん", en: "¥12,000" },
         { jp: "さんまんごせんえん", en: "¥35,000" },
       ],
-      watch: [
-        "Don't say さんひゃく, ろくひゃく, はちひゃく, さんせん, はちせん. They're understood but sound wrong.",
-        "10,000 = いちまん. 100,000 = じゅうまん (ten ten-thousands), not \"hundred thousand\".",
-      ],
-      uni: "Price listening is the L2 listening item. Train your ear on the changed sounds; they are exactly what quizzes test.",
-      life: "Prices in shops usually include tax (ぜいこみ). Cash is still common in small shops and restaurants.",
+      watch: ["Not さんひゃく, ろくひゃく, はちひゃく, さんせん, はちせん.", "100,000 is じゅうまん (10 × 10,000)."],
+      uni: "Price listening is a typical Lesson 2 quiz item, and the sound changes are what it tests.",
+      life: "Shop prices usually include tax. Small shops and restaurants are sometimes cash only.",
       checks: [
         {
           q: "¥600",
           choices: ["ろっぴゃくえん", "ろくひゃくえん", "ろっひゃくえん", "ろくびゃくえん"],
           answer: 0,
-          why: "6 + ひゃく becomes ろっぴゃく.",
+          why: "6 + ひゃく → ろっぴゃく.",
         },
         {
           q: "¥10,000",
           choices: ["いちまんえん", "まんえん", "じゅうせんえん", "いちせんえん"],
           answer: 0,
-          why: "Ten thousand keeps its いち: いちまん.",
+          why: "いちまん keeps the いち.",
         },
         {
           q: "¥3,800",
           choices: ["さんぜんはっぴゃくえん", "さんせんはちひゃくえん", "さんぜんはちひゃくえん", "さんせんはっぴゃくえん"],
           answer: 0,
-          why: "Both parts change: さんぜん + はっぴゃく.",
+          why: "さんぜん + はっぴゃく.",
         },
       ],
       games: ["prices-read", "prices-listen"],
-      ask: ["Why does 300 become さんびゃく?", "How do I read 150,000 yen?"],
+      ask: ["Why is 300 さんびゃく?", "How do I read ¥150,000?"],
     },
     // ------------------------------------------------ grammar 1
     {
       id: "kore",
       kind: "grammar",
       title: "これ・それ・あれ・どれ",
-      name: "This one, that one, which one",
-      genki: "Genki p. 60 · Grammar 1",
+      name: "Grammar 1 · this, that, which",
+      genki: "Genki p. 60",
       teach:
-        "Picture yourself and a friend standing a few steps apart. Japanese splits the world around you " +
-        "two:\n" +
-        "**これ** — the thing near me (the speaker)\n" +
-        "**それ** — the thing near you (the listener)\n" +
-        "**あれ** — the thing far from both of us\n" +
-        "**どれ** — which one?\n\n" +
-        "English only has \"this\" and \"that\". Japanese has two \"that\"s, and choosing between them is " +
-        "about **whose side the thing is on**, not just distance.\n\n" +
-        "The flip that catches everyone: if your friend points at the bag you're holding and asks " +
-        "**それは なんですか** (\"what's that?\"), you answer **これは かばんです** (\"this is a bag\"). Same " +
-        "bag, different word, because it's near you.\n\n" +
-        "These words stand alone, like nouns: これは いくらですか (\"How much is this?\").",
+        "**これ**: the thing near the speaker\n" +
+        "**それ**: the thing near the listener\n" +
+        "**あれ**: the thing far from both\n" +
+        "**どれ**: which one?\n\n" +
+        "The choice between それ and あれ depends on whose side the thing is on, not only on distance.\n\n" +
+        "Because of this, a question and its answer often use different words. If someone points at the bag you're holding and asks **それは なんですか**, you answer **これは かばんです**.\n\n" +
+        "These words stand alone, followed by は, が and so on: これは いくらですか.",
       pattern: [
         ["これは 〔X〕です。", "This (near me) is X."],
         ["それは 〔X〕ですか。", "Is that (near you) X?"],
-        ["どれですか。", "Which one is it?"],
+        ["どれですか。", "Which one?"],
       ],
       examples: [
         { jp: "これは いくらですか。", en: "How much is this?" },
-        { jp: "それは さんぜんえんです。", en: "That (in your hand) is 3,000 yen." },
+        { jp: "それは さんぜんえんです。", en: "That (by you) is 3,000 yen." },
         { jp: "あれは なんですか。", en: "What's that over there?" },
         { jp: "あれは としょかんです。", en: "That's the library." },
-        { jp: "どれですか。", en: "Which one (do you mean)?" },
+        { jp: "どれですか。", en: "Which one?" },
       ],
       watch: [
-        "The question-and-answer flip: それ in the question often becomes これ in the answer, and the other way round.",
-        "Don't use これ/それ/あれ for people standing right there. \"This is my friend\" uses こちら or この ひと (coming soon).",
-        "どれ is a question word, so it takes が rather than は: どれが ミンさんの かさですか. Genki explains why in Lesson 8; for now, just copy it.",
+        "それ in a question often becomes これ in the answer, and the reverse.",
+        "Don't use これ / それ / あれ for people who are present.",
+        "Question words like どれ take が, not は: どれが ミンさんの かさですか. (Explained in Lesson 8.)",
       ],
-      uni: "Expect picture questions: a speaker, a listener and an object. Ask yourself \"whose side is it on?\" before you answer.",
+      uni: "Quizzes use pictures with a speaker, a listener and an object. Decide whose side the object is on.",
       checks: [
         {
-          q: "The umbrella is in YOUR hand. \"How much is this?\"",
+          q: "The umbrella is in your hand.",
           jp: "＿は いくらですか。",
           choices: ["これ", "それ", "あれ", "どれ"],
           answer: 0,
-          why: "Near the speaker = これ.",
+          why: "Near the speaker: これ.",
         },
         {
-          q: "Your friend asks それは なんですか about the book you're holding. You reply:",
+          q: "Your friend asks それは なんですか about the book you're holding. You answer:",
           choices: ["これは ほんです。", "それは ほんです。", "あれは ほんです。", "どれは ほんです。"],
           answer: 0,
-          why: "From your side it's near you, so これ.",
+          why: "From your side it's near you: これ.",
         },
         {
-          q: "A tall building far from both of you:",
+          q: "A building far from both of you:",
           choices: ["あれ", "それ", "これ", "どれ"],
           answer: 0,
-          why: "Far from both speaker and listener = あれ.",
+          why: "Far from both: あれ.",
         },
       ],
       games: ["kosoado-things"],
-      ask: ["How do I know if something is それ or あれ?", "Why can't I use これ for people?"],
+      ask: ["それ or あれ: how do I decide?", "Why not これ for people?"],
     },
     // ------------------------------------------------ grammar 2
     {
       id: "kono",
       kind: "grammar",
-      title: "この・その・あの・どの ＋ noun",
-      name: "This watch, that bag",
-      genki: "Genki p. 61 · Grammar 2",
+      title: "この・その・あの・どの + Noun",
+      name: "Grammar 2 · this watch, that bag",
+      genki: "Genki p. 61",
       teach:
-        "The **の** versions follow the same map (near me / near you / far / which), but they can't stand " +
-        "alone. They must have a noun right after them:\n" +
-        "**この** とけい (this watch) · **その** かばん (that bag) · **あの** ひと (that person over there) · " +
-        "**どの** ほん (which book).\n\n" +
-        "A handy test: if the next word is は, use the **れ** word. If the next word is a noun, use the " +
-        "**の** word.\n" +
-        "これは たかいです. (This is expensive.)\n" +
-        "このとけいは たかいです. (This watch is expensive.)\n\n" +
-        "Unlike これ/それ/あれ, the の forms are fine for people: あの ひとは だれですか (\"Who's that " +
-        "person?\").",
+        "The の forms use the same map but must be followed by a noun: **この** とけい, **その** かばん, **あの** ひと, **どの** ほん.\n\n" +
+        "Followed by は (or another particle): the れ word. Followed by a noun: the の word.\n" +
+        "これは たかいです。 This is expensive.\n" +
+        "このとけいは たかいです。 This watch is expensive.\n\n" +
+        "The の forms can be used for people: あのひとは だれですか.",
       pattern: [
-        ["この／その／あの 〔noun〕", "this / that / that … over there"],
-        ["どの 〔noun〕が 〜ですか。", "Which noun is …?"],
+        ["この／その／あの 〔Noun〕", "this / that / that … over there"],
+        ["どの 〔Noun〕が 〜ですか。", "Which … is …?"],
       ],
       examples: [
         { jp: "このとけいは いくらですか。", en: "How much is this watch?" },
-        { jp: "そのかばんは ミンさんのです。", en: "That bag (near you) is Min's." },
+        { jp: "そのかばんは ミンさんのです。", en: "That bag (by you) is Min's." },
         { jp: "あのひとは せんせいです。", en: "That person over there is a teacher." },
         { jp: "どのほんが いいですか。", en: "Which book is good?" },
       ],
-      watch: [
-        "このは / これの are both wrong. この needs a noun; これ stands alone.",
-        "\"This one\" when pointing at a thing on a menu: これ, not この.",
-      ],
+      watch: ["このは and これの are both wrong."],
       checks: [
         {
-          q: "Choose the right word.",
+          q: "Fill the gap.",
           jp: "＿とけいは いくらですか。",
           choices: ["この", "これ", "ここ", "これの"],
           answer: 0,
-          why: "A noun (とけい) follows, so it's the の form.",
+          why: "A noun follows: この.",
         },
         {
-          q: "Choose the right word.",
+          q: "Fill the gap.",
           jp: "＿は いくらですか。",
           choices: ["これ", "この", "このの", "こ"],
           answer: 0,
-          why: "Nothing but は follows, so it's the れ form.",
+          why: "は follows: これ.",
         },
         {
           q: "\"Who is that person over there?\"",
           choices: ["あのひとは だれですか。", "あれは だれですか。", "あのは だれですか。", "あそこは だれですか。"],
           answer: 0,
-          why: "For people, use あの ひと. あれ for a person sounds rude.",
+          why: "あの ひと for people.",
         },
       ],
       games: ["kono-or-kore"],
-      ask: ["Can I say この for people?", "What's the difference between それ and その?"],
+      ask: ["Can この be used for people?", "それ vs その?"],
     },
     // ------------------------------------------------ grammar 3
     {
       id: "koko",
       kind: "grammar",
       title: "ここ・そこ・あそこ・どこ",
-      name: "Here, there, over there, where",
-      genki: "Genki p. 62 · Grammar 3",
+      name: "Grammar 3 · here, there, where",
+      genki: "Genki p. 62",
       teach:
-        "One more set on the same map, this time for **places**:\n" +
-        "**ここ** here (near me) · **そこ** there (near you) · **あそこ** over there · **どこ** where.\n\n" +
-        "To ask where something is: **〔X〕は どこですか**. The most useful sentence in this lesson is " +
-        "probably トイレは どこですか.\n\n" +
-        "Notice the pattern across all three sets: こ・そ・あ・ど. Once you know which side a thing is on, " +
-        "you pick the ending you need: れ (a thing), の + noun, or こ/そこ (a place). Japanese teachers call " +
-        "this the こそあど system, and it keeps coming back (こちら, こんな, こう …).",
-      pattern: [["〔X〕は どこですか。", "Where is X?"], ["〔X〕は あそこです。", "X is over there."]],
+        "The same map for places: **ここ** here (near me), **そこ** there (near you), **あそこ** over there, **どこ** where.\n\n" +
+        "To ask where something is: **〔X〕は どこですか**. Answer by pointing: あそこです.\n\n" +
+        "Together with Grammar 1 and 2 this is the こそあど system: こ near me, そ near you, あ far from both, ど which. It comes back in later lessons.",
+      pattern: [
+        ["〔X〕は どこですか。", "Where is X?"],
+        ["〔X〕は あそこです。", "X is over there."],
+      ],
       examples: [
-        { jp: "すみません。トイレは どこですか。", en: "Excuse me, where's the toilet?" },
-        { jp: "あそこです。", en: "It's over there." },
+        { jp: "すみません。トイレは どこですか。", en: "Excuse me, where's the restroom?" },
+        { jp: "あそこです。", en: "Over there." },
         { jp: "ゆうびんきょくは どこですか。", en: "Where's the post office?" },
-        { jp: "ここは としょかんです。", en: "This (place) is the library." },
+        { jp: "ここは としょかんです。", en: "This is the library." },
       ],
-      watch: [
-        "Places use ここ/そこ/あそこ, not これ/それ/あれ. \"Here is the bank\": ここは ぎんこうです.",
-        "Detailed directions (left, right, in front of) arrive in Lesson 4. For now, point and say あそこです.",
-      ],
-      life: "Asking for things in a shop works the same way: くつは どこですか (\"Where are the shoes?\").",
+      watch: ["Places take ここ / そこ / あそこ, not これ / それ / あれ.", "Directions (left, right, in front of) are Lesson 4."],
+      life: "The same question works in shops: くつは どこですか.",
       checks: [
         {
           q: "\"Where is the bank?\"",
@@ -1144,92 +1230,87 @@ const L2: GenkiLesson = {
           why: "Places: どこ.",
         },
         {
-          q: "The post office is far from both of you. You point and say:",
+          q: "The post office is far from both of you.",
           choices: ["あそこです。", "そこです。", "ここです。", "あれです。"],
           answer: 0,
-          why: "A place far from both = あそこ.",
+          why: "A place far from both: あそこ.",
         },
       ],
       games: ["kosoado-places"],
-      ask: ["Why is it あそこ and not あこ?", "How do I ask where something is in a shop?"],
+      ask: ["Why あそこ and not あこ?", "How do I ask where something is in a shop?"],
     },
     // ------------------------------------------------ grammar 4
     {
       id: "dare-no",
       kind: "grammar",
-      title: "だれの noun",
-      name: "Whose is it?",
-      genki: "Genki p. 62 · Grammar 4",
+      title: "だれの Noun",
+      name: "Grammar 4 · whose",
+      genki: "Genki p. 62",
       teach:
-        "**だれ** is \"who\". Add the の from Lesson 1 and you get **だれの** — \"whose\". It works " +
-        "exactly like any other の phrase: だれの かさですか (\"Whose umbrella is it?\").\n\n" +
-        "Answer by putting the owner in the same spot: ミンさんの かさです.\n\n" +
-        "When the noun is obvious, you can drop it and keep the の: これは わたしのです (\"This is mine\"). " +
-        "That の means \"the one belonging to\".",
-      pattern: [["これは だれの 〔noun〕ですか。", "Whose noun is this?"], ["〔person〕の 〔noun〕です。", "It's (person)'s noun."]],
+        "**だれ** is \"who\"; **だれの** is \"whose\": だれの かさですか.\n\n" +
+        "Answer with the owner in the same place: ミンさんの かさです.\n\n" +
+        "If the noun is clear, it can be dropped after の: これは わたしのです (\"This is mine\").",
+      pattern: [
+        ["これは だれの 〔Noun〕ですか。", "Whose … is this?"],
+        ["〔Person〕の 〔Noun〕です。", "It's (person)'s …"],
+      ],
       examples: [
         { jp: "これは だれの かさですか。", en: "Whose umbrella is this?" },
         { jp: "ノアさんの かさです。", en: "It's Noah's umbrella." },
         { jp: "そのペンは わたしのです。", en: "That pen is mine." },
       ],
-      watch: ["だれ alone is \"who\": あのひとは だれですか. You need の to make \"whose\"."],
+      watch: ["だれ alone is \"who\": あのひとは だれですか."],
       checks: [
         {
           q: "\"Whose bag is this?\"",
           choices: ["これは だれの かばんですか。", "これは だれ かばんですか。", "これの だれは かばんですか。", "だれは これの かばんですか。"],
           answer: 0,
-          why: "だれの + noun = whose noun.",
+          why: "だれの + noun.",
         },
         {
-          q: "\"That's mine.\" (the thing near the listener)",
+          q: "\"That's mine.\" (by the listener)",
           choices: ["それは わたしのです。", "それは わたしです。", "それの わたしです。", "わたしは それのです。"],
           answer: 0,
-          why: "わたしの = mine, with the noun left out.",
+          why: "わたしの = mine.",
         },
       ],
       games: ["whose"],
-      ask: ["Can I always drop the noun after の?"],
+      ask: ["Can the noun always be dropped after の?"],
     },
     // ------------------------------------------------ grammar 5
     {
       id: "mo",
       kind: "grammar",
       title: "Noun も",
-      name: "Too, also",
-      genki: "Genki pp. 62–63 · Grammar 5",
+      name: "Grammar 5 · too, also",
+      genki: "Genki pp. 62–63",
       teach:
-        "**も** means \"too / also\", and it **replaces は**. It goes right after the thing that is \"also\" " +
-        "true.\n\n" +
+        "**も** means \"too\" and **replaces は**. It goes right after the item that shares the fact.\n\n" +
         "ミンさんは にねんせいです。ノアさん**も** にねんせいです。\n" +
-        "\"Min is a second-year. Noah is a second-year **too**.\"\n\n" +
-        "The rule of thumb: if a sentence repeats what was just said about someone else, the new person " +
-        "gets も. If the fact is different, keep は.\n\n" +
-        "\"Me too!\" in conversation is **わたしもです**.",
+        "Min is a second-year. Noah is a second-year too.\n\n" +
+        "If the second fact is different, keep は.\n\n" +
+        "\"Me too\" is **わたしもです**.",
       pattern: [["A は X です。B も X です。", "A is X. B is X too."]],
       examples: [
-        { jp: "このかさは たかいです。あのかさも たかいです。", en: "This umbrella is expensive. That one over there is expensive too." },
+        { jp: "このかさは たかいです。あのかさも たかいです。", en: "This umbrella is expensive. That one is expensive too." },
         { jp: "はるとさんは にほんじんです。おかあさんも にほんじんです。", en: "Haruto is Japanese. His mother is Japanese too." },
-        { jp: "A: しゅっしんは ソウルです。 B: わたしもです。", en: "A: I'm from Seoul. B: Me too!" },
+        { jp: "A: しゅっしんは ソウルです。 B: わたしもです。", en: "A: I'm from Seoul. B: Me too." },
       ],
-      watch: [
-        "も replaces は. はも or もは are never right.",
-        "も attaches to the thing that's shared, not to the end of the sentence like English \"too\".",
-        "If the facts differ, it's は: ミンさんは にねんせいです。ノアさんは いちねんせいです。",
-      ],
+      watch: ["も replaces は: never はも or もは.", "も goes after the shared item, not at the end of the sentence."],
       checks: [
         {
           q: "Lena is a first-year. Noah is a first-year too.",
           jp: "レナさんは いちねんせいです。ノアさん＿ いちねんせいです。",
           choices: ["も", "は", "の", "か"],
           answer: 0,
-          why: "Same fact, new person → も.",
+          why: "Same fact: も.",
         },
         {
           q: "Lena is a first-year. Min is a second-year.",
           jp: "レナさんは いちねんせいです。ミンさん＿ にねんせいです。",
           choices: ["は", "も", "の", "か"],
           answer: 0,
-          why: "Different fact → keep は.",
+          why: "Different fact: は.",
         },
       ],
       games: ["mo-or-wa"],
@@ -1240,146 +1321,126 @@ const L2: GenkiLesson = {
       id: "janai",
       kind: "grammar",
       title: "Noun じゃないです",
-      name: "Saying something isn't",
-      genki: "Genki pp. 63–64 · Grammar 6",
+      name: "Grammar 6 · is not",
+      genki: "Genki pp. 63–64",
       teach:
-        "To say \"X is **not** Y\", replace です with **じゃないです**:\n" +
-        "がくせいです → がくせい**じゃないです** (I'm not a student).\n\n" +
-        "There are two more versions with the same meaning, a step up in formality:\n" +
-        "**じゃありません** — polite and a bit more careful\n" +
-        "**ではありません** — formal; the one to use in **writing**, essays and exams\n\n" +
-        "Now you can answer \"no\" properly: いいえ、にほんじんじゃないです。カナダじんです。 " +
-        "Deny, then give the right answer. That's the most natural pattern.\n\n" +
-        "**Important limit:** this is for nouns (and a few words like them). Describing words that end in " +
-        "い, like たかい (expensive) and おいしい (delicious), make their negative differently. You'll learn " +
-        "that in Lesson 5; until then, don't put じゃないです after them.",
+        "To negate X は Y です when Y is a noun, replace です with **じゃないです**: がくせい**じゃないです** (I'm not a student).\n\n" +
+        "Two other forms mean the same, in more formal styles:\n" +
+        "**じゃありません**: polite, more conservative\n" +
+        "**ではありません**: formal, used in writing\n\n" +
+        "Answering no: いいえ、にほんじんじゃないです。カナダじんです。\n\n" +
+        "This only works after nouns. たかい and おいしい are adjectives; their negative is in Lesson 5.",
       pattern: [
         ["〔X〕は 〔Y〕じゃないです。", "X is not Y. (spoken)"],
-        ["〔X〕は 〔Y〕ではありません。", "X is not Y. (formal, written)"],
+        ["〔X〕は 〔Y〕ではありません。", "X is not Y. (written)"],
       ],
       examples: [
-        { jp: "はるとさんは りゅうがくせいじゃないです。", en: "Haruto isn't an exchange student." },
+        { jp: "はるとさんは りゅうがくせいじゃないです。", en: "Haruto isn't an international student." },
         { jp: "いいえ、さかなじゃないです。にくです。", en: "No, it's not fish. It's meat." },
         { jp: "わたしは せんせいではありません。", en: "I am not a teacher. (formal)" },
       ],
-      watch: [
-        "You can't answer with just いいえ、じゃないです. The noun has to be there: いいえ、がくせいじゃないです.",
-        "たかいじゃないです is wrong. たかい is a describing word; its negative comes in Lesson 5.",
-      ],
-      uni: "Many university courses expect ではありません in written homework and じゃないです in speaking. If your teacher hasn't said, ask which they want.",
+      watch: ["じゃないです needs its noun: not いいえ、じゃないです.", "たかいじゃないです is wrong (Lesson 5)."],
+      uni: "Written homework often expects ではありません, speaking じゃないです. Check what your course uses.",
       checks: [
         {
           q: "\"Ms. Yamamoto isn't a student.\"",
           choices: ["やまもとさんは がくせいじゃないです。", "やまもとさんは がくせいないです。", "やまもとさんは じゃないです がくせい。", "やまもとさんは がくせいですじゃない。"],
           answer: 0,
-          why: "です → じゃないです, right after the noun.",
+          why: "Noun + じゃないです.",
         },
         {
-          q: "Which is the most formal, written form?",
+          q: "The formal, written form:",
           choices: ["ではありません", "じゃないです", "じゃありません", "ないです"],
           answer: 0,
-          why: "ではありません is the written-style negative.",
+          why: "ではありません.",
         },
         {
-          q: "\"Is that fish?\" It's meat. Best answer:",
+          q: "\"Is that fish?\" It's meat.",
           choices: ["いいえ、さかなじゃないです。にくです。", "いいえ、じゃないです。", "はい、さかなじゃないです。", "いいえ、にくじゃないです。"],
           answer: 0,
-          why: "Deny the wrong noun, then give the right one.",
+          why: "Deny, then correct.",
         },
       ],
       games: ["negate"],
-      ask: ["Why can't I say たかいじゃないです?", "Which negative should I use with my teacher?"],
+      ask: ["Why not たかいじゃないです?", "Which negative do I use with my teacher?"],
     },
     // ------------------------------------------------ grammar 7
     {
       id: "ne-yo",
       kind: "grammar",
       title: "〜ね・〜よ",
-      name: "Isn't it? / I'm telling you",
-      genki: "Genki p. 64 · Grammar 7",
+      name: "Grammar 7 · ね and よ",
+      genki: "Genki p. 64",
       teach:
-        "Two tiny endings that make you sound like a person rather than a textbook.\n\n" +
-        "**ね** asks for agreement or checks something: \"…, right?\" / \"…, isn't it?\". Use it when you " +
-        "expect the other person feels the same or already knows: おいしいですね (\"It's good, isn't it?\"). " +
-        "Also for double-checking: ゼロはちゼロ… ですね (\"080…, right?\").\n\n" +
-        "**よ** tells the other person something they don't know yet: \"I'm telling you / you know\". " +
-        "とんかつは にくですよ (\"Tonkatsu is meat, you know.\").\n\n" +
-        "Quick test: does the listener **already know** it? → ね. Are you **giving them new information**? → よ.",
-      pattern: [["〜ですね。", "…, isn't it? (shared)"], ["〜ですよ。", "…, I tell you. (new info)"]],
+        "**ね** asks for agreement or confirmation, like \"…, right?\": おいしいですね.\n\n" +
+        "**よ** tells the listener something they don't know, like \"you know\": とんかつは にくですよ.\n\n" +
+        "If the listener already knows or shares it, use ね. If it's new to them, use よ.",
+      pattern: [
+        ["〜ですね。", "…, isn't it?"],
+        ["〜ですよ。", "…, you know."],
+      ],
       examples: [
         { jp: "このラーメン、おいしいですね。", en: "This ramen is good, isn't it?" },
-        { jp: "あれは ぎんこうじゃないですよ。ゆうびんきょくですよ。", en: "That's not a bank, you know. It's the post office." },
+        { jp: "あれは ぎんこうじゃないですよ。ゆうびんきょくですよ。", en: "That's not a bank. It's the post office." },
         { jp: "ミンさんの せんこうは けいざいですね。", en: "Your major is economics, right, Min?" },
       ],
-      watch: [
-        "Too much よ can sound pushy or like you're correcting people. Use it when the info is genuinely useful to them.",
-        "ね on something the listener can't know (\"My name is Lena, isn't it?\") sounds odd.",
-      ],
-      life: "Japanese conversations are full of ね. Agreeing with そうですね is the most common reaction you'll hear.",
+      watch: ["Using よ a lot can sound pushy."],
       checks: [
         {
-          q: "You and a friend are both eating, and it's delicious.",
+          q: "You and a friend are both eating; it's good.",
           jp: "おいしいです＿。",
           choices: ["ね", "よ", "か", "の"],
           answer: 0,
-          why: "Shared experience → ね.",
+          why: "Shared: ね.",
         },
         {
-          q: "Your friend thinks the store is closed. You know it isn't — it's open today.",
+          q: "Your friend thinks the shop is closed. It's open today.",
           jp: "きょうは だいじょうぶです＿。",
           choices: ["よ", "ね", "か", "も"],
           answer: 0,
-          why: "Giving them information they don't have → よ.",
+          why: "New to them: よ.",
         },
       ],
       games: ["ne-or-yo"],
-      ask: ["Is よ rude?", "What's the difference between ですね and そうですね?"],
+      ask: ["Is よ rude?", "ですね vs そうですね?"],
     },
-    // ------------------------------------------------ expressions: shopping
+    // ------------------------------------------------ shopping phrases
     {
       id: "shopping",
       kind: "expressions",
       title: "かいもの・レストラン",
       name: "Shops and restaurants",
-      genki: "Genki pp. 56–57, 65–66 · the conversations, Expression Notes 3, Culture Notes (Japanese Currency)",
+      genki: "Genki pp. 56–57, 65–66 · Dialogues, Expression Notes 3, Culture Notes",
       teach:
-        "Everything you need to buy something is now in your hands:\n" +
-        "**いくらですか** — how much is it?\n" +
-        "**〔X〕を ください** — please give me X (for things in a shop)\n" +
-        "**〔X〕を おねがいします** — X, please (a little more polite; the natural way to order food)\n" +
-        "**じゃあ** — \"OK then…\", what you say when you've decided\n\n" +
-        "Staff will say **いらっしゃいませ** (welcome) when you come in, and **どうぞ** when they hand you " +
-        "something or invite you to go ahead. You can answer どうぞ with **どうも** (\"thanks\"), the " +
-        "all-purpose short thank-you.\n\n" +
-        "**Money.** Japan uses coins for 1, 5, 10, 50, 100 and 500 yen and notes for 1,000, 5,000 and " +
-        "10,000 (2,000 exists but is rare). Card and phone payments are everywhere in cities, but small " +
-        "restaurants and shops can be cash-only, so most people carry some.",
+        "**いくらですか**: How much is it?\n" +
+        "**〔X〕を ください**: Please give me X. Used for things in a shop.\n" +
+        "**〔X〕を おねがいします**: X, please. Slightly more polite; the usual way to order food.\n" +
+        "**じゃあ**: Well then. Said when you decide.\n\n" +
+        "Staff say **いらっしゃいませ** when you enter and **どうぞ** when they hand you something. Customers don't answer いらっしゃいませ; a short **どうも** is enough for どうぞ.\n\n" +
+        "Coins: ¥1, 5, 10, 50, 100, 500. Notes: ¥1,000, 5,000, 10,000 (¥2,000 exists but is rare).",
       examples: [
         { jp: "すみません。このTシャツは いくらですか。", en: "Excuse me, how much is this T-shirt?" },
         { jp: "にせんえんです。", en: "It's 2,000 yen." },
-        { jp: "じゃあ、これを ください。", en: "OK, I'll take this one." },
+        { jp: "じゃあ、これを ください。", en: "Then I'll take this one." },
         { jp: "コーヒーを おねがいします。", en: "A coffee, please." },
       ],
-      watch: [
-        "を after the thing you want: ペンを ください. (を is said \"o\".)",
-        "いらっしゃいませ isn't said back. Customers just come in.",
-      ],
+      watch: ["を after the item: ペンを ください. を is read \"o\"."],
       checks: [
         {
-          q: "Ordering in a restaurant, the most natural phrase is:",
+          q: "Ordering in a restaurant:",
           choices: ["カレーを おねがいします。", "カレーです。", "カレーは どこですか。", "カレーの ください。"],
           answer: 0,
-          why: "〜を おねがいします is the standard polite order.",
+          why: "〜を おねがいします.",
         },
         {
-          q: "The waiter hands you the menu and says どうぞ. A short, natural reply:",
+          q: "The waiter hands you the menu with どうぞ. You say:",
           choices: ["どうも。", "いらっしゃいませ。", "いってきます。", "ただいま。"],
           answer: 0,
           why: "どうも = thanks.",
         },
       ],
       games: ["flea-market", "restaurant"],
-      ask: ["Is it rude to say ください to a shop clerk?", "How do I ask for the bill?"],
+      ask: ["Is ください rude in a shop?", "How do I ask for the bill?"],
     },
     // ------------------------------------------------ warm-up: classroom
     {
@@ -1388,15 +1449,12 @@ const L2: GenkiLesson = {
       optional: true,
       title: "きょうしつ",
       name: "Classroom phrases",
-      genki: "Genki p. 81 · Useful Expressions (In the Classroom)",
+      genki: "Genki p. 81 · Useful Expressions",
       teach:
-        "These are the sentences you'll hear and say every single class. Learn them as fixed chunks; the " +
-        "grammar inside them (〜てください) comes in Lesson 6.\n\n" +
-        "The three you most need as a student: **わかりません** (I don't understand), **もういちど いって " +
-        "ください** (please say it again), and **ゆっくり いってください** (please say it slowly). " +
-        "Teachers are always glad to hear them; they mean you're trying.",
+        "Learn these as set phrases; the 〜てください form inside them is Lesson 6.\n\n" +
+        "The ones you'll need most as a student: **わかりません**, **もういちど いってください**, **ゆっくり いってください**.",
       table: {
-        caption: "Say these in class",
+        caption: "Phrases",
         rows: [
           ["Do you understand?", "わかりましたか。"],
           ["I understand.", "わかりました。"],
@@ -1410,10 +1468,10 @@ const L2: GenkiLesson = {
       },
       checks: [
         {
-          q: "You didn't catch what the teacher said. Ask them to repeat it.",
+          q: "You didn't catch what the teacher said.",
           choices: ["もういちど いってください。", "わかりました。", "きいてください。", "ちょっと まってください。"],
           answer: 0,
-          why: "もういちど = one more time.",
+          why: "もういちど = once more.",
         },
       ],
       games: ["classroom-match"],
@@ -1421,22 +1479,22 @@ const L2: GenkiLesson = {
     },
   ],
   dialogue: {
-    title: "Saturday at the flea market",
-    setting: "Lena and Min look around a flea market, then get lunch at a small restaurant.",
+    title: "Practice conversation: flea market and lunch",
+    setting: "Lena and Min go to a flea market, then get lunch.",
     lines: [
-      { who: "みせのひと", jp: "いらっしゃいませ。", en: "Welcome!" },
+      { who: "みせのひと", jp: "いらっしゃいませ。", en: "Welcome." },
       { who: "レナ", jp: "すみません。そのぼうしは いくらですか。", en: "Excuse me, how much is that hat?" },
-      { who: "みせのひと", jp: "これですか。せんにひゃくえんです。", en: "This one? It's 1,200 yen." },
-      { who: "レナ", jp: "あのかばんも いくらですか。", en: "And that bag over there, how much is it?" },
+      { who: "みせのひと", jp: "これですか。せんにひゃくえんです。", en: "This one? 1,200 yen." },
+      { who: "レナ", jp: "あのかばんも いくらですか。", en: "And how much is that bag over there?" },
       { who: "みせのひと", jp: "あれは はっせんえんです。", en: "That's 8,000 yen." },
-      { who: "ミン", jp: "たかいですね。", en: "That's expensive, isn't it?" },
-      { who: "レナ", jp: "じゃあ、そのぼうしを ください。", en: "OK then, I'll take that hat." },
+      { who: "ミン", jp: "たかいですね。", en: "That's expensive." },
+      { who: "レナ", jp: "じゃあ、そのぼうしを ください。", en: "Then I'll take the hat." },
       { who: "ミン", jp: "あれ？ これは だれの さいふですか。", en: "Huh? Whose wallet is this?" },
       { who: "レナ", jp: "あっ、わたしのです。ありがとう！", en: "Oh, it's mine. Thanks!" },
       { who: "てんいん", jp: "いらっしゃいませ。メニューを どうぞ。", en: "Welcome. Here's the menu." },
       { who: "ミン", jp: "どうも。これは なんですか。", en: "Thanks. What's this?" },
-      { who: "てんいん", jp: "それは うどんです。おいしいですよ。", en: "That's udon. It's good, I promise." },
-      { who: "ミン", jp: "じゃあ、これを おねがいします。", en: "Then I'll have this, please." },
+      { who: "てんいん", jp: "それは うどんです。おいしいですよ。", en: "That's udon. It's good." },
+      { who: "ミン", jp: "じゃあ、これを おねがいします。", en: "Then this, please." },
       { who: "レナ", jp: "わたしも うどんを おねがいします。", en: "Udon for me too, please." },
     ],
   },
@@ -1447,13 +1505,13 @@ const L2: GenkiLesson = {
       jp: "＿は ミンさんの ペンですか。",
       choices: ["それ", "これ", "あれ", "その"],
       answer: 0,
-      why: "Near the listener and standing alone → それ.",
+      why: "Near the listener, standing alone: それ.",
     },
     {
       q: "¥800",
       choices: ["はっぴゃくえん", "はちひゃくえん", "はっひゃくえん", "はちびゃくえん"],
       answer: 0,
-      why: "8 + ひゃく → はっぴゃく.",
+      why: "はっぴゃく.",
     },
     {
       q: "\"How much is this bag?\"",
@@ -1462,10 +1520,10 @@ const L2: GenkiLesson = {
       why: "この + noun.",
     },
     {
-      q: "\"Excuse me, where's the toilet?\"",
+      q: "\"Excuse me, where's the restroom?\"",
       choices: ["すみません。トイレは どこですか。", "すみません。トイレは どれですか。", "すみません。トイレは なんですか。", "すみません。トイレを ください。"],
       answer: 0,
-      why: "Places take どこ.",
+      why: "Places: どこ.",
     },
     {
       q: "\"Whose umbrella is this?\"",
@@ -1478,51 +1536,51 @@ const L2: GenkiLesson = {
       jp: "おとうさん＿ にほんじんです。",
       choices: ["も", "は", "の", "を"],
       answer: 0,
-      why: "Same fact, new person → も.",
+      why: "Same fact: も.",
     },
     {
-      q: "\"I'm not an exchange student.\"",
+      q: "\"I'm not an international student.\"",
       choices: ["りゅうがくせいじゃないです。", "りゅうがくせいないです。", "りゅうがくせいですじゃない。", "じゃないです りゅうがくせい。"],
       answer: 0,
       why: "Noun + じゃないです.",
     },
     {
-      q: "You're telling a lost tourist something they don't know: the bank is over there.",
+      q: "You tell a lost tourist: the bank is over there.",
       jp: "ぎんこうは あそこです＿。",
       choices: ["よ", "ね", "か", "も"],
       answer: 0,
-      why: "New information for the listener → よ.",
+      why: "New information: よ.",
     },
     {
       q: "¥35,000",
       choices: ["さんまんごせんえん", "さんじゅうごせんえん", "さんまんごひゃくえん", "さんぜんごまんえん"],
       answer: 0,
-      why: "3 ten-thousands + 5 thousands.",
+      why: "3 × 10,000 + 5 × 1,000.",
     },
     {
-      q: "Ordering food politely:",
+      q: "Ordering food:",
       choices: ["ラーメンを おねがいします。", "ラーメンは ください。", "ラーメンです か。", "ラーメンの おねがいします。"],
       answer: 0,
-      why: "を marks what you want; おねがいします is the polite order.",
+      why: "〜を おねがいします.",
     },
     {
-      q: "Which one is written-style formal?",
+      q: "Which is the written-style negative?",
       choices: ["がくせいではありません。", "がくせいじゃないです。", "がくせいじゃありません。", "がくせいないです。"],
       answer: 0,
-      why: "ではありません is the formal, written negative.",
+      why: "ではありません.",
     },
     {
-      q: "Your friend points at the T-shirt you're wearing: それは どこの Tシャツですか. You start your answer with:",
+      q: "Your friend points at the T-shirt you're wearing: それは どこの Tシャツですか. Your answer starts:",
       choices: ["これは…", "それは…", "あれは…", "どれは…"],
       answer: 0,
-      why: "From your side it's near you: これ.",
+      why: "It's on your side: これ.",
     },
   ],
 };
 
 export const GENKI_LESSONS: GenkiLesson[] = [L1, L2];
 
-/** Every lesson in Genki I, for the course map; the first two are built. */
+/** Every lesson in Genki I, for the unit list; the first two are built. */
 export const GENKI_MAP: { num: number; jp: string; en: string; topics: string }[] = [
   { num: 1, jp: "あたらしいともだち", en: "New Friends", topics: "Greetings · numbers · X は Y です · か · の · time" },
   { num: 2, jp: "かいもの", en: "Shopping", topics: "こそあど · だれの · も · じゃないです · ね/よ · prices" },
