@@ -1,13 +1,14 @@
 /**
  * The Genki companion: Genki I (3rd edition), unit by unit.
  *
- * Each unit follows one Genki lesson: the book's vocabulary lists, its
- * grammar points in its order and numbering, page references for every
- * section, short summaries of what the book's dialogues and culture notes
- * cover, and a map of its practice exercises with a way to do each one
- * alone. The explanations, example sentences, practice conversation and
- * drills here are written for the app; the book's own text is not
- * reproduced, so the unit is used next to the book, not instead of it.
+ * Each unit covers one Genki lesson completely, so the book isn't needed
+ * alongside it: the lesson's vocabulary lists, its grammar points in the
+ * book's order and numbering, the reference material (numbers, time,
+ * greetings, classroom phrases), two conversations, and in-app practice
+ * for every kind of exercise the lesson has, including listening and
+ * reading. Page references are kept for anyone using the book in class.
+ * The explanations, sentences, conversations and drills are written for
+ * the app; the book's own text is not reproduced.
  *
  * Example sentences use a small cast of our own: レナ (Lena, a first-year
  * from Germany), はると (Haruto, a Japanese third-year), ミン (Min, a Korean
@@ -72,7 +73,7 @@ export interface GenkiStep {
   /** The pattern box: a template and what it means. */
   pattern?: [jp: string, en: string][];
   examples?: GenkiExample[];
-  table?: GenkiTable;
+  tables?: GenkiTable[];
   /** Common mistakes. */
   watch?: string[];
   /** What class quizzes tend to check. */
@@ -85,25 +86,6 @@ export interface GenkiStep {
   games: string[];
   /** Starter questions for Ask Coach. */
   ask: string[];
-}
-
-/** A section of the book, summarised: what it is and where. */
-export interface BookSection {
-  ref: string;
-  pages: string;
-  summary: string;
-}
-
-/** One of the book's practice exercises, and how to do it without a class. */
-export interface PracticeItem {
-  ref: string;
-  pages: string;
-  /** What it drills. */
-  drills: string;
-  /** How to do it alone. */
-  solo: string;
-  /** In-app games that cover the same ground. */
-  games?: string[];
 }
 
 export interface DialogueLine {
@@ -129,16 +111,12 @@ export interface GenkiLesson {
   goals: string[];
   /** A suggested order over five study sessions. */
   plan: string[];
-  /** The book's own sections, summarised, with pages. */
-  book: {
-    dialogues: BookSection[];
-    notes: BookSection[];
-    practice: PracticeItem[];
-  };
+  /** Every practice game for the unit, grouped, for the unit page. */
+  practice: { title: string; games: string[] }[];
   vocab: VocabGroup[];
   steps: GenkiStep[];
-  /** A practice conversation using the unit's grammar. */
-  dialogue: GenkiDialogue;
+  /** Two conversations using the unit's grammar. */
+  dialogues: GenkiDialogue[];
   /** Games for the "put it together" page. */
   together: string[];
   test: GenkiCheck[];
@@ -168,73 +146,13 @@ const L1: GenkiLesson = {
     "4 · Time and phone numbers, names and titles",
     "5 · Practice conversation, self-introduction, unit test",
   ],
-  book: {
-    dialogues: [
-      {
-        ref: "Dialogue I",
-        pages: "p. 36",
-        summary:
-          "Mary, an exchange student who has just arrived in Japan, meets Takeshi at orientation. She asks whether he is an international student (he is Japanese) and what year he is in.",
-      },
-      {
-        ref: "Dialogue II",
-        pages: "p. 37",
-        summary: "Mary introduces herself to the group: her university, her year, her major and her age.",
-      },
-    ],
-    notes: [
-      { ref: "Greetings", pages: "pp. 30–32", summary: "The everyday greetings with pictures, and a table with romaji and English." },
-      { ref: "Culture Notes: Greetings and Bowing", pages: "p. 32", summary: "Bowing and how deep it goes, handshakes, and exchanging business cards." },
-      { ref: "Expression Notes 1", pages: "p. 33", summary: "Short vs. polite greetings, the different goodbyes, the uses of すみません and いいえ, and the leaving/coming-home pairs." },
-      { ref: "Numbers", pages: "p. 35", summary: "0 to 100 with the alternative readings of 4, 7 and 9." },
-      { ref: "Expression Notes 2", pages: "pp. 44–45", summary: "あのう, そうですか, how each number's reading changes in compounds, why not to call yourself せんせい, さん and other titles, avoiding あなた." },
-      { ref: "Culture Notes: Japanese Names", pages: "p. 45", summary: "Family name first, common family and given names, and names written in kanji." },
-      { ref: "Useful Expressions: Time", pages: "p. 55", summary: "Hours 1–12 and minutes 1–30 with their sound changes." },
-    ],
-    practice: [
-      {
-        ref: "I メアリーさんは アメリカじんです",
-        pages: "pp. 46–47",
-        drills: "X は Y です: nationality, year and age from a chart; D is group work.",
-        solo: "Do A–C aloud from the chart. For D, say your own name, nationality, year and age.",
-        games: ["wa-desu-builder", "ages-years"],
-      },
-      {
-        ref: "II メアリーさんは アメリカじんですか",
-        pages: "pp. 47–49",
-        drills: "Yes/no questions and question words (なんさい, なんねんせい) from cues and a host-family chart.",
-        solo: "Ask the question and answer it yourself, out loud, for every cue.",
-        games: ["question-words"],
-      },
-      {
-        ref: "III にほんごの がくせいです",
-        pages: "pp. 50–51",
-        drills: "の phrases: translating, describing school and major, answering questions; D is group work.",
-        solo: "Do A–C. For D, answer the C questions about yourself.",
-        games: ["no-chain"],
-      },
-      {
-        ref: "IV でんわばんごう",
-        pages: "p. 51",
-        drills: "Asking for and reading back phone numbers (pair work).",
-        solo: "Read your own number and three made-up ones aloud, digit by digit.",
-        games: ["phone-listen"],
-      },
-      {
-        ref: "V じかん",
-        pages: "pp. 52–53",
-        drills: "Telling time from clocks, asking the time, times around the world.",
-        solo: "Do A and C. For B, ask and answer the time for each clock yourself.",
-        games: ["clock"],
-      },
-      {
-        ref: "VI まとめの れんしゅう",
-        pages: "p. 54",
-        drills: "Class interview, role play from Dialogue I, self-introduction from Dialogue II.",
-        solo: "Use the self-introduction builder on the Put it together page and say it aloud.",
-      },
-    ],
-  },
+  practice: [
+    { title: "Listening", games: ["intro-listen", "numbers-listen", "phone-listen"] },
+    { title: "Reading", games: ["reading-u1"] },
+    { title: "Sentences", games: ["wa-desu-builder", "chart-questions", "question-words", "no-chain", "jin-or-go"] },
+    { title: "Numbers and time", games: ["numbers-read", "ages-years", "clock", "minutes-clock"] },
+    { title: "Words and phrases", games: ["vocab-l1", "greet-situations"] },
+  ],
   vocab: [
     {
       title: "School",
@@ -366,7 +284,8 @@ const L1: GenkiLesson = {
         "**Short and long forms.** おはよう / おはようございます and ありがとう / ありがとうございます. Use the short form with friends and family, the long form with teachers, staff, strangers and anyone older.\n\n" +
         "**Leaving and coming home.** The person leaving says いってきます; the people staying answer いってらっしゃい. Coming back: ただいま, answered with おかえりなさい.\n\n" +
         "**Meals.** いただきます before eating, ごちそうさまでした after.\n\n" +
-        "**Goodbye.** さようなら sounds final. Between friends who'll meet again soon, use じゃあ、また. Leaving a teacher's office, use しつれいします.",
+        "**Goodbye.** さようなら sounds final. Between friends who'll meet again soon, use じゃあ、また. Leaving a teacher's office, use しつれいします.\n\n" +
+        "**Bowing.** Greetings usually come with a bow, from a small nod between friends to a deeper bow from the waist for teachers, customers or an apology. The deeper and longer the bow, the more formal. Handshakes are mostly for business, and business cards (めいし) are offered and received with both hands and a small bow.",
       examples: [
         { jp: "おはようございます。", en: "Good morning. (polite)" },
         { jp: "こんにちは。", en: "Good afternoon. / Hello.", note: "The last kana is は, read \"wa\"." },
@@ -375,7 +294,7 @@ const L1: GenkiLesson = {
         { jp: "いいえ。", en: "No. / Not at all." },
         { jp: "はじめまして。レナです。よろしくおねがいします。", en: "How do you do? I'm Lena. Nice to meet you." },
       ],
-      table: {
+      tables: [{
         caption: "Pairs",
         rows: [
           ["Leaving home", "いってきます"],
@@ -386,7 +305,7 @@ const L1: GenkiLesson = {
           ["After eating", "ごちそうさまでした"],
           ["Going to bed", "おやすみなさい"],
         ],
-      },
+      }],
       watch: [
         "こんにちは and こんばんは are written with は, not わ.",
         "こんにちは is not used with your own family.",
@@ -428,7 +347,7 @@ const L1: GenkiLesson = {
         "Above ten the numbers are built from 1–10: 11 is じゅういち (10 + 1), 20 is にじゅう (2 × 10), 45 is よんじゅうご (4 × 10 + 5).\n\n" +
         "4, 7 and 9 have two readings. In counting and in most numbers use **よん, なな, きゅう**. The other readings (し, しち, く) appear in set words, most often in times: 4 o'clock is よじ, 7 o'clock is しちじ, 9 o'clock is くじ.\n\n" +
         "Zero is ゼロ or れい.",
-      table: {
+      tables: [{
         caption: "0–10 and how bigger numbers are built",
         rows: [
           ["0", "ゼロ／れい"],
@@ -447,7 +366,7 @@ const L1: GenkiLesson = {
           ["45", "よんじゅうご"],
           ["100", "ひゃく"],
         ],
-      },
+      }],
       watch: [
         "10 is じゅう and 100 is ひゃく, not いちじゅう or いちひゃく.",
         "40, 70, 90: よんじゅう, ななじゅう, きゅうじゅう.",
@@ -646,9 +565,9 @@ const L1: GenkiLesson = {
       teach:
         "Hours are number + **じ**. Half past is + **はん**. a.m. and p.m. go in front: ごぜん くじ (9 a.m.), ごご にじはん (2:30 p.m.).\n\n" +
         "Three hours are irregular: **よじ** (4), **しちじ** (7), **くじ** (9).\n\n" +
-        "Minutes (p. 55) use ふん / ぷん with sound changes: いっぷん, にふん, さんぷん, よんぷん, ごふん, ろっぷん, ななふん, はっぷん, きゅうふん, じゅっぷん.\n\n" +
+        "Minutes use ふん or ぷん: ぷん after 1, 3, 4, 6, 8 and 10 (いっぷん, さんぷん, よんぷん, ろっぷん, はっぷん, じゅっぷん), ふん after 2, 5, 7 and 9. Bigger minutes are built the same way: 18 = じゅう + はっぷん. Hour first, then minutes: くじ じゅうはっぷん (9:18).\n\n" +
         "Phone numbers are read one digit at a time, and the dash is read **の**: 090-1234-5678 → ゼロきゅうゼロの いちにさんよんの ごろくななはち. When reading digits, 2 and 5 are often lengthened to にい and ごお.",
-      table: {
+      tables: [{
         caption: "Hours",
         rows: [
           ["1:00", "いちじ"],
@@ -665,7 +584,26 @@ const L1: GenkiLesson = {
           ["12:00", "じゅうにじ"],
           ["1:30", "いちじはん"],
         ],
-      },
+      }, {
+        caption: "Minutes",
+        rows: [
+          ["1 min", "いっぷん"],
+          ["2 min", "にふん"],
+          ["3 min", "さんぷん"],
+          ["4 min", "よんぷん"],
+          ["5 min", "ごふん"],
+          ["6 min", "ろっぷん"],
+          ["7 min", "ななふん"],
+          ["8 min", "はっぷん", "or はちふん"],
+          ["9 min", "きゅうふん"],
+          ["10 min", "じゅっぷん", "or じっぷん"],
+          ["15 min", "じゅうごふん"],
+          ["20 min", "にじゅっぷん"],
+          ["30 min", "さんじゅっぷん", "or はん"],
+          ["9:18", "くじ じゅうはっぷん"],
+          ["1:55", "いちじ ごじゅうごふん"],
+        ],
+      }],
       examples: [
         { jp: "いま なんじですか。", en: "What time is it now?" },
         { jp: "ごご よじはんです。", en: "It's 4:30 p.m." },
@@ -694,7 +632,7 @@ const L1: GenkiLesson = {
           why: "The dash is read の.",
         },
       ],
-      games: ["clock", "phone-listen"],
+      games: ["clock", "minutes-clock", "phone-listen"],
       ask: ["How do I say 4:45?", "Is the 24-hour clock used in speech?"],
     },
     // ------------------------------------------------ names and titles
@@ -732,8 +670,8 @@ const L1: GenkiLesson = {
       ask: ["How do I write my name in Japanese?", "When are ちゃん and くん used?"],
     },
   ],
-  dialogue: {
-    title: "Practice conversation: orientation",
+  dialogues: [{
+    title: "Conversation 1: orientation",
     setting: "Lena, an exchange student, meets Haruto at a welcome event. Min joins them.",
     lines: [
       { who: "はると", jp: "こんにちは。やまもと はるとです。", en: "Hi. I'm Haruto Yamamoto." },
@@ -748,7 +686,22 @@ const L1: GenkiLesson = {
       { who: "はると", jp: "ごご よじはんです。", en: "It's 4:30 p.m." },
       { who: "ミン", jp: "ありがとうございます。", en: "Thank you." },
     ],
-  },
+  }, {
+    title: "Conversation 2: introductions in class",
+    setting: "On the first day of class, Professor Yamamoto asks the new students to introduce themselves.",
+    lines: [
+      { who: "せんせい", jp: "はじめまして。やまもとです。にほんごの せんせいです。", en: "How do you do? I'm Yamamoto. I teach Japanese." },
+      { who: "せんせい", jp: "じゃあ、ノアさん、どうぞ。", en: "Noah, please go ahead." },
+      { who: "ノア", jp: "はじめまして。ノア・ベルです。カナダじんです。", en: "How do you do? I'm Noah Bell. I'm Canadian." },
+      { who: "ノア", jp: "トロントだいがくの いちねんせいです。せんこうは コンピューターです。", en: "I'm a first-year at the University of Toronto. My major is computer science." },
+      { who: "ノア", jp: "じゅうはっさいです。よろしく おねがいします。", en: "I'm 18. Nice to meet you." },
+      { who: "せんせい", jp: "ノアさんは いちねんせいですか。", en: "You're a first-year, Noah?" },
+      { who: "ノア", jp: "はい、そうです。", en: "Yes, that's right." },
+      { who: "せんせい", jp: "でんわばんごうは なんばんですか。", en: "What's your phone number?" },
+      { who: "ノア", jp: "ゼロはちゼロの ごろくななはちの いちにさんよんです。", en: "080-5678-1234." },
+      { who: "せんせい", jp: "ありがとう。じゃあ、ミンさん、どうぞ。", en: "Thanks. Min, go ahead." },
+    ],
+  }],
   together: ["self-intro"],
   test: [
     {
@@ -852,85 +805,14 @@ const L2: GenkiLesson = {
     "4 · Grammar 5–7: も, じゃないです, ね / よ",
     "5 · Shopping and restaurant role plays, practice conversation, unit test",
   ],
-  book: {
-    dialogues: [
-      {
-        ref: "Dialogue I",
-        pages: "p. 56",
-        summary:
-          "At a flea market Mary asks the price of a few watches, finds two too expensive and buys a cheaper one. Afterwards a stranger finds a wallet and asks whose it is; it's Mary's.",
-      },
-      {
-        ref: "Dialogue II",
-        pages: "p. 57",
-        summary: "At a restaurant Mary asks what a dish on the menu is, learns it's meat rather than fish, orders it, and asks where the restroom is.",
-      },
-    ],
-    notes: [
-      { ref: "Expression Notes 3", pages: "p. 65", summary: "ください vs おねがいします vs どうぞ, sound changes in big numbers, and counting in units of 10,000 (まん)." },
-      { ref: "Culture Notes: Japanese Currency", pages: "p. 66", summary: "The notes and coins in use, who is on each note, and why many people still carry cash." },
-      { ref: "Let's Find Out: Compare the Prices", pages: "p. 78", summary: "Compare prices at a chain restaurant in Japan and in your own country." },
-      { ref: "Useful Expressions: In the Classroom", pages: "p. 81", summary: "Classroom objects and the phrases used in every class (わかりません, もういちど…)." },
-    ],
-    practice: [
-      {
-        ref: "I すうじ",
-        pages: "pp. 67–69",
-        drills: "Reading numbers to 90,000; prices from pictures; C is a pair price-gap exercise.",
-        solo: "Read A and B aloud. For C, read both price sheets (p. 69 and p. 79) aloud.",
-        games: ["prices-read", "prices-listen"],
-      },
-      {
-        ref: "II これは なんですか",
-        pages: "pp. 69–70",
-        drills: "これ / それ / あれ from pictures; C is pair work in the classroom.",
-        solo: "Do A and B. For C, name objects around you with これ, and things across the room with あれ.",
-        games: ["kosoado-things"],
-      },
-      {
-        ref: "III このほんは いくらですか",
-        pages: "pp. 70–72",
-        drills: "この / その / あの + noun with prices; B and C are pair work.",
-        solo: "Do A. For B, play both vendor and customer with cards A (p. 71) and B (p. 80).",
-        games: ["kono-or-kore"],
-      },
-      {
-        ref: "IV ぎんこうは あそこです",
-        pages: "p. 72",
-        drills: "Asking where places are and answering with ここ / そこ / あそこ.",
-        solo: "Do it as written, both parts aloud.",
-        games: ["kosoado-places"],
-      },
-      {
-        ref: "V これは だれの かさですか",
-        pages: "p. 73",
-        drills: "だれの with pictures A and B (pair work).",
-        solo: "Look at picture B (p. 79) and say whose each item is.",
-        games: ["whose"],
-      },
-      {
-        ref: "VI おかあさんも にほんじんです",
-        pages: "pp. 73–74",
-        drills: "も from pairs of pictures.",
-        solo: "Do it as written.",
-        games: ["mo-or-wa"],
-      },
-      {
-        ref: "VII メアリーさんは にほんじんじゃないです",
-        pages: "pp. 74–75",
-        drills: "じゃないです from a chart; B and C are group and pair work.",
-        solo: "Do A. For C, answer yes/no questions about yourself, correcting the wrong ones.",
-        games: ["negate"],
-      },
-      {
-        ref: "VIII まとめの れんしゅう",
-        pages: "pp. 76–77",
-        drills: "Shop and restaurant role plays, photos of friends and family, find someone who….",
-        solo: "Do the flea market and lunch order role plays on the Put it together page.",
-        games: ["flea-market", "restaurant"],
-      },
-    ],
-  },
+  practice: [
+    { title: "Listening", games: ["shop-listen", "prices-listen"] },
+    { title: "Reading", games: ["reading-u2"] },
+    { title: "Pointing words", games: ["kosoado-things", "kono-or-kore", "kosoado-places"] },
+    { title: "Grammar", games: ["whose", "mo-or-wa", "negate", "ne-or-yo"] },
+    { title: "Role plays", games: ["flea-market", "restaurant"] },
+    { title: "Numbers, words and phrases", games: ["prices-read", "vocab-l2", "classroom-match"] },
+  ],
   vocab: [
     {
       title: "Words that point",
@@ -1024,6 +906,21 @@ const L2: GenkiLesson = {
       ],
     },
     {
+      title: "In the classroom",
+      extra: true,
+      words: [
+        { jp: "こくばん", en: "blackboard" },
+        { jp: "つくえ", en: "desk" },
+        { jp: "いす", en: "chair" },
+        { jp: "ドア", en: "door" },
+        { jp: "まど", en: "window" },
+        { jp: "でんき", en: "light" },
+        { jp: "じしょ", en: "dictionary" },
+        { jp: "えんぴつ", en: "pencil" },
+        { jp: "けしゴム", en: "eraser" },
+      ],
+    },
+    {
       title: "Expressions",
       words: [
         { jp: "いらっしゃいませ", en: "Welcome (to our store)", star: true },
@@ -1049,7 +946,7 @@ const L2: GenkiLesson = {
         "**Sound changes** to learn: 300 さんびゃく, 600 ろっぴゃく, 800 はっぴゃく, 3,000 さんぜん, 8,000 はっせん.\n\n" +
         "**10,000 is いちまん.** Unlike ひゃく and せん, まん keeps the いち. Large numbers are counted in units of 10,000: 20,000 is にまん (2 × 10,000), and 35,000 is さんまんごせん.\n\n" +
         "Yen is えん: ¥1,800 = せんはっぴゃくえん.",
-      table: {
+      tables: [{
         caption: "Sound changes",
         rows: [
           ["300", "さんびゃく"],
@@ -1060,7 +957,7 @@ const L2: GenkiLesson = {
           ["10,000", "いちまん"],
           ["20,000", "にまん"],
         ],
-      },
+      }],
       examples: [
         { jp: "さんびゃくえん", en: "¥300" },
         { jp: "せんはっぴゃくえん", en: "¥1,800" },
@@ -1453,7 +1350,7 @@ const L2: GenkiLesson = {
       teach:
         "Learn these as set phrases; the 〜てください form inside them is Lesson 6.\n\n" +
         "The ones you'll need most as a student: **わかりません**, **もういちど いってください**, **ゆっくり いってください**.",
-      table: {
+      tables: [{
         caption: "Phrases",
         rows: [
           ["Do you understand?", "わかりましたか。"],
@@ -1465,7 +1362,22 @@ const L2: GenkiLesson = {
           ["Please listen.", "きいてください。"],
           ["Please look at page 10.", "じゅっページを みてください。"],
         ],
-      },
+      }, {
+        caption: "In the classroom",
+        rows: [
+          ["blackboard", "こくばん"],
+          ["desk", "つくえ"],
+          ["chair", "いす"],
+          ["door", "ドア"],
+          ["window", "まど"],
+          ["light", "でんき"],
+          ["curtain", "カーテン"],
+          ["dictionary", "じしょ"],
+          ["pencil", "えんぴつ"],
+          ["eraser", "けしゴム"],
+          ["book", "ほん"],
+        ],
+      }],
       checks: [
         {
           q: "You didn't catch what the teacher said.",
@@ -1478,9 +1390,9 @@ const L2: GenkiLesson = {
       ask: ["How do I ask what a word means?"],
     },
   ],
-  dialogue: {
-    title: "Practice conversation: flea market and lunch",
-    setting: "Lena and Min go to a flea market, then get lunch.",
+  dialogues: [{
+    title: "Conversation 1: flea market",
+    setting: "Lena and Min look around a flea market on Saturday.",
     lines: [
       { who: "みせのひと", jp: "いらっしゃいませ。", en: "Welcome." },
       { who: "レナ", jp: "すみません。そのぼうしは いくらですか。", en: "Excuse me, how much is that hat?" },
@@ -1491,13 +1403,21 @@ const L2: GenkiLesson = {
       { who: "レナ", jp: "じゃあ、そのぼうしを ください。", en: "Then I'll take the hat." },
       { who: "ミン", jp: "あれ？ これは だれの さいふですか。", en: "Huh? Whose wallet is this?" },
       { who: "レナ", jp: "あっ、わたしのです。ありがとう！", en: "Oh, it's mine. Thanks!" },
+    ],
+  }, {
+    title: "Conversation 2: lunch",
+    setting: "After the market they go to a small restaurant.",
+    lines: [
       { who: "てんいん", jp: "いらっしゃいませ。メニューを どうぞ。", en: "Welcome. Here's the menu." },
       { who: "ミン", jp: "どうも。これは なんですか。", en: "Thanks. What's this?" },
       { who: "てんいん", jp: "それは うどんです。おいしいですよ。", en: "That's udon. It's good." },
       { who: "ミン", jp: "じゃあ、これを おねがいします。", en: "Then this, please." },
       { who: "レナ", jp: "わたしも うどんを おねがいします。", en: "Udon for me too, please." },
+      { who: "レナ", jp: "あのう、すみません。トイレは どこですか。", en: "Um, excuse me. Where's the restroom?" },
+      { who: "てんいん", jp: "あそこです。", en: "Over there." },
+      { who: "レナ", jp: "どうも。", en: "Thanks." },
     ],
-  },
+  }],
   together: ["flea-market", "restaurant"],
   test: [
     {

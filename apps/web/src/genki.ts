@@ -238,9 +238,6 @@ function drawHome(body: HTMLDivElement, all: Progress, go: (p: Page) => void): v
 
 function drawLesson(body: HTMLDivElement, lesson: GenkiLesson, index: number, mine: LessonProgress, go: (p: Page) => void): void {
   const tick = (on: boolean): string => `<span class="gk-tick${on ? " on" : ""}">${on ? "✓" : ""}</span>`;
-  const section = (b: { ref: string; pages: string; summary: string }): string =>
-    `<div class="gk-book-row"><div><b>${escapeHtml(b.ref)}</b> <span class="glosses">${escapeHtml(b.pages)}</span></div>
-      <div class="gk-book-sum">${escapeHtml(b.summary)}</div></div>`;
   body.innerHTML = `
     ${backButton("All units")}
     <div class="lesson-head">
@@ -271,22 +268,10 @@ function drawLesson(body: HTMLDivElement, lesson: GenkiLesson, index: number, mi
       } questions, pass ${PASS}%${mine.test !== undefined ? ` · best ${mine.test}%` : ""}</span></span><span class="gk-arrow">›</span></button>
     </div>
     <div class="card-panel lesson-section">
-      <h3>In the book</h3>
-      ${lesson.book.dialogues.map(section).join("")}
-      ${lesson.book.notes.map(section).join("")}
-    </div>
-    <div class="card-panel lesson-section">
-      <h3>Book practice</h3>
-      <div class="glosses" style="margin-bottom:6px">Each exercise in the book's Practice section, and how to do it without a partner.</div>
-      ${lesson.book.practice
-        .map(
-          (p, i) => `<div class="gk-book-row">
-            <div><b lang="ja">${escapeHtml(p.ref)}</b> <span class="glosses">${escapeHtml(p.pages)}</span></div>
-            <div class="gk-book-sum">${escapeHtml(p.drills)}</div>
-            <div class="gk-book-solo"><span class="glosses">Alone:</span> ${escapeHtml(p.solo)}</div>
-            ${p.games?.length ? `<div class="gk-games gk-practice-games" data-practice="${i}"></div>` : ""}
-          </div>`,
-        )
+      <h3>Practice</h3>
+      ${lesson.practice
+        .map((g, i) => `<div class="gk-practice-group"><div class="gk-practice-title">${escapeHtml(g.title)}</div>
+          <div class="gk-games gk-practice-games" data-practice="${i}"></div></div>`)
         .join("")}
     </div>`;
   body.querySelector("#gk-back")!.addEventListener("click", () => go({ kind: "home" }));
@@ -300,8 +285,8 @@ function drawLesson(body: HTMLDivElement, lesson: GenkiLesson, index: number, mi
     });
   }
   for (const host of body.querySelectorAll<HTMLDivElement>(".gk-practice-games")) {
-    const item = lesson.book.practice[Number(host.dataset.practice)];
-    void drawGameButtons(host, item.games ?? [], (game) => go({ kind: "game", lesson: index, game, back: page }));
+    const group = lesson.practice[Number(host.dataset.practice)];
+    void drawGameButtons(host, group.games, (game) => go({ kind: "game", lesson: index, game, back: page }));
   }
   mountCoach(body, lesson, null);
 }
@@ -385,11 +370,11 @@ function drawStep(
           : ""
       }
     </div>
-    ${
-      step.table
-        ? `<div class="card-panel lesson-section">
-            ${step.table.caption ? `<h3>${escapeHtml(step.table.caption)}</h3>` : ""}
-            <div class="gk-table">${step.table.rows
+    ${(step.tables ?? [])
+      .map(
+        (table) => `<div class="card-panel lesson-section">
+            ${table.caption ? `<h3>${escapeHtml(table.caption)}</h3>` : ""}
+            <div class="gk-table">${table.rows
               .map(
                 ([left, jp, note]) => `<button class="gk-table-row" type="button" data-say="${escapeHtml(jp)}">
                   <span class="gk-table-left">${escapeHtml(left)}</span>
@@ -397,9 +382,9 @@ function drawStep(
                   <span class="glosses">${note ? escapeHtml(note) : ""}</span></button>`,
               )
               .join("")}</div>
-          </div>`
-        : ""
-    }
+          </div>`,
+      )
+      .join("")}
     ${
       step.examples?.length
         ? `<div class="card-panel lesson-section"><div class="gk-section-head"><h3>Examples</h3>${romajiToggle()}</div>
@@ -581,24 +566,25 @@ function introLines(f: SelfIntro): [string, string][] {
 }
 
 async function drawTogether(body: HTMLDivElement, lesson: GenkiLesson, index: number, go: (p: Page) => void): Promise<void> {
-  const d = lesson.dialogue;
   const hasIntro = lesson.together.includes("self-intro");
   const games = lesson.together.filter((g) => GAMES[g]);
   body.innerHTML = `
     ${backButton(`Unit ${lesson.num}`)}
     <div class="lesson-head">
-      <div class="glosses">Unit ${lesson.num} · put it together</div>
-      <h2>${escapeHtml(d.title)}</h2>
-      <div class="glosses">${escapeHtml(d.setting)}</div>
+      <div class="glosses">Unit ${lesson.num}</div>
+      <h2>Put it together</h2>
+      <div class="glosses">Tap a line to show the English. Play a conversation and repeat each line in the pause.</div>
     </div>
-    <div class="card-panel lesson-section">
-      <div class="gk-section-head"><h3>Conversation</h3>${romajiToggle()}</div>
-      <div class="glosses" style="margin-bottom:8px">Tap a line to show the English. Play it and repeat each line in the pause.</div>
-      <div class="row-actions"><button class="secondary" id="gk-play-all">▶ Play all</button>
-        <button class="ghost" id="gk-show-all">Show all English</button></div>
+    ${lesson.dialogues
+      .map(
+        (d, di) => `<div class="card-panel lesson-section gk-convo" data-d="${di}">
+      <div class="gk-section-head"><h3>${escapeHtml(d.title)}</h3>${di === 0 ? romajiToggle() : ""}</div>
+      <div class="glosses" style="margin-bottom:8px">${escapeHtml(d.setting)}</div>
+      <div class="row-actions"><button class="secondary gk-play-all">▶ Play all</button>
+        <button class="ghost gk-show-all">Show all English</button></div>
       <div class="gk-dialogue">${d.lines
         .map(
-          (l, i) => `<div class="gk-line" data-i="${i}" data-say="${escapeHtml(l.jp.replace(/\s+/g, ""))}">
+          (l) => `<div class="gk-line" data-say="${escapeHtml(l.jp.replace(/\s+/g, ""))}">
             <span class="gk-who">${escapeHtml(l.who)}</span>
             <div><div lang="ja" class="gk-line-jp">${escapeHtml(l.jp)}</div>
             ${romaji ? `<div class="gk-romaji">${escapeHtml(romajiOf(l.jp))}</div>` : ""}
@@ -607,7 +593,9 @@ async function drawTogether(body: HTMLDivElement, lesson: GenkiLesson, index: nu
           </div>`,
         )
         .join("")}</div>
-    </div>
+    </div>`,
+      )
+      .join("")}
     ${
       hasIntro
         ? `<div class="card-panel lesson-section" id="gk-intro">
@@ -633,23 +621,25 @@ async function drawTogether(body: HTMLDivElement, lesson: GenkiLesson, index: nu
       en.hidden = !en.hidden;
     });
   }
-  body.querySelector("#gk-show-all")!.addEventListener("click", () => {
-    for (const en of body.querySelectorAll<HTMLElement>(".gk-line-en")) en.hidden = false;
-  });
   let playing = false;
-  body.querySelector("#gk-play-all")!.addEventListener("click", async () => {
-    if (playing) return;
-    playing = true;
-    for (const line of body.querySelectorAll<HTMLElement>(".gk-line")) {
-      if (!line.isConnected) break;
-      line.classList.add("now");
-      await speak(line.dataset.say ?? "", { rate: 0.85 }).catch(() => undefined);
-      // A beat after each line: the gap you repeat it in.
-      await new Promise((r) => setTimeout(r, 1400));
-      line.classList.remove("now");
-    }
-    playing = false;
-  });
+  for (const convo of body.querySelectorAll<HTMLElement>(".gk-convo")) {
+    convo.querySelector(".gk-show-all")!.addEventListener("click", () => {
+      for (const en of convo.querySelectorAll<HTMLElement>(".gk-line-en")) en.hidden = false;
+    });
+    convo.querySelector(".gk-play-all")!.addEventListener("click", async () => {
+      if (playing) return;
+      playing = true;
+      for (const line of convo.querySelectorAll<HTMLElement>(".gk-line")) {
+        if (!line.isConnected) break;
+        line.classList.add("now");
+        await speak(line.dataset.say ?? "", { rate: 0.85 }).catch(() => undefined);
+        // A beat after each line: the gap you repeat it in.
+        await new Promise((r) => setTimeout(r, 1400));
+        line.classList.remove("now");
+      }
+      playing = false;
+    });
+  }
   const gamesHost = body.querySelector<HTMLDivElement>("#gk-games");
   if (gamesHost) void drawGameButtons(gamesHost, games, (game) => go({ kind: "game", lesson: index, game, back: page }));
   if (hasIntro) await drawIntroBuilder(body.querySelector<HTMLDivElement>("#gk-intro")!);

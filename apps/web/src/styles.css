@@ -6425,26 +6425,6 @@ button.gram-swap-line:hover {
  * Genki companion
  * ================================================================ */
 
-.gk-book-row {
-  padding: 9px 0;
-  border-top: 1px solid #ffffff0d;
-  font-size: 0.9rem;
-}
-
-.gk-book-row:first-of-type {
-  border-top: none;
-}
-
-.gk-book-sum {
-  margin-top: 2px;
-  line-height: 1.5;
-}
-
-.gk-book-solo {
-  margin-top: 4px;
-  line-height: 1.5;
-}
-
 .gk-practice-games {
   margin-top: 8px;
 }
@@ -7199,4 +7179,53 @@ button.gram-swap-line:hover {
 .gk-coach-note {
   margin-top: 6px;
   font-size: 0.75rem;
+}
+
+.gk-practice-group {
+  padding: 8px 0;
+  border-top: 1px solid #ffffff0d;
+}
+
+.gk-practice-group:first-of-type {
+  border-top: none;
+}
+
+.gk-practice-title {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.gk-chart {
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  width: 100%;
+  max-width: 380px;
+}
+
+.gk-chart th,
+.gk-chart td {
+  padding: 4px 6px;
+  border-bottom: 1px solid #ffffff12;
+  text-align: left;
+}
+
+.gk-chart th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.gk-chart tr th:first-child {
+  color: var(--text);
+}
+
+.gk-passage {
+  text-align: left;
+  white-space: pre-line;
+  font-size: 1.02rem;
+  line-height: 1.8;
+  background: var(--panel-2);
+  border-radius: 12px;
+  padding: 12px 14px;
+  max-width: 420px;
 }

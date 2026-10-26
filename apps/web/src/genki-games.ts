@@ -132,6 +132,23 @@ export function ageKana(n: number): string {
 const HOURS = ["", "いちじ", "にじ", "さんじ", "よじ", "ごじ", "ろくじ", "しちじ", "はちじ", "くじ", "じゅうじ", "じゅういちじ", "じゅうにじ"];
 const HOUR_TRAPS: Record<number, string> = { 4: "よんじ", 7: "ななじ", 9: "きゅうじ" };
 
+/** ぷん after 1, 3, 4, 6, 8 and 10; ふん after the rest. */
+const MINUTE_ONES = ["", "いっぷん", "にふん", "さんぷん", "よんぷん", "ごふん", "ろっぷん", "ななふん", "はっぷん", "きゅうふん"];
+
+/** 1–59 minutes as they are said. */
+export function minuteKana(m: number): string {
+  const tens = Math.floor(m / 10);
+  const ones = m % 10;
+  const tensPart = tens ? (tens === 1 ? "" : DIGIT[tens]) + "じゅう" : "";
+  if (ones === 0) return (tens === 1 ? "" : DIGIT[tens]) + "じゅっぷん";
+  return tensPart + MINUTE_ONES[ones];
+}
+
+/** The same minutes read with no sound change at all: the usual mistake. */
+function naiveMinutes(m: number): string {
+  return naiveKana(m) + "ふん";
+}
+
 // ====================================================================
 // helpers
 // ====================================================================
@@ -184,10 +201,10 @@ function chat(lines: [who: string, jp: string][]): string {
 // pictures
 // ====================================================================
 
-/** An analogue clock face at h o'clock, or half past. */
-function clockSvg(hour: number, half: boolean): string {
-  const hourAngle = ((hour % 12) + (half ? 0.5 : 0)) * 30;
-  const minuteAngle = half ? 180 : 0;
+/** An analogue clock face at h o'clock, or half past, or h:m. */
+function clockSvg(hour: number, half: boolean, minutes = half ? 30 : 0): string {
+  const hourAngle = ((hour % 12) + minutes / 60) * 30;
+  const minuteAngle = minutes * 6;
   const ticks = Array.from({ length: 12 }, (_, i) => {
     const a = (i * 30 * Math.PI) / 180;
     const r1 = i % 3 === 0 ? 38 : 41;
@@ -282,14 +299,38 @@ const GREETINGS: { s: string; a: string; avoid?: string[] }[] = [
 
 const GREETING_POOL = [...new Set(GREETINGS.map((g) => g.a))];
 
-const FACTS: { name: string; nat: string; year: number; major: string }[] = [
-  { name: "レナ", nat: "ドイツじん", year: 1, major: "にほんご" },
-  { name: "はると", nat: "にほんじん", year: 3, major: "れきし" },
-  { name: "ミン", nat: "かんこくじん", year: 2, major: "けいざい" },
-  { name: "ノア", nat: "カナダじん", year: 1, major: "コンピューター" },
-  { name: "ゆい", nat: "にほんじん", year: 2, major: "ぶんがく" },
-  { name: "サラ", nat: "アメリカじん", year: 3, major: "けいざい" },
+const FACTS: { name: string; nat: string; natEn: string; year: number; major: string; age: number }[] = [
+  { name: "レナ", nat: "ドイツじん", natEn: "German", year: 1, major: "にほんご", age: 19 },
+  { name: "はると", nat: "にほんじん", natEn: "Japanese", year: 3, major: "れきし", age: 21 },
+  { name: "ミン", nat: "かんこくじん", natEn: "Korean", year: 2, major: "けいざい", age: 20 },
+  { name: "ノア", nat: "カナダじん", natEn: "Canadian", year: 1, major: "コンピューター", age: 18 },
+  { name: "ゆい", nat: "にほんじん", natEn: "Japanese", year: 2, major: "ぶんがく", age: 20 },
+  { name: "サラ", nat: "アメリカじん", natEn: "American", year: 3, major: "けいざい", age: 22 },
 ];
+
+/** The cast as a small table, shown above the chart questions. */
+function factsChart(): string {
+  return `<table class="gk-chart"><tr><th></th><th>from</th><th>year</th><th>major</th><th>age</th></tr>${FACTS.map(
+    (f) => `<tr><th lang="ja">${f.name}</th><td>${f.natEn}</td><td>${f.year}</td><td lang="ja">${f.major}</td><td>${f.age}</td></tr>`,
+  ).join("")}</table>`;
+}
+
+const PROFILE_NAMES = ["エマ", "ルカ", "アンナ", "ダニエル", "ソフィア", "トム", "マリア", "ケン", "リサ", "ジョン"];
+const PROFILE_FROM: [string, string][] = [
+  ["アメリカ", "the USA"], ["イギリス", "Britain"], ["カナダ", "Canada"], ["オーストラリア", "Australia"],
+  ["かんこく", "Korea"], ["ちゅうごく", "China"], ["インド", "India"], ["フィリピン", "the Philippines"],
+];
+const PROFILE_MAJORS: [string, string][] = [
+  ["けいざい", "economics"], ["れきし", "history"], ["ぶんがく", "literature"], ["こうがく", "engineering"],
+  ["せいじ", "politics"], ["ビジネス", "business"], ["にほんご", "Japanese"], ["せいぶつがく", "biology"],
+];
+const YEAR_EN = ["", "first", "second", "third", "fourth"];
+
+/** Questions with their passage shown above: the reading games. */
+function readingQuestions(passage: string, items: [q: string, right: string, wrong: string[]][]): GameQuestion[] {
+  const visual = `<div class="gk-passage" lang="ja">${escapeHtml(passage)}</div>`;
+  return items.map(([q, right, wrong]) => choice(q, right, wrong, { visual, sayAfter: undefined }));
+}
 
 const YEARS = ["", "いちねんせい", "にねんせい", "さんねんせい", "よねんせい"];
 
@@ -324,7 +365,7 @@ export const GAMES: Record<string, GameDef> = {
         const n = Math.random() < 0.6 ? (Math.random() < 0.5 ? tricky * 10 + randInt(0, 9) : randInt(1, 9) * 10 + tricky) : randInt(0, 100);
         const right = numberKana(n);
         const swapped = n >= 11 && n % 10 && n < 100 ? numberKana((n % 10) * 10 + Math.floor(n / 10)) : numberKana(n + 10);
-        return choice(`How do you read ${n}?`, right, [oldReadings(right), swapped, numberKana(Math.max(0, n - 1)), naiveKana(n)], {
+        return choice(`How do you read ${n}?`, right, [oldReadings(right), swapped, numberKana(Math.max(0, n - 1)), naiveKana(n), numberKana(n + 1), numberKana(n + 11)], {
           why: `${n} → ${right}`,
         });
       }),
@@ -431,7 +472,7 @@ export const GAMES: Record<string, GameDef> = {
         const n = pick([1, 8, 10, 11, 18, 19, 20, 21, 22, 23, 28, 30, 31, 40, 48]);
         const right = ageKana(n);
         const naive = n === 20 ? "にさい" : naiveKana(n) + "さい";
-        qs.push(choice(`${n} years old`, right, [naive, ageKana(n + 1), n === 20 ? "にじゅうさい" : oldReadings(naiveKana(n)) + "さい"], { why: n === 20 ? "20 is はたち (にじゅっさい also works)." : right }));
+        qs.push(choice(`${n} years old`, right, [naive, n === 20 ? "にじゅうさい" : oldReadings(naiveKana(n)) + "さい", ageKana(n + 1), ageKana(n + 2), ageKana(n - 1)], { why: n === 20 ? "20 is はたち (にじゅっさい also works)." : right }));
       }
       for (let y = 1; y <= 4; y++) {
         qs.push(choice(`A year-${y} student`, YEARS[y], [y === 4 ? "よんねんせい" : `${DIGIT[y]}ねん`, YEARS[(y % 4) + 1], `${DIGIT[y]}さい`], { why: y === 4 ? "Fourth year is よねんせい, not よん." : YEARS[y] }));
@@ -514,7 +555,7 @@ export const GAMES: Record<string, GameDef> = {
       Array.from({ length: 10 }, () => {
         const n = randomPrice();
         const right = numberKana(n) + "えん";
-        return choice("How do you say this price?", right, [naiveKana(n) + "えん", numberKana(nearPrice(n)) + "えん", numberKana(nearPrice(n)) + "えん", naiveKana(nearPrice(n)) + "えん"], {
+        return choice("How do you say this price?", right, [naiveKana(n) + "えん", numberKana(nearPrice(n)) + "えん", naiveKana(nearPrice(n)) + "えん", numberKana(nearPrice(n)) + "えん", numberKana(n + 1000 <= 99999 ? n + 1000 : n - 1000) + "えん", numberKana(n + 100) + "えん"], {
           visual: `<div class="gk-price">¥${n.toLocaleString("en-US")}</div>`,
         });
       }),
@@ -776,6 +817,153 @@ export const GAMES: Record<string, GameDef> = {
       choice("It's far from both of you. The staff point and say:", "あそこです。", ["そこです。", "ここです。", "あれです。"], {
         visual: scene("🚻", "far", "restroom", "friend"),
       }),
+    ],
+  },
+
+  "minutes-clock": {
+    id: "minutes-clock",
+    title: "Clock: minutes",
+    blurb: "Hours and minutes, with ふん and ぷん.",
+    icon: "⏱️",
+    build: () =>
+      Array.from({ length: 10 }, () => {
+        const h = randInt(1, 12);
+        const m = pick([5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 3, 8, 18, 46]);
+        const right = `${HOURS[h]} ${minuteKana(m)}`;
+        const other = m === 30 ? 20 : m + (m % 10 === 0 ? 5 : 1);
+        return choice("What time is it?", right, [
+          `${HOURS[h]} ${naiveMinutes(m)}`,
+          `${HOUR_TRAPS[h] ?? HOURS[(h % 12) + 1]} ${minuteKana(m)}`,
+          `${HOURS[h]} ${minuteKana(other)}`,
+        ], { visual: clockSvg(h, false, m), why: `${h}:${String(m).padStart(2, "0")} → ${right}` });
+      }),
+  },
+
+  "chart-questions": {
+    id: "chart-questions",
+    title: "Questions about people",
+    blurb: "Answer questions from a chart.",
+    icon: "📋",
+    build: () =>
+      Array.from({ length: 10 }, () => {
+        const p = pick(FACTS);
+        const kind = pick(["age", "year", "major", "natYes", "natNo"] as const);
+        const visual = factsChart();
+        if (kind === "age") {
+          return choice("Answer from the chart.", `${ageKana(p.age)}です。`, [`${ageKana(p.age + 1)}です。`, `${YEARS[p.year]}です。`, `${naiveKana(p.age)}さいです。`], { jp: `${p.name}さんは なんさいですか。`, visual });
+        }
+        if (kind === "year") {
+          return choice("Answer from the chart.", `${YEARS[p.year]}です。`, [`${YEARS[(p.year % 4) + 1]}です。`, `${ageKana(p.age)}です。`, p.year === 4 ? "よんねんせいです。" : `${YEARS[p.year === 1 ? 2 : p.year - 1]}です。`], { jp: `${p.name}さんは なんねんせいですか。`, visual });
+        }
+        if (kind === "major") {
+          return choice("Answer from the chart.", `${p.major}です。`, ["れきしです。", "けいざいです。", "ぶんがくです。", "にほんごです。", "コンピューターです。"].filter((x) => x !== `${p.major}です。`), { jp: `${p.name}さんの せんこうは なんですか。`, visual });
+        }
+        if (kind === "natYes") {
+          return choice("Answer from the chart.", "はい、そうです。", [`いいえ、${p.nat}です。`, "いいえ、そうです。", `はい、${p.nat}じゃないです。`], { jp: `${p.name}さんは ${p.nat}ですか。`, visual });
+        }
+        const wrongNat = pick(["アメリカじん", "イギリスじん", "ちゅうごくじん", "カナダじん", "にほんじん"].filter((x) => x !== p.nat));
+        return choice("Answer from the chart.", `いいえ、${p.nat}です。`, ["はい、そうです。", `いいえ、${wrongNat}です。`, "いいえ、そうです。"], { jp: `${p.name}さんは ${wrongNat}ですか。`, visual });
+      }),
+  },
+
+  "intro-listen": {
+    id: "intro-listen",
+    title: "Listening: self-introductions",
+    blurb: "Hear someone introduce themselves, then answer.",
+    icon: "🎧",
+    build: () => {
+      const qs: GameQuestion[] = [];
+      for (const name of shuffle(PROFILE_NAMES).slice(0, 4)) {
+        const [from, fromEn] = pick(PROFILE_FROM);
+        const [major, majorEn] = pick(PROFILE_MAJORS);
+        const year = randInt(1, 4);
+        const age = randInt(18, 24);
+        const said = `はじめまして。${name}です。${from}じんです。${YEARS[year]}です。せんこうは ${major}です。${ageKana(age)}です。よろしく おねがいします。`;
+        const asks: GameQuestion[] = [
+          choice(`Where is ${name} from?`, fromEn, shuffle(PROFILE_FROM.map(([, en]) => en).filter((en) => en !== fromEn)), { listen: said, sayAfter: undefined }),
+          choice(`What year is ${name} in?`, `${YEAR_EN[year]} year`, YEAR_EN.slice(1).filter((y) => y !== YEAR_EN[year]).map((y) => `${y} year`), { listen: said, sayAfter: undefined }),
+          choice(`What does ${name} study?`, majorEn, shuffle(PROFILE_MAJORS.map(([, en]) => en).filter((en) => en !== majorEn)), { listen: said, sayAfter: undefined }),
+          choice(`How old is ${name}?`, String(age), [String(age + 1), String(age - 1), String(age + 2)], { listen: said, sayAfter: undefined }),
+        ];
+        qs.push(...shuffle(asks).slice(0, 2));
+      }
+      return qs;
+    },
+  },
+
+  "shop-listen": {
+    id: "shop-listen",
+    title: "Listening: at the shop",
+    blurb: "Hear a customer ask a price, then answer.",
+    icon: "🎧",
+    scripted: true,
+    build: () => {
+      const qs: GameQuestion[] = [];
+      for (const [, jp, en] of shuffle(THINGS).slice(0, 4)) {
+        const price = randomPrice();
+        const near = pick(["この", "その", "あの"]);
+        const said = `すみません。${near}${jp}は いくらですか。${numberKana(price)}えんです。`;
+        qs.push(
+          choice("What is the customer asking about?", en, shuffle(THINGS.map(([, , e]) => e).filter((e) => e !== en)), { listen: said, sayAfter: undefined }),
+          choice("How much is it?", `¥${price.toLocaleString("en-US")}`, [nearPrice(price), nearPrice(price), price * 10 <= 99999 ? price * 10 : Math.round(price / 10)].map((n) => `¥${n.toLocaleString("en-US")}`), { listen: said, sayAfter: undefined }),
+        );
+      }
+      return qs;
+    },
+  },
+
+  "reading-u1": {
+    id: "reading-u1",
+    title: "Reading",
+    blurb: "Two short passages in kana, with questions.",
+    icon: "📖",
+    scripted: true,
+    build: () => [
+      ...readingQuestions(
+        "はじめまして。わたしは エマです。イギリスじんです。さくらだいがくの りゅうがくせいです。にねんせいです。せんこうは れきしです。にじゅういっさいです。よろしく おねがいします。",
+        [
+          ["Where is Emma from?", "Britain", ["the USA", "Australia", "Canada"]],
+          ["What year is she in?", "second year", ["first year", "third year", "fourth year"]],
+          ["What is her major?", "history", ["economics", "literature", "Japanese"]],
+          ["How old is she?", "21", ["20", "12", "22"]],
+        ],
+      ),
+      ...readingQuestions(
+        "わたしの ともだちは けんさんです。けんさんは にほんじんです。とうきょうだいがくの よねんせいです。せんこうは けいざいです。けんさんの でんわばんごうは ゼロきゅうゼロの はちななろくごの よんさんにいちです。",
+        [
+          ["Ken is…", "Japanese", ["an exchange student", "Korean", "a teacher"]],
+          ["Ken is a…", "fourth-year student", ["first-year student", "high school student", "graduate student"]],
+          ["Ken's major:", "economics", ["engineering", "history", "business"]],
+          ["Ken's phone number:", "090-8765-4321", ["090-8765-1234", "080-8765-4321", "090-5678-4321"]],
+        ],
+      ),
+    ],
+  },
+
+  "reading-u2": {
+    id: "reading-u2",
+    title: "Reading",
+    blurb: "Two short passages in kana, with questions.",
+    icon: "📖",
+    scripted: true,
+    build: () => [
+      ...readingQuestions(
+        "ここは コンビニです。これは ペンです。ひゃくはちじゅうえんです。それは ノートです。にひゃくえんです。あれは かさです。はっぴゃくえんです。かさは たかいですね。",
+        [
+          ["How much is the pen?", "¥180", ["¥108", "¥800", "¥200"]],
+          ["How much is the notebook?", "¥200", ["¥180", "¥2,000", "¥800"]],
+          ["What costs ¥800?", "the umbrella", ["the pen", "the notebook", "nothing"]],
+          ["Where is the umbrella?", "far from both people", ["near the speaker", "near the listener", "it's not said"]],
+        ],
+      ),
+      ...readingQuestions(
+        "A：すみません。これは だれの さいふですか。\nB：ノアさんの さいふです。\nA：あの かさも ノアさんのですか。\nB：いいえ、ノアさんのじゃないです。ミンさんのです。",
+        [
+          ["Whose is the wallet?", "Noah's", ["Min's", "B's", "A's"]],
+          ["Whose is the umbrella?", "Min's", ["Noah's", "B's", "A's"]],
+          ["Where is the umbrella?", "far from both people", ["near A", "near B", "it's not said"]],
+        ],
+      ),
     ],
   },
 
