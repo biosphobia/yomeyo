@@ -14,6 +14,7 @@
  *   POST grammar.php {prompt, mode:deck}      vocabulary cards for a deck
  *   POST grammar.php {prompt, mode:translate} one built word, translated
  *   POST grammar.php {prompt, mode:explain}   why a quiz answer was right/wrong
+ *   POST grammar.php {prompt, mode:coach}     a Genki learner's question answered
  *   POST grammar.php {mode:ocr, image, media} a page image read into text blocks
  *   POST grammar.php {mode:reading, image, media, text, question?}
  *                                             a page explained to a beginner,
@@ -103,6 +104,7 @@ $parse = ($mode === "parse");
 $deck = ($mode === "deck");
 $translate = ($mode === "translate");
 $explain = ($mode === "explain");
+$coach = ($mode === "coach");
 $ocr = ($mode === "ocr");
 $reading = ($mode === "reading");
 
@@ -196,6 +198,30 @@ $translateSchema = [
     "note" => ["type" => "string"],
   ],
   "required" => ["en"],
+  "additionalProperties" => false,
+];
+
+// Ask Coach: a short answer, a few example sentences, and where in Genki
+// to look. Examples are separate so the app can read them aloud.
+$coachSchema = [
+  "type" => "object",
+  "properties" => [
+    "answer" => ["type" => "string"],
+    "examples" => [
+      "type" => "array",
+      "items" => [
+        "type" => "object",
+        "properties" => [
+          "jp" => ["type" => "string"],
+          "en" => ["type" => "string"],
+        ],
+        "required" => ["jp", "en"],
+        "additionalProperties" => false,
+      ],
+    ],
+    "genki" => ["type" => "string"],
+  ],
+  "required" => ["answer", "examples"],
   "additionalProperties" => false,
 ];
 
@@ -293,6 +319,8 @@ $schema = $ocr
   ? ($readingQuestion !== "" ? $readingAskSchema : $readingSchema)
   : ($explain
   ? $explainSchema
+  : ($coach
+  ? $coachSchema
   : ($translate
   ? $translateSchema
   : ($deck
@@ -333,13 +361,13 @@ $schema = $ocr
       ],
       "required" => ["sentences"],
       "additionalProperties" => false,
-    ])))));
+    ]))))));
 
 $body = [
   // Feedback has to land while the answer still stings, so it rides the
   // fastest model; everything else keeps the careful one.
   "model" => $explain ? "claude-haiku-4-5-20251001" : "claude-sonnet-5",
-  "max_tokens" => $explain ? 300 : ($ocr ? 8000 : ($reading ? 6000 : 16000)),
+  "max_tokens" => $explain ? 300 : ($coach ? 2500 : ($ocr ? 8000 : ($reading ? 6000 : 16000))),
   "output_config" => $explain
     ? ["format" => ["type" => "json_schema", "schema" => $schema]]
     : [
@@ -393,6 +421,30 @@ $body = [
       "the top-left corner and w and h the size, all in thousandths of the " .
       "image's width and height (0 to 1000). Positioning accuracy matters " .
       "as much as the text: a box that drifts off its bubble is a failure."
+    : ($coach
+    ? "You are a warm, precise Japanese teacher coaching a university " .
+      "student who studies with the textbook Genki I (3rd edition), often " .
+      "on their own. The request says which lesson and step they are on " .
+      "and what has been taught so far. Answer their question the way a " .
+      "good teacher would in office hours: start with the direct answer in " .
+      "one or two sentences, then explain the why in plain English, short " .
+      "enough to read on a phone. Accuracy comes first: never invent a " .
+      "rule, and if usage genuinely varies or native speakers disagree, " .
+      "say so. Stay inside what Genki has taught up to their lesson: use " .
+      "only grammar and vocabulary from those lessons in your Japanese, in " .
+      "kana for lessons 1 and 2. If the honest answer needs something from " .
+      "a later lesson, say plainly that it comes in that lesson and give " .
+      "only as much as they need now. Use Genki's own terms (topic " .
+      "particle, noun, い-adjective, ru-verb, u-verb, short form) since " .
+      "that is what their class uses, but explain any term the first time. " .
+      "Put two or three short example sentences in \"examples\", each with " .
+      "a natural English translation; do not repeat them inside " .
+      "\"answer\". In \"genki\", name where in Genki I to look (lesson and " .
+      "section, e.g. \"Lesson 2, Grammar 1\") when there is a specific " .
+      "place; leave it empty otherwise. Do not quote the textbook. If the " .
+      "question is not about Japanese, steer back kindly in one sentence. " .
+      "Plain text in \"answer\": paragraphs separated by blank lines, " .
+      "**bold** allowed, no headings, no tables, no em dashes."
     : ($explain
     ? "You give feedback on one answered quiz question in a beginner " .
       "Japanese course. One or two short sentences, plain everyday words, " .
@@ -420,7 +472,7 @@ $body = [
       "Follow the model and the wording rules in the request exactly."
     : "You write practice sentences for a beginner Japanese course. " .
       "Follow the rules in the request exactly; every sentence is shown to a " .
-      "learner as fact, so a wrong label teaches something wrong.")))))),
+      "learner as fact, so a wrong label teaches something wrong."))))))),
   "messages" => [[
     "role" => "user",
     "content" => $ocrCrops

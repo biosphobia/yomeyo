@@ -1,7 +1,7 @@
 /**
  * The navigation, in one place, for two very different screens.
  *
- * There are nine destinations. A wide screen has room for all of them down
+ * There are ten destinations. A wide screen has room for all of them down
  * the side, grouped and labelled. A phone does not: nine tabs across a
  * 400-pixel bar gives each one 44 pixels, which is narrower than a fingertip
  * and reads as a wall of tiny icons.
@@ -51,6 +51,7 @@ export const NAV: NavGroup[] = [
       { route: "kana", label: "Kana", icon: "あ", primary: true },
       { route: "grammar", label: "Grammar", icon: "文", primary: true },
       { route: "kanji", label: "Kanji", icon: "漢" },
+      { route: "genki", label: "Genki", icon: "📗" },
     ],
   },
   {

@@ -278,6 +278,38 @@ goals laid over the counts, so both the schedule and the pool in
 Completed days earn a star and feed a day streak, and the kana game keeps a
 correct-answer streak (🔥) with the best run remembered on the device.
 
+## Genki
+
+The **Genki** tab (under *Learn*) is a teacher-style companion to *Genki I*
+(3rd edition), built to sit beside the book for a university course or for
+self-study. It follows the book's order and cites its pages. Every
+explanation, example, dialogue and drill in the tab is original; the textbook
+itself is not reproduced. Lessons 1 and 2 are built so far.
+
+Each lesson has:
+
+- an overview with goals and a five-day plan
+- tap-to-hear vocabulary, with "make it yours" word groups
+- one page per grammar point: the why, a pattern box, spoken examples, common
+  mistakes, what class quizzes tend to test, and how it sounds in real life
+- a quick check on every grammar page
+- optional games: clocks, prices, the こそあど pointing scenes, number and
+  phone dictation, sentence building, and flea-market and restaurant
+  role-plays
+- an original conversation to shadow
+- a lesson test
+
+Greetings, numbers and classroom phrases are optional warm-ups.
+
+**Ask Coach**, at the bottom of every page, sends a question to Claude along
+with the lesson and step the learner is on. Answers use only grammar Genki
+has taught so far and say where in the book to look. It uses the same
+`grammar.php` endpoint and key as the other AI features. Without a key, the
+coach says so and the rest of the tab works as normal.
+
+The book analysis and the plan for the remaining lessons are in
+[`docs/genki.md`](docs/genki.md).
+
 ## Kanji
 
 The **Kanji** tab has two lists:

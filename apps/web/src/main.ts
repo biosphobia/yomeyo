@@ -101,6 +101,9 @@ function route(): void {
     case "kanji":
       void renderKanji(main, isCurrent);
       break;
+    case "genki":
+      void lazyImport(() => import("./genki.js")).then((mod) => mod.renderGenki(main, isCurrent));
+      break;
     case "calendar":
       void renderCalendar(main, isCurrent);
       break;
