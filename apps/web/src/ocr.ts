@@ -1,5 +1,5 @@
 import { getMeta, setMeta } from "./db.js";
-import { assetUrl } from "./store.js";
+import { aiUrl, aiProbeUrl } from "./ai-endpoint.js";
 
 /**
  * OCR for pages the computer cannot read: scanned manga, photographed
@@ -219,7 +219,7 @@ const hasJapanese = (text: string): boolean => /[぀-ヿ一-鿿]/.test(text);
 /** Is the Claude endpoint deployed here? Asked once per page load. */
 let claudeReady: Promise<boolean> | null = null;
 function claudeAvailable(): Promise<boolean> {
-  claudeReady ??= fetch(assetUrl("grammar.php?probe=1"))
+  claudeReady ??= fetch(aiProbeUrl())
     .then((res) => res.status === 204)
     .catch(() => false);
   return claudeReady;
@@ -350,7 +350,7 @@ async function transcribeBlocks(frame: AnyCanvas, boxes: DetectedLine[]): Promis
   // tries — and then say it was busy, which is not the same as unreadable.
   let res: Response | null = null;
   for (let attempt = 0; attempt < 4; attempt++) {
-    res = await fetch(assetUrl("grammar.php"), {
+    res = await fetch(aiUrl(), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ mode: "ocr", images, media: "image/jpeg", vertical: verticals }),
@@ -1316,7 +1316,7 @@ export async function readRegion(
   context2d(crop).drawImage(canvas as CanvasImageSource, x, y, w, h, 0, 0, crop.width, crop.height);
   const image = await jpegBase64(crop, 0.85);
 
-  const res = await fetch(assetUrl("grammar.php"), {
+  const res = await fetch(aiUrl(), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ mode: "ocr", images: [image], media: "image/jpeg", vertical: [h >= w] }),

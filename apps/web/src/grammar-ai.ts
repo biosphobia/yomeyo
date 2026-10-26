@@ -1,6 +1,6 @@
 import { getMeta, setMeta } from "./db.js";
-import { assetUrl } from "./store.js";
 import { PARTICLE_JOB, type Chunk, type GrammarUnit, type Role, type Sentence } from "./grammar-data.js";
+import { aiUrl, aiProbeUrl } from "./ai-endpoint.js";
 
 /**
  * Fresh practice sentences, written by Claude, for a unit that is starting.
@@ -31,7 +31,7 @@ let available: Promise<boolean> | null = null;
 
 /** Is generation configured on this host? Asked once per page load. */
 export function generationAvailable(): Promise<boolean> {
-  available ??= fetch(assetUrl("grammar.php?probe=1"))
+  available ??= fetch(aiProbeUrl())
     .then((res) => res.status === 204)
     .catch(() => false);
   return available;
@@ -137,7 +137,7 @@ export async function generateSentences(
     }
     if (!(await generationAvailable())) return null;
 
-    const res = await fetch(assetUrl("grammar.php"), {
+    const res = await fetch(aiUrl(), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ prompt: promptFor(unit, count), count }),
@@ -204,7 +204,7 @@ export function explainAnswer(input: AnswerContext): Promise<string | null> {
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 12000);
-      const res = await fetch(assetUrl("grammar.php"), {
+      const res = await fetch(aiUrl(), {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ prompt, mode: "explain" }),

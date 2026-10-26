@@ -1,7 +1,7 @@
 import { getMeta, setMeta } from "./db.js";
-import { assetUrl } from "./store.js";
 import { generationAvailable } from "./grammar-ai.js";
 import type { KanaEntry } from "./kana-data.js";
+import { aiUrl } from "./ai-endpoint.js";
 
 /**
  * The alien dictionary: made-up words with made-up meanings, written by
@@ -137,7 +137,7 @@ export async function warmAlienWords(groups: string[], pool: KanaEntry[]): Promi
       "- No two words alike, no two meanings alike, nothing generic like 'a strange thing'.",
     ].join("\n");
 
-    const res = await fetch(assetUrl("grammar.php"), {
+    const res = await fetch(aiUrl(), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ mode: "deck", prompt }),

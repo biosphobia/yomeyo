@@ -1,5 +1,5 @@
-import { assetUrl } from "./store.js";
 import { PARTICLE_JOB, type Chunk } from "./grammar-data.js";
+import { aiUrl, aiProbeUrl } from "./ai-endpoint.js";
 
 /**
  * Taking a real Japanese sentence apart, the same way the course does.
@@ -37,7 +37,7 @@ const ROLES = new Set(["engine", "doer", "topic", "ghost", "object", "other"]);
 let available: Promise<boolean> | null = null;
 
 export function parserAvailable(): Promise<boolean> {
-  available ??= fetch(assetUrl("grammar.php?probe=1"))
+  available ??= fetch(aiProbeUrl())
     .then((res) => res.status === 204)
     .catch(() => false);
   return available;
@@ -155,7 +155,7 @@ export async function parseSentence(text: string): Promise<Parsed | null> {
   if (!sentence) return null;
   if (!(await parserAvailable())) return null;
   try {
-    const res = await fetch(assetUrl("grammar.php"), {
+    const res = await fetch(aiUrl(), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ mode: "parse", prompt: promptFor(sentence) }),

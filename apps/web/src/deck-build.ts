@@ -8,7 +8,8 @@ import {
   type Card,
   type DictEntry,
 } from "@yomeyo/core";
-import { activeDictionary, assetUrl, importCards, liveCards } from "./store.js";
+import { activeDictionary, importCards, liveCards } from "./store.js";
+import { aiUrl, aiProbeUrl } from "./ai-endpoint.js";
 
 /**
  * Building a deck by typing, rather than by importing a file.
@@ -128,7 +129,7 @@ let available: Promise<boolean> | null = null;
 
 /** Whether the site can reach Claude at all. Asked once per page load. */
 export function generatorAvailable(): Promise<boolean> {
-  available ??= fetch(assetUrl("grammar.php?probe=1"))
+  available ??= fetch(aiProbeUrl())
     .then((res) => res.status === 204)
     .catch(() => false);
   return available;
@@ -198,7 +199,7 @@ function avoidList(have: Map<string, Card>, offered: Set<string>): string[] {
 
 /** One request to the model, parsed but not yet checked. */
 async function askOnce(request: string, count: number, avoid: string[]): Promise<unknown[]> {
-  const res = await fetch(assetUrl("grammar.php"), {
+  const res = await fetch(aiUrl(), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ mode: "deck", prompt: promptFor(request, count, avoid) }),

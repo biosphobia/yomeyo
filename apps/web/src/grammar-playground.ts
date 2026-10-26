@@ -1,7 +1,7 @@
 import { lookup } from "@yomeyo/core";
 import { getMeta, setMeta } from "./db.js";
 import { speak } from "./audio.js";
-import { activeDictionary, assetUrl } from "./store.js";
+import { activeDictionary } from "./store.js";
 import { generationAvailable } from "./grammar-ai.js";
 import { renderRecipes } from "./grammar-recipes.js";
 import {
@@ -18,6 +18,7 @@ import {
   type Piece,
   type WordKind,
 } from "./grammar-conjugate.js";
+import { aiUrl } from "./ai-endpoint.js";
 
 /**
  * The grammar playground: type a word, then bend it by tapping the part
@@ -468,7 +469,7 @@ async function translate(out: HTMLDivElement, w: PlayWord, steps: Step[], state:
   ].join("\n");
 
   try {
-    const res = await fetch(assetUrl("grammar.php"), {
+    const res = await fetch(aiUrl(), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ mode: "translate", prompt }),

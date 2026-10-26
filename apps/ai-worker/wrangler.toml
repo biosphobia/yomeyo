@@ -1,0 +1,11 @@
+# Yomeyo's Claude endpoint for GitHub Pages. Deployed by the GitHub Actions
+# workflow (see .github/workflows/deploy.yml); the API key is set there as a
+# Worker secret and never lives in this repository.
+name = "yomeyo-ai"
+main = "worker.js"
+compatibility_date = "2024-09-23"
+workers_dev = true
+
+[vars]
+# Pages allowed to call the endpoint, comma-separated.
+ALLOWED_ORIGINS = "https://biosphobia.github.io,https://duugu.moe,http://localhost:5173"

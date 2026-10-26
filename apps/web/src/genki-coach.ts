@@ -1,8 +1,8 @@
 import { getMeta, setMeta } from "./db.js";
 import { speak } from "./audio.js";
-import { assetUrl } from "./store.js";
 import { generationAvailable } from "./grammar-ai.js";
 import { GENKI_MAP, type GenkiLesson, type GenkiStep } from "./genki-data.js";
+import { aiUrl } from "./ai-endpoint.js";
 
 /**
  * Ask Coach: a question box on every lesson that goes to Claude.
@@ -94,7 +94,7 @@ export async function askCoach(lesson: GenkiLesson, step: GenkiStep | null, ques
   const past = await history(lesson.id);
   let res: Response;
   try {
-    res = await fetch(assetUrl("grammar.php"), {
+    res = await fetch(aiUrl(), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ mode: "coach", prompt: promptFor(lesson, step, q, past) }),

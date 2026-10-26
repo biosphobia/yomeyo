@@ -46,6 +46,11 @@ jobs:
       # host; the step below keys off it. (Secrets cannot be read inside an
       # `if:` directly, so the host lands in the environment first.)
       CPANEL_FTP_HOST: ${{ secrets.CPANEL_FTP_HOST }}
+      # Present when the repository may publish the Claude endpoint as a
+      # Cloudflare Worker (see "Publish the Claude endpoint" below). Wrangler
+      # reads both straight from the environment.
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@v4
 
@@ -98,8 +103,42 @@ jobs:
             exit 1
           fi
 
+      # GitHub Pages cannot run grammar.php, so the AI features (Ask Coach,
+      # answer explanations, OCR, the reading tutor…) reach Claude through a
+      # Cloudflare Worker instead: apps/ai-worker, a port of grammar.php that
+      # holds the key as a Worker secret. This publishes it, hands it the
+      # ANTHROPIC_API_KEY secret, and passes its address to the app build.
+      # Without the CLOUDFLARE_* secrets it is skipped and the AI features
+      # stay off on Pages; a failure here never stops the site publishing.
+      - name: Publish the Claude endpoint (Cloudflare Worker)
+        id: worker
+        if: env.CLOUDFLARE_API_TOKEN != ''
+        continue-on-error: true
+        working-directory: apps/ai-worker
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          out=$(npx --yes wrangler@3 deploy 2>&1) || { echo "$out"; exit 1; }
+          echo "$out"
+          url=$(printf '%s\n' "$out" | grep -o 'https://[A-Za-z0-9.-]*\.workers\.dev' | head -n 1)
+          if [ -z "$url" ]; then
+            echo "::error::The Worker deployed, but wrangler printed no workers.dev address. Open Cloudflare → Workers & Pages once to pick a workers.dev subdomain, then re-run."
+            exit 1
+          fi
+          if [ -n "$ANTHROPIC_API_KEY" ]; then
+            printf %s "$ANTHROPIC_API_KEY" | npx --yes wrangler@3 secret put ANTHROPIC_API_KEY
+          else
+            echo "::warning::No ANTHROPIC_API_KEY repository secret, so the Worker has no key and the AI features stay off."
+          fi
+          echo "VITE_AI_URL=$url" >> "$GITHUB_ENV"
+          echo "The app will send its Claude requests to $url"
+
       - name: Build web app
         env:
+          # Where the app sends Claude requests: the Worker published above,
+          # or an AI_PROXY_URL repository variable for one deployed by hand.
+          # Empty means grammar.php beside the app (a PHP host).
+          VITE_AI_URL: ${{ env.VITE_AI_URL || vars.AI_PROXY_URL }}
           # Optional. Set this repository secret to the Firebase project's web
           # config JSON and the deployed app offers "Sign in with Google"
           # straight away, with nothing to paste on each device. Without it

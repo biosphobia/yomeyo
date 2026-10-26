@@ -21,7 +21,10 @@
  *                                             or their question about it answered
  *
  * On a host without the key file the app notices and simply uses the
- * sentences that ship with it, so nothing here is ever load-bearing.
+ * sentences that ship with it, so nothing here is ever load-bearing. *
+ * GitHub Pages cannot run PHP, so Pages builds use apps/ai-worker/worker.js,
+ * a Cloudflare Worker port of this file. KEEP THE TWO IN STEP: a change to a
+ * mode, schema, prompt or limit here belongs there too.
  */
 
 $key = @include __DIR__ . "/grammar-key.php";

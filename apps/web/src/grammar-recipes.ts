@@ -1,8 +1,8 @@
 import { getAllCards, getMeta, setMeta } from "./db.js";
 import { speak } from "./audio.js";
-import { assetUrl } from "./store.js";
 import { generationAvailable } from "./grammar-ai.js";
 import { PIECES, guessKind, isKana, startState, toHiragana, type WordKind } from "./grammar-conjugate.js";
+import { aiUrl } from "./ai-endpoint.js";
 
 /**
  * The sentence recipes: the course's patterns, live.
@@ -242,7 +242,7 @@ async function refineTranslation(host: HTMLElement, recipe: Recipe, s: RecipeSta
     if (seq === translateSeq && box.isConnected) box.textContent = "";
   };
   try {
-    const res = await fetch(assetUrl("grammar.php"), {
+    const res = await fetch(aiUrl(), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ mode: "translate", prompt }),

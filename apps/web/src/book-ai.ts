@@ -1,6 +1,6 @@
 import { getMeta, setMeta } from "./db.js";
-import { assetUrl } from "./store.js";
 import type { OcrWord } from "./ocr.js";
+import { aiUrl } from "./ai-endpoint.js";
 
 /**
  * The reading tutor: Claude looking at the same page as the learner.
@@ -46,7 +46,7 @@ export function pageJpeg(source: HTMLCanvasElement): string {
 }
 
 async function callReading(image: string, lines: OcrWord[], question?: string): Promise<unknown> {
-  const res = await fetch(assetUrl("grammar.php"), {
+  const res = await fetch(aiUrl(), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({

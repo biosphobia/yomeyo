@@ -303,9 +303,39 @@ Greetings, numbers and classroom phrases are optional warm-ups.
 
 **Ask Coach**, at the bottom of every page, sends a question to Claude along
 with the lesson and step the learner is on. Answers use only grammar Genki
-has taught so far and say where in the book to look. It uses the same
-`grammar.php` endpoint and key as the other AI features. Without a key, the
-coach says so and the rest of the tab works as normal.
+has taught so far and say where in the book to look. It uses the same Claude
+endpoint and key as the other AI features (below). Without a key, the coach
+says so and the rest of the tab works as normal.
+
+## Claude on GitHub Pages (Ask Coach, explanations, OCR, the reading tutor)
+
+GitHub Pages serves only static files, so it cannot run `grammar.php`, the
+small script that keeps the Anthropic API key off the browser. For Pages the
+same endpoint runs as a free **Cloudflare Worker** (`apps/ai-worker/`), and
+the deploy workflow publishes it for you. One-time setup:
+
+1. **Make a free Cloudflare account** at https://dash.cloudflare.com and open
+   **Workers & Pages** once, so the account picks its `workers.dev`
+   subdomain.
+2. **Make an API token**: *My Profile → API Tokens → Create Token → "Edit
+   Cloudflare Workers"* template → Continue → Create. Copy the token.
+3. **Find your account ID**: it's on the right of *Workers & Pages →
+   Overview*.
+4. **Add two repository secrets** on GitHub (*Settings → Secrets and
+   variables → Actions*): `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
+   The `ANTHROPIC_API_KEY` secret you already have is handed to the Worker
+   by the workflow.
+5. **Push or re-run the workflow.** It publishes the Worker as
+   `yomeyo-ai`, gives it the key as an encrypted Worker secret, and builds
+   the app pointing at it.
+
+Only pages on the addresses listed in `apps/ai-worker/wrangler.toml`
+(`ALLOWED_ORIGINS`) may call the Worker. That stops other websites from
+using it, but not a determined person forging requests, so set a monthly
+spend limit on the Anthropic key in the Anthropic console.
+
+Already running the Worker somewhere else? Set an `AI_PROXY_URL`
+repository *variable* to its address instead of the two secrets.
 
 The book analysis and the plan for the remaining lessons are in
 [`docs/genki.md`](docs/genki.md).
