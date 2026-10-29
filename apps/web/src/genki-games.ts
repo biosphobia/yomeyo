@@ -334,6 +334,114 @@ function readingQuestions(passage: string, items: [q: string, right: string, wro
 
 const YEARS = ["", "いちねんせい", "にねんせい", "さんねんせい", "よねんせい"];
 
+interface Verb {
+  dict: string;
+  stem: string;
+  en: string;
+  group: "u" | "ru" | "irr";
+}
+
+const GROUP_LABEL: Record<Verb["group"], string> = { u: "u-verb", ru: "ru-verb", irr: "irregular" };
+
+/** Lessons 3 and 4's verbs with their ます stems. */
+const VERBS: Verb[] = [
+  { dict: "いく", stem: "いき", en: "to go", group: "u" },
+  { dict: "かえる", stem: "かえり", en: "to go back", group: "u" },
+  { dict: "きく", stem: "きき", en: "to listen", group: "u" },
+  { dict: "のむ", stem: "のみ", en: "to drink", group: "u" },
+  { dict: "はなす", stem: "はなし", en: "to speak", group: "u" },
+  { dict: "よむ", stem: "よみ", en: "to read", group: "u" },
+  { dict: "おきる", stem: "おき", en: "to get up", group: "ru" },
+  { dict: "たべる", stem: "たべ", en: "to eat", group: "ru" },
+  { dict: "ねる", stem: "ね", en: "to sleep", group: "ru" },
+  { dict: "みる", stem: "み", en: "to watch", group: "ru" },
+  { dict: "くる", stem: "き", en: "to come", group: "irr" },
+  { dict: "する", stem: "し", en: "to do", group: "irr" },
+  { dict: "べんきょうする", stem: "べんきょうし", en: "to study", group: "irr" },
+  { dict: "あう", stem: "あい", en: "to meet", group: "u" },
+  { dict: "ある", stem: "あり", en: "there is (a thing)", group: "u" },
+  { dict: "かう", stem: "かい", en: "to buy", group: "u" },
+  { dict: "かく", stem: "かき", en: "to write", group: "u" },
+  { dict: "とる", stem: "とり", en: "to take (a photo)", group: "u" },
+  { dict: "まつ", stem: "まち", en: "to wait", group: "u" },
+  { dict: "わかる", stem: "わかり", en: "to understand", group: "u" },
+  { dict: "いる", stem: "い", en: "(a person) is", group: "ru" },
+];
+
+const PAST_EN: Record<string, string> = {
+  いく: "went", かえる: "went back", きく: "listened", のむ: "drank", はなす: "spoke", よむ: "read",
+  おきる: "got up", たべる: "ate", ねる: "slept", みる: "watched", くる: "came", する: "did",
+  べんきょうする: "studied", あう: "met", かう: "bought", かく: "wrote", とる: "took a photo", まつ: "waited",
+};
+
+const LOCATIONS: [rel: string, en: string][] = [
+  ["うえ", "on"],
+  ["した", "under"],
+  ["なか", "in"],
+  ["みぎ", "to the right of"],
+  ["ひだり", "to the left of"],
+  ["あいだ", "between"],
+];
+
+const LOC_ITEMS: [emoji: string, jp: string][] = [
+  ["🐱", "ねこ"],
+  ["🐕", "いぬ"],
+  ["📕", "ほん"],
+  ["☂️", "かさ"],
+  ["👛", "さいふ"],
+];
+
+const LOC_EN: Record<string, string> = { ねこ: "cat", いぬ: "dog", ほん: "book", かさ: "umbrella", さいふ: "wallet" };
+
+/** Pairs of buildings for みぎ, ひだり and あいだ: [emoji, name, second emoji, second name]. */
+const LOC_BUILDINGS: [string, string, string, string][] = [
+  ["🏦", "ぎんこう", "🏨", "ホテル"],
+  ["🏪", "コンビニ", "📚", "としょかん"],
+  ["🏥", "びょういん", "🏦", "ぎんこう"],
+];
+
+/** X placed relative to Y (and Z, for あいだ), drawn with emoji. */
+function locationScene(rel: string, x: string, y: string, z: string): string {
+  const cell = (e: string, big = false): string => `<span class="gk-loc-cell${big ? " big" : ""}">${e}</span>`;
+  switch (rel) {
+    case "うえ":
+      return `<div class="gk-loc col">${cell(x)}${cell(y, true)}</div>`;
+    case "した":
+      return `<div class="gk-loc col">${cell(y, true)}${cell(x)}</div>`;
+    case "なか":
+      return `<div class="gk-loc"><span class="gk-loc-in">${cell(y, true)}<span class="gk-loc-inner">${x}</span></span></div>`;
+    case "みぎ":
+      return `<div class="gk-loc">${cell(y, true)}${cell(x)}</div>`;
+    case "ひだり":
+      return `<div class="gk-loc">${cell(x)}${cell(y, true)}</div>`;
+    default:
+      return `<div class="gk-loc">${cell(y, true)}${cell(x)}${cell(z, true)}</div>`;
+  }
+}
+
+const DATES: Record<number, string> = {
+  1: "ついたち", 2: "ふつか", 3: "みっか", 4: "よっか", 5: "いつか", 6: "むいか", 7: "なのか", 8: "ようか",
+  9: "ここのか", 10: "とおか", 11: "じゅういちにち", 14: "じゅうよっか", 17: "じゅうしちにち", 19: "じゅうくにち",
+  20: "はつか", 24: "にじゅうよっか",
+};
+
+const MONTHS: Record<number, string> = {
+  1: "いちがつ", 2: "にがつ", 3: "さんがつ", 4: "しがつ", 5: "ごがつ", 6: "ろくがつ", 7: "しちがつ",
+  8: "はちがつ", 9: "くがつ", 10: "じゅうがつ", 11: "じゅういちがつ", 12: "じゅうにがつ",
+};
+
+const MONTHS_EN = ["", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+const WEEKDAYS: [string, string][] = [
+  ["にちようび", "Sunday"], ["げつようび", "Monday"], ["かようび", "Tuesday"], ["すいようび", "Wednesday"],
+  ["もくようび", "Thursday"], ["きんようび", "Friday"], ["どようび", "Saturday"],
+];
+
+function ordinal(n: number): string {
+  const tail = n % 10 === 1 && n !== 11 ? "st" : n % 10 === 2 && n !== 12 ? "nd" : n % 10 === 3 && n !== 13 ? "rd" : "th";
+  return `${n}${tail}`;
+}
+
 export const GAMES: Record<string, GameDef> = {
   "greet-situations": {
     id: "greet-situations",
@@ -964,6 +1072,456 @@ export const GAMES: Record<string, GameDef> = {
           ["Where is the umbrella?", "far from both people", ["near A", "near B", "it's not said"]],
         ],
       ),
+    ],
+  },
+
+  // ================================================================ unit 3
+
+  "verb-class": {
+    id: "verb-class",
+    title: "Verb groups",
+    blurb: "ru-verb, u-verb or irregular.",
+    icon: "🗂️",
+    build: () =>
+      shuffle(VERBS).slice(0, 10).map((v) =>
+        choice(`${v.en}`, GROUP_LABEL[v.group], ["u-verb", "ru-verb", "irregular"], {
+          jp: v.dict,
+          why: v.dict === "かえる" ? "かえる ends in -eru but is a u-verb: かえります." : `${v.dict} → ${v.stem}ます`,
+          sayAfter: v.dict,
+        }),
+      ),
+  },
+
+  "masu-form": {
+    id: "masu-form",
+    title: "ます and ません",
+    blurb: "From the dictionary form to the polite form.",
+    icon: "🔁",
+    build: () =>
+      shuffle(VERBS).slice(0, 10).map((v) => {
+        const negative = Math.random() < 0.4;
+        const end = negative ? "ません" : "ます";
+        const right = v.stem + end;
+        const base = v.dict.slice(0, -1);
+        const wrong = [v.dict + end, base + end, base + "り" + end, v.dict === "くる" ? "くり" + end : v.dict.endsWith("する") ? v.dict.slice(0, -2) + "す" + end : base + "え" + end];
+        return choice(negative ? `${v.en} (negative)` : v.en, right, wrong, { jp: v.dict, why: `${GROUP_LABEL[v.group]}: ${v.dict} → ${right}` });
+      }),
+  },
+
+  "particles-u3": {
+    id: "particles-u3",
+    title: "を・で・に",
+    blurb: "Pick the particle.",
+    icon: "🧩",
+    build: () =>
+      shuffle<[string, string, string]>([
+        ["まいにち コーヒー＿ のみます。", "を", "I drink coffee every day."],
+        ["としょかん＿ ほんを よみます。", "で", "I read books at the library."],
+        ["あした きょうと＿ いきます。", "に", "I'll go to Kyoto tomorrow."],
+        ["うち＿ ばんごはんを たべます。", "で", "I eat dinner at home."],
+        ["じゅういちじ＿ ねます。", "に", "I go to bed at eleven."],
+        ["おんがく＿ ききます。", "を", "I listen to music."],
+        ["にちようび＿ テニスを します。", "に", "I play tennis on Sunday."],
+        ["カフェ＿ べんきょうします。", "で", "I study at a café."],
+        ["がっこう＿ きます。", "に", "I come to school."],
+        ["テレビ＿ みます。", "を", "I watch TV."],
+        ["にほんご＿ はなします。", "を", "I speak Japanese."],
+      ])
+        .slice(0, 10)
+        .map(([jp, right, en]) =>
+          choice(en, right, ["を", "で", "に"], { jp, sayAfter: jp.replace("＿", right) }),
+        ),
+  },
+
+  "time-ni": {
+    id: "time-ni",
+    title: "Time words and に",
+    blurb: "Does the time word take に?",
+    icon: "🕑",
+    build: () =>
+      shuffle<[string, string, "に" | "no に" | "optional"]>([
+        ["どようび", "Saturday", "に"],
+        ["にちようび", "Sunday", "に"],
+        ["くじ", "nine o'clock", "に"],
+        ["じゅうじはん", "10:30", "に"],
+        ["しちじ", "seven o'clock", "に"],
+        ["あした", "tomorrow", "no に"],
+        ["きょう", "today", "no に"],
+        ["こんばん", "tonight", "no に"],
+        ["まいにち", "every day", "no に"],
+        ["まいばん", "every night", "no に"],
+        ["いつ", "when", "no に"],
+        ["あさ", "in the morning", "optional"],
+        ["しゅうまつ", "on the weekend", "optional"],
+      ])
+        .slice(0, 10)
+        .map(([jp, en, right]) =>
+          choice(`"${en}": does it take に?`, right === "に" ? "takes に" : right === "no に" ? "no に" : "に is optional", ["takes に", "no に", "に is optional"], {
+            jp,
+            why: right === "に" ? "Days of the week and clock times take に." : right === "no に" ? "Words measured from now, regular intervals and いつ take no に." : "Parts of the day and the weekend can go either way.",
+            sayAfter: jp,
+          }),
+        ),
+  },
+
+  frequency: {
+    id: "frequency",
+    title: "How often",
+    blurb: "まいにち, よく, ときどき, あまり, ぜんぜん.",
+    icon: "📆",
+    build: () => {
+      const acts: [string, string, string][] = [
+        ["テレビを み", "watch TV", "テレビを"],
+        ["コーヒーを のみ", "drink coffee", "コーヒーを"],
+        ["ざっしを よみ", "read magazines", "ざっしを"],
+        ["テニスを し", "play tennis", "テニスを"],
+        ["カフェに いき", "go to cafés", "カフェに"],
+        ["おさけを のみ", "drink alcohol", "おさけを"],
+      ];
+      const adverbs: [string, string, boolean][] = [
+        ["まいにち", "every day", true],
+        ["よく", "often", true],
+        ["ときどき", "sometimes", true],
+        ["あまり", "not much", false],
+        ["ぜんぜん", "never", false],
+      ];
+      return Array.from({ length: 10 }, (_, i) => {
+        const [stem, en] = pick(acts);
+        const [adv, advEn, positive] = pick(adverbs);
+        if (i % 2 === 0) {
+          const right = stem + (positive ? "ます" : "ません");
+          const wrong = stem + (positive ? "ません" : "ます");
+          return choice(`Finish the sentence.`, `${adv} ${right}。`, [`${adv} ${wrong}。`, `${adv} ${stem}ませんか。`], {
+            jp: `${adv} ${stem.split(" ")[0]} ＿。`,
+            why: positive ? `${adv} goes with a positive verb.` : `${adv} needs a negative verb.`,
+          });
+        }
+        const english = positive ? `I ${advEn === "every day" ? "" : advEn + " "}${en}${advEn === "every day" ? " every day" : ""}.` : advEn === "never" ? `I never ${en}.` : `I don't ${en} much.`;
+        return choice(english, adv, adverbs.map(([a]) => a).filter((a) => a !== adv), {
+          jp: `＿ ${stem}${positive ? "ます" : "ません"}。`,
+          sayAfter: `${adv} ${stem}${positive ? "ます" : "ません"}`,
+        });
+      });
+    },
+  },
+
+  "u3-builder": {
+    id: "u3-builder",
+    title: "Sentence order",
+    blurb: "Topic, time, place, thing, verb.",
+    icon: "🧱",
+    build: () =>
+      shuffle<[string[], string]>([
+        [["わたしは", "きょう", "としょかんで", "にほんごを", "べんきょうします。"], "I'll study Japanese at the library today."],
+        [["ミンさんは", "まいにち", "コーヒーを", "のみます。"], "Min drinks coffee every day."],
+        [["わたしは", "よく", "しちじごろ", "うちに", "かえります。"], "I often go home at around seven."],
+        [["あした", "カフェで", "ひるごはんを", "たべます。"], "I'll eat lunch at a café tomorrow."],
+        [["はるとさんは", "あまり", "テレビを", "みません。"], "Haruto doesn't watch TV much."],
+        [["どようびに", "えいがを", "みませんか。"], "Would you like to see a movie on Saturday?"],
+        [["しゅうまつは", "たいてい", "なにを", "しますか。"], "What do you usually do on weekends?"],
+      ]).map(([tiles, en]) => ({ kind: "order" as const, prompt: "Build the sentence.", tiles, en })),
+  },
+
+  "schedule-listen": {
+    id: "schedule-listen",
+    title: "Listening: daily schedules",
+    blurb: "Hear someone's day, then answer.",
+    icon: "🎧",
+    build: () => {
+      const acts: [string, string][] = [
+        ["おきます", "get up"],
+        ["がっこうに いきます", "go to school"],
+        ["ひるごはんを たべます", "eat lunch"],
+        ["としょかんで べんきょうします", "study at the library"],
+        ["うちに かえります", "go home"],
+        ["ばんごはんを たべます", "eat dinner"],
+        ["テレビを みます", "watch TV"],
+        ["ねます", "go to bed"],
+      ];
+      const qs: GameQuestion[] = [];
+      for (const p of shuffle(FACTS).slice(0, 4)) {
+        const [a, b] = shuffle(acts).slice(0, 2);
+        const [h1, h2] = shuffle([6, 7, 8, 9, 10, 11, 12, 1, 2, 3, 4, 5]).slice(0, 2);
+        const said = `${p.name}さんは まいにち ${HOURS[h1]}に ${a[0]}。${HOURS[h2]}に ${b[0]}。`;
+        const clock = (h: number): string => `${h}:00`;
+        qs.push(
+          choice(`What time does ${p.name} ${a[1]}?`, clock(h1), [clock(h2), clock((h1 % 12) + 1), clock(h1 === 1 ? 12 : h1 - 1)], { listen: said, sayAfter: undefined }),
+          choice(`What does ${p.name} do at ${clock(h2)}?`, b[1], shuffle(acts.map(([, en]) => en).filter((en) => en !== b[1])), { listen: said, sayAfter: undefined }),
+        );
+      }
+      return qs;
+    },
+  },
+
+  "reading-u3": {
+    id: "reading-u3",
+    title: "Reading: my day",
+    blurb: "A short passage in kana, with questions.",
+    icon: "📖",
+    scripted: true,
+    build: () =>
+      readingQuestions(
+        "わたしは まいにち しちじに おきます。あさごはんは たべません。コーヒーを のみます。はちじはんに がっこうに いきます。じゅうにじに がっこうで ひるごはんを たべます。ごご よじごろ としょかんで べんきょうします。しちじごろ うちに かえります。ときどき テレビを みます。じゅうにじごろ ねます。",
+        [
+          ["What time does the writer get up?", "7:00", ["8:30", "4:00", "12:00"]],
+          ["What do they have in the morning?", "only coffee", ["breakfast and coffee", "tea", "nothing at all"]],
+          ["Where do they study?", "at the library", ["at home", "at a café", "at school"]],
+          ["What time do they go home?", "about 7", ["about 4", "8:30", "about 12"]],
+          ["How often do they watch TV?", "sometimes", ["every day", "never", "often"]],
+        ],
+      ),
+  },
+
+  invite: {
+    id: "invite",
+    title: "Making plans",
+    blurb: "Invite someone, then agree on a day.",
+    icon: "🎬",
+    scripted: true,
+    build: () => [
+      choice("Ask Min what she usually does on weekends.", "しゅうまつは たいてい なにを しますか。", ["しゅうまつに たいてい なにを しましたか。", "しゅうまつは なにですか。", "しゅうまつを なにを しますか。"], {
+        why: "Weekend as the topic (は), a habit (ます).",
+      }),
+      choice("Invite her to play tennis on Saturday.", "どようびに テニスを しませんか。", ["どようびに テニスを しますか。", "どようびは テニスを します。", "どようびで テニスを しませんか。"], {
+        visual: chat([["ミン", "そうですね。ときどき テニスを します。"]]),
+        why: "Invitation: ませんか; days take に.",
+      }),
+      choice("What does Min mean?", "Saturday doesn't work for her.", ["She'll come on Saturday.", "She doesn't play tennis.", "She asks what time."], {
+        visual: chat([["ミン", "どようびは ちょっと…。"]]),
+      }),
+      choice("Suggest Sunday instead.", "じゃあ、にちようびは どうですか。", ["じゃあ、にちようびに しますか。", "にちようびは ちょっと…。", "にちようびに いきました。"], {}),
+      choice("She agrees. What does she say?", "いいですね。", ["ちょっと…。", "いいえ。", "どうも。"], {
+        visual: chat([["ミン", "＿"]]),
+      }),
+      choice("Ask what time.", "なんじに しますか。", ["なんじですか テニス。", "いつに しますか。", "なんじで しますか。"], {
+        why: "Clock time + に; いつ never takes に.",
+      }),
+      choice("Suggest about ten o'clock.", "じゅうじごろ どうですか。", ["じゅうじかん どうですか。", "じゅうじで どうですか。", "じゅうじへ どうですか。"], {}),
+    ],
+  },
+
+  // ================================================================ unit 4
+
+  "aru-iru": {
+    id: "aru-iru",
+    title: "あります or います",
+    blurb: "Things, people and animals.",
+    icon: "📍",
+    build: () =>
+      shuffle<[string, string, string, boolean]>([
+        ["🐱", "ねこ", "a cat", true],
+        ["🐕", "いぬ", "a dog", true],
+        ["🧒", "こども", "a child", true],
+        ["🧑‍🏫", "せんせい", "a teacher", true],
+        ["🧑", "ともだち", "a friend", true],
+        ["🧑‍🎓", "りゅうがくせい", "an exchange student", true],
+        ["📕", "ほん", "a book", false],
+        ["☂️", "かさ", "an umbrella", false],
+        ["🌸", "はな", "flowers", false],
+        ["🏦", "ぎんこう", "a bank", false],
+        ["🚏", "バスてい", "a bus stop", false],
+        ["🪑", "いす", "a chair", false],
+        ["📷", "しゃしん", "a photo", false],
+      ])
+        .slice(0, 10)
+        .map(([emoji, jp, en, alive]) => {
+          const [place, placeEn] = pick<[string, string]>([["あそこ", "over there"], ["こうえん", "in the park"], ["ここ", "here"]]);
+          const right = alive ? "います" : "あります";
+          return choice(`There is ${en} ${placeEn}.`, right, ["います", "あります", "です"], {
+            visual: `<div class="gk-tag"><span class="gk-thing">${emoji}</span></div>`,
+            jp: `${place}に ${jp}が ＿。`,
+            why: alive ? "People and animals: います." : "Things and plants: あります.",
+            sayAfter: `${place}に ${jp}が ${right}`,
+          });
+        }),
+  },
+
+  location: {
+    id: "location",
+    title: "Where is it?",
+    blurb: "うえ, した, なか, みぎ, ひだり, あいだ.",
+    icon: "🧭",
+    build: () =>
+      Array.from({ length: 10 }, () => {
+        const [rel, en] = pick(LOCATIONS);
+        const [xEmoji, xJp] = pick(LOC_ITEMS);
+        const [yEmoji, yJp, zEmoji, zJp] = rel === "なか" ? ["👜", "かばん", "", ""] : rel === "あいだ" || rel === "みぎ" || rel === "ひだり" ? pick(LOC_BUILDINGS) : ["🪑", "いす", "", ""];
+        const phrase = rel === "あいだ" ? `${yJp}と ${zJp}の あいだです。` : `${yJp}の ${rel}です。`;
+        const others = LOCATIONS.map(([r]) => r).filter((r) => r !== rel && r !== "あいだ").map((r) => `${yJp}の ${r}です。`);
+        return choice(`Where is the ${LOC_EN[xJp] ?? xJp}?`, phrase, shuffle(others), {
+          visual: locationScene(rel, xEmoji, yEmoji, zEmoji),
+          jp: `${xJp}は どこですか。`,
+          why: `${en}: ${rel}`,
+          sayAfter: `${xJp}は ${phrase}`,
+        });
+      }),
+  },
+
+  "location-listen": {
+    id: "location-listen",
+    title: "Listening: where is it?",
+    blurb: "Hear where something is, then pick the picture's description.",
+    icon: "🎧",
+    build: () =>
+      Array.from({ length: 8 }, () => {
+        const [rel, en] = pick(LOCATIONS.filter(([r]) => r !== "あいだ"));
+        const [, xJp] = pick(LOC_ITEMS);
+        const alive = xJp === "ねこ" || xJp === "いぬ";
+        const said = `${xJp}は いすの ${rel}に ${alive ? "います" : "あります"}。`;
+        const xEn = LOC_EN[xJp] ?? xJp;
+        const options = LOCATIONS.filter(([r]) => r !== "あいだ").map(([, e]) => `The ${xEn} is ${e} the chair.`);
+        return choice("Where is it?", `The ${xEn} is ${en} the chair.`, shuffle(options), { listen: said, sayAfter: undefined });
+      }),
+  },
+
+  "past-forms": {
+    id: "past-forms",
+    title: "Past tense",
+    blurb: "ました, ませんでした, でした.",
+    icon: "⏪",
+    build: () => {
+      const qs: GameQuestion[] = [];
+      for (const v of shuffle(VERBS.filter((x) => x.dict !== "ある" && x.dict !== "いる" && x.dict !== "わかる")).slice(0, 7)) {
+        const tense = pick(["did", "didn't", "do", "don't"] as const);
+        const forms = { did: v.stem + "ました", "didn't": v.stem + "ませんでした", do: v.stem + "ます", "don't": v.stem + "ません" };
+        const verbEn = v.en.replace(/^to /, "");
+        const english = tense === "did" ? `I ${PAST_EN[v.dict] ?? verbEn}.` : tense === "didn't" ? `I didn't ${verbEn}.` : tense === "do" ? `I ${verbEn}.` : `I don't ${verbEn}.`;
+        qs.push(choice(english, forms[tense], Object.values(forms), { jp: v.dict }));
+      }
+      for (const [noun, en] of shuffle<[string, string]>([["げつようび", "Monday"], ["がくせい", "a student"], ["いい てんき", "nice weather"], ["にほんじん", "Japanese"], ["テスト", "a test"]]).slice(0, 3)) {
+        if (noun === "いい てんき") continue;
+        const past = Math.random() < 0.5;
+        const negative = Math.random() < 0.5;
+        const forms = [noun + "です", noun + "じゃないです", noun + "でした", noun + "じゃなかったです"];
+        const right = forms[(past ? 2 : 0) + (negative ? 1 : 0)];
+        qs.push(choice(`It ${past ? (negative ? "wasn't" : "was") : negative ? "isn't" : "is"} ${en}.`, right, forms, {}));
+      }
+      return qs;
+    },
+  },
+
+  "mo-particles": {
+    id: "mo-particles",
+    title: "も, にも, でも",
+    blurb: "Replace は, が, を; keep に and で.",
+    icon: "➕",
+    build: () =>
+      shuffle<[string, string]>([
+        ["パンを かいました。ノート＿ かいました。", "も"],
+        ["きょうとに いきました。おおさか＿ いきました。", "にも"],
+        ["うちで べんきょうしました。カフェ＿ べんきょうしました。", "でも"],
+        ["レナさんは こうえんに いきました。ミンさん＿ いきました。", "も"],
+        ["どようびに がっこうに きました。にちようび＿ きました。", "にも"],
+        ["こうえんに いぬが います。ねこ＿ います。", "も"],
+        ["えきで しゃしんを とりました。おてら＿ とりました。", "でも"],
+        ["コーヒーを のみました。おちゃ＿ のみました。", "も"],
+        ["はるとさんに あいました。ノアさん＿ あいました。", "にも"],
+        ["としょかんで ほんを よみました。うち＿ よみました。", "でも"],
+      ]).map(([jp, right]) =>
+        choice("Fill the gap.", right, ["も", "にも", "でも", "をも"], {
+          jp,
+          why: right === "も" ? "は, が and を are replaced by も." : `${right[0]} stays: ${right}.`,
+          sayAfter: jp.replace("＿", right),
+        }),
+      ),
+  },
+
+  "goro-gurai": {
+    id: "goro-gurai",
+    title: "ごろ or ぐらい",
+    blurb: "About a time, or about an amount.",
+    icon: "⏳",
+    build: () =>
+      shuffle<[string, string]>([
+        ["しちじ＿ おきました。", "ごろ"],
+        ["さんじかん＿ べんきょうしました。", "ぐらい"],
+        ["じゅうにじ＿ ねました。", "ごろ"],
+        ["いちじかん＿ まちました。", "ぐらい"],
+        ["くじ＿ うちに かえりました。", "ごろ"],
+        ["にじかんはん＿ テレビを みました。", "ぐらい"],
+        ["ごご よじ＿ こうえんに いきました。", "ごろ"],
+        ["はちじかん＿ ねました。", "ぐらい"],
+      ]).map(([jp, right]) =>
+        choice("Fill the gap.", right, ["ごろ", "ぐらい", "に"], {
+          jp,
+          why: right === "ごろ" ? "A point in time: ごろ." : "An amount of time: ぐらい.",
+          sayAfter: jp.replace("＿", right),
+        }),
+      ),
+  },
+
+  dates: {
+    id: "dates",
+    title: "Dates and days",
+    blurb: "Days of the week, months and dates.",
+    icon: "🗓️",
+    build: () => {
+      const qs: GameQuestion[] = [];
+      for (let i = 0; i < 4; i++) {
+        const d = pick([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 14, 20, 24, 11, 17, 19]);
+        qs.push(
+          choice(`The ${ordinal(d)} of the month`, DATES[d], [
+            naiveKana(d) + "にち",
+            d === 20 ? "はたち" : oldReadings(naiveKana(d)) + "にち",
+            DATES[d === 10 ? 9 : d + 1] ?? naiveKana(d + 1) + "にち",
+            naiveKana(d + 1) + "にち",
+            naiveKana(d + 2) + "にち",
+          ], {}),
+        );
+      }
+      for (let i = 0; i < 3; i++) {
+        const m = pick([4, 7, 9, 1, 6, 10, 12]);
+        qs.push(choice(MONTHS_EN[m], MONTHS[m], [naiveKana(m) + "がつ", MONTHS[(m % 12) + 1], m === 4 ? "よんがつ" : m === 7 ? "なながつ" : m === 9 ? "きゅうがつ" : naiveKana(m) + "つき"], {}));
+      }
+      for (const [jp, en] of shuffle(WEEKDAYS).slice(0, 3)) {
+        qs.push(choice(en, jp, WEEKDAYS.map(([j]) => j).filter((j) => j !== jp), {}));
+      }
+      return shuffle(qs);
+    },
+  },
+
+  "reading-u4": {
+    id: "reading-u4",
+    title: "Reading: the weekend",
+    blurb: "A short passage in the past tense.",
+    icon: "📖",
+    scripted: true,
+    build: () =>
+      readingQuestions(
+        "どようびに ともだちと まちに いきました。デパートで かいものを しました。わたしは くつを かいました。ともだちは かばんを かいました。それから、レストランで ひるごはんを たべました。にちようびは うちに いました。ひとりで レポートを かきました。さんじかんぐらい かきました。それから、いぬと こうえんに いきました。",
+        [
+          ["Who did the writer go to town with?", "a friend", ["alone", "their dog", "their teacher"]],
+          ["What did the writer buy?", "shoes", ["a bag", "a book", "nothing"]],
+          ["Where did they eat lunch?", "at a restaurant", ["at the department store", "at home", "in the park"]],
+          ["What did they do on Sunday?", "wrote a paper at home", ["went shopping", "went to a temple", "met a friend"]],
+          ["How long did they write?", "about 3 hours", ["about 1 hour", "until 3 o'clock", "all day"]],
+        ],
+      ),
+  },
+
+  weekend: {
+    id: "weekend",
+    title: "Talking about the weekend",
+    blurb: "Ask and answer about what you did.",
+    icon: "🗣️",
+    scripted: true,
+    build: () => [
+      choice("Ask Noah what he did on the weekend.", "しゅうまつは なにを しましたか。", ["しゅうまつは なにを しますか。", "しゅうまつに なにが ありましたか。", "しゅうまつは なにでしたか。"], {
+        why: "Past: しましたか.",
+      }),
+      choice("What did Noah do?", "He went to Kyoto with Haruto.", ["He went to Kyoto alone.", "He'll go to Kyoto with Haruto.", "Haruto went to Kyoto."], {
+        visual: chat([["ノア", "はるとさんと きょうとに いきました。"]]),
+      }),
+      choice("Ask what he did there.", "きょうとで なにを しましたか。", ["きょうとに なにを しましたか。", "きょうとは なにを しますか。", "きょうとを なにを しましたか。"], {
+        why: "Where the action happened: で.",
+      }),
+      choice("He says he took lots of photos at a temple. Which sentence says that?", "おてらで しゃしんを たくさん とりました。", ["おてらに しゃしんを たくさん とりました。", "おてらで しゃしんが たくさん ありました。", "おてらで たくさん しゃしんを とります。"], {}),
+      choice("Now Noah asks you. Say you studied for about two hours.", "にじかんぐらい べんきょうしました。", ["にじごろ べんきょうしました。", "にじかんに べんきょうしました。", "にじかんぐらい べんきょうします。"], {
+        visual: chat([["ノア", "しゅうまつは なにを しましたか。"]]),
+      }),
+      choice("Then add that you saw a movie too.", "えいがも みました。", ["えいがを も みました。", "えいがにも みました。", "えいがも みます。"], {
+        why: "を is replaced by も.",
+      }),
     ],
   },
 

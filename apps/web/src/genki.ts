@@ -198,7 +198,7 @@ function drawHome(body: HTMLDivElement, all: Progress, go: (p: Page) => void): v
   body.innerHTML = `
     <div id="gk-lessons"></div>
     <div class="card-panel gk-map">
-      <b>Units 3–12</b>
+      <b>Units ${GENKI_LESSONS.length + 1}–12</b>
       <div class="glosses" style="margin:4px 0 8px">Not built yet.</div>
       ${GENKI_MAP.filter((m) => m.num > GENKI_LESSONS.length)
         .map(
@@ -304,7 +304,9 @@ function drawVocab(body: HTMLDivElement, lesson: GenkiLesson, index: number, go:
         .map(
           (w) => `<div class="gk-word" data-say="${escapeHtml(w.jp.replace(/[〜／].*$/, (m) => (m.startsWith("〜") ? m.slice(1) : "")))}">
             <button class="speaker" title="Say it" aria-label="Say it">🔊</button>
-            <span class="gk-word-jp" lang="ja">${w.star ? "<i>★</i>" : ""}${escapeHtml(w.jp)}</span>
+            <span class="gk-word-jp" lang="ja">${w.star ? "<i>★</i>" : ""}${escapeHtml(w.jp)}${
+              w.kanji ? ` <span class="gk-kanji">${escapeHtml(w.kanji)}</span>` : ""
+            }</span>
             ${romaji ? `<span class="gk-romaji">${escapeHtml(romajiOf(w.jp.replace(/[〜／]/g, " ")))}</span>` : ""}
             <span class="gk-word-en">${escapeHtml(w.en)}</span>
           </div>`,

@@ -19,6 +19,8 @@
  * against finishing a unit; a unit is done when its test is passed.
  */
 
+import { L3, L4 } from "./genki-units-3-4.js";
+
 export interface GenkiExample {
   jp: string;
   en: string;
@@ -37,6 +39,8 @@ export interface GenkiCheck {
 
 export interface VocabWord {
   jp: string;
+  /** The usual kanji spelling, from Unit 3 on. */
+  kanji?: string;
   en: string;
   /** Marked in the book as appearing in the dialogue. */
   star?: boolean;
@@ -1498,9 +1502,9 @@ const L2: GenkiLesson = {
   ],
 };
 
-export const GENKI_LESSONS: GenkiLesson[] = [L1, L2];
+export const GENKI_LESSONS: GenkiLesson[] = [L1, L2, L3, L4];
 
-/** Every lesson in Genki I, for the unit list; the first two are built. */
+/** Every lesson in Genki I, for the unit list; the first four are built. */
 export const GENKI_MAP: { num: number; jp: string; en: string; topics: string }[] = [
   { num: 1, jp: "あたらしいともだち", en: "New Friends", topics: "Greetings · numbers · X は Y です · か · の · time" },
   { num: 2, jp: "かいもの", en: "Shopping", topics: "こそあど · だれの · も · じゃないです · ね/よ · prices" },
